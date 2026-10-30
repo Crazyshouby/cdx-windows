@@ -54,6 +54,9 @@ tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, re
 - **Réglages** (`Settings.cs`) : `explorer.json` dans le dossier de données, une clé à la fois (`fs.settings.get` / `fs.settings.set`, clés `[a-z0-9._-]`, 256 Ko au plus, écriture atomique), renvoyés à toutes les fenêtres ;
   côté page `settings` et `setSetting(clé, valeur)`.
 - **Tâches de fond** (`Jobs.cs`) : file d'attente (copier, déplacer, supprimer, chercher), avancement, vitesse lissée, pause, reprise, annulation ; messages `fs.job` à toutes les fenêtres (utilisée par le lot 4).
+- **La liste suit le dossier** (`Watch.cs`) : un `FileSystemWatcher` par onglet prévient la page (`fs.changed`, au plus tous les 250 ms), qui relit en gardant sélection et défilement (pas pendant un renommage ni un glisser) ; un dossier supprimé fait remonter au parent.
+- **Éléments cachés et extensions** : menu « Affichage » (réglages `show.hidden`, `show.ext`, partagés par toutes les fenêtres) ; un élément caché est estompé ; sans extension affichée le renommage garde l'extension.
+- **Très grands dossiers** : lecture par paquets de 4000 (`fs.list` puis `fs.list.more`), liste virtualisée (32 lignes dans le DOM pour 100 000 éléments), tri et filtre en cache ; `tests\perf.ps1` (100 000 fichiers : premières lignes 45 ms, lecture complète 0,5 s).
 - **Liste en arrière-plan** : `fs.list` ne bloque plus le fil d'interface ; une nouvelle demande pour le même onglet annule la précédente.
 
 ## Glisser-déposer de l'Explorateur

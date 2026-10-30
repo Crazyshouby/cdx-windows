@@ -16,7 +16,7 @@
     else if (e.ctrlKey && k.toLowerCase() === 'c') copy(false); else if (e.ctrlKey && k.toLowerCase() === 'x') copy(true); else if (e.ctrlKey && k.toLowerCase() === 'v') paste();
     else if (e.ctrlKey && e.shiftKey && k.toLowerCase() === 'n') newFolder();
     else if (e.ctrlKey && k.toLowerCase() === 't') addTab(t.path);
-    else if (e.ctrlKey && k.toLowerCase() === 'w' && tabs.length > 1) { tabs.splice(cur, 1); cur = Math.min(cur, tabs.length - 1); drawTabs(); show(); }
+    else if (e.ctrlKey && k.toLowerCase() === 'w' && tabs.length > 1) { post({ cmd: 'fs.watch', tab: tabs[cur].id, path: '' }); tabs.splice(cur, 1); cur = Math.min(cur, tabs.length - 1); drawTabs(); show(); }
     else if (k === 'Escape') { t.sel.clear(); show(true); }
   });
 

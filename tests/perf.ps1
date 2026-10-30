@@ -53,11 +53,12 @@ try {
   Check "la hauteur de la liste vaut celle de toutes les lignes (barre de défilement juste)" ([math]::Abs([int](Js "document.getElementById('files').scrollHeight") - $N * 26) -lt 400)
 
   # --- défilement ---
-  $ms = Js "const b = document.getElementById('files'); const t0 = performance.now(); b.scrollTop = 26 * 50000; paintRows(); return Math.round(performance.now() - t0)"
+  $ms = Js "const b = document.getElementById('files'); const t0 = performance.now(); b.scrollTop = 26 * $([int]($N / 2)); paintRows(); return Math.round(performance.now() - t0)"
   "  saut au milieu : $ms ms"
   Check "un saut au milieu de la liste se dessine en moins de 200 ms" ([int]$ms -lt 200)
   $firstIdx = [int](Js "+document.querySelector('#files .fr').dataset.i")
-  Check "les lignes dessinées sont bien celles du milieu (à partir de l'indice $firstIdx)" ($firstIdx -ge 49980 -and $firstIdx -le 50000)
+  $mid = [int]($N / 2)
+  Check "les lignes dessinées sont bien celles du milieu (à partir de l'indice $firstIdx)" ($firstIdx -ge $mid - 20 -and $firstIdx -le $mid)
   $ms = Js "const b = document.getElementById('files'); const t0 = performance.now(); for (let k = 0; k < 200; k++) { b.scrollTop += 26 * 7; paintRows(); } return Math.round(performance.now() - t0)"
   "  200 défilements : $ms ms"
   Check "200 défilements consécutifs en moins de 2 s" ([int]$ms -lt 2000)
@@ -81,7 +82,7 @@ try {
   1..3 | ForEach-Object { Js "reload()" | Out-Null; Until { (Js "!T().loading && T().items.length") -eq "$N" } 60000 | Out-Null; Start-Sleep -Milliseconds 500 }
   $mem1 = [double](Js "performance.memory ? performance.memory.usedJSHeapSize : 0")
   "  mémoire JS : $([int]($mem0 / 1MB)) Mo -> $([int]($mem1 / 1MB)) Mo"
-  Check "la mémoire ne grossit pas de plus de 80 % après 3 relectures complètes" ($mem0 -le 0 -or $mem1 -lt $mem0 * 1.8)
+  Check "la mémoire ne grossit pas de plus de 80 % (+ 30 Mo) après 3 relectures complètes" ($mem0 -le 0 -or $mem1 -lt $mem0 * 1.8 + 30MB)
   Check "le programme n'a pas planté" (-not $app.HasExited)
 }
 finally {

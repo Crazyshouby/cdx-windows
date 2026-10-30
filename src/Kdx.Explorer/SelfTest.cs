@@ -156,6 +156,24 @@ static class SelfTest
             }
             Check("lecture de dossier : sans annulation, les 300 fichiers sont rendus", ((dynamic)Fs.List(big2, "t")).items.Count == 300);
 
+            // --- éléments cachés (réglage show.hidden) et lecture par paquets ---
+            string hid = Path.Combine(dir, "caches"); Directory.CreateDirectory(hid);
+            File.WriteAllText(Path.Combine(hid, "visible.txt"), "v"); File.WriteAllText(Path.Combine(hid, "secret.txt"), "s"); File.SetAttributes(Path.Combine(hid, "secret.txt"), FileAttributes.Hidden);
+            JsonElement L(string path) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(Fs.List(path, "t"))); return d.RootElement.Clone(); }
+            string Names(JsonElement e) => string.Join(",", e.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("n").GetString()).OrderBy(x => x));
+            Settings.Reset(); File.Delete(Settings.FilePath);
+            Check("éléments cachés : absents par défaut", Names(L(hid)) == "visible.txt");
+            using (var tr = JsonDocument.Parse("true")) Settings.Set("show.hidden", tr.RootElement);
+            var withHidden = L(hid);
+            Check("réglage show.hidden vrai : présents, et marqués h:true pour que la page les estompe", Names(withHidden) == "secret.txt,visible.txt" && withHidden.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("n").GetString() == "secret.txt").TryGetProperty("h", out var hh) && hh.GetBoolean());
+            using (var fl = JsonDocument.Parse("false")) Settings.Set("show.hidden", fl.RootElement);
+            Check("réglage show.hidden faux : de nouveau absents", Names(L(hid)) == "visible.txt");
+            File.Delete(Settings.FilePath); Settings.Reset();
+            var msgs = new List<JsonElement>();
+            Fs.ListStream(big2, "t", default, o => { using var d = JsonDocument.Parse(JsonSerializer.Serialize(o)); msgs.Add(d.RootElement.Clone()); }, 100);
+            Check("lecture par paquets de 100 : fs.list (more), des fs.list.more, le dernier more=false (vide si le total tombe juste)", msgs.Count >= 3 && msgs[0].GetProperty("type").GetString() == "fs.list" && msgs[0].GetProperty("more").GetBoolean() && msgs.Skip(1).All(m => m.GetProperty("type").GetString() == "fs.list.more") && !msgs[^1].GetProperty("more").GetBoolean() && msgs.Take(msgs.Count - 1).All(m => m.GetProperty("more").GetBoolean()));
+            Check("lecture par paquets : 300 éléments en tout, le chemin et l'espace libre dans le premier seulement", msgs.Sum(m => m.GetProperty("items").GetArrayLength()) == 300 && msgs[0].TryGetProperty("free", out _) && !msgs[1].TryGetProperty("free", out _));
+
             Do($"{{\"cmd\":\"fs.delete\",\"paths\":[{J(Path.Combine(dir, "sous"))},{J(Path.Combine(dir, "b (2).txt"))}],\"tab\":\"t\"}}");
             Check("suppression : dossier et fichier partis (corbeille)", !Directory.Exists(Path.Combine(dir, "sous")) && !File.Exists(Path.Combine(dir, "b (2).txt")));
         }

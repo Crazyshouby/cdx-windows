@@ -7,6 +7,6 @@
   function drawTabs() {
     $('tabs').innerHTML = tabs.map((t, i) => `<button class="tab ${i === cur ? 'on' : ''}" data-i="${i}">${esc(baseOf(t.path ?? t.want ?? ''))}</button>`).join('') + '<button class="tab" data-i="+">+</button>';
   }
-  $('tabs').onclick = e => { const b = e.target.closest('[data-i]'); if (!b) return; if (b.dataset.i === '+') addTab(T().path ?? ''); else { cur = +b.dataset.i; drawTabs(); show(); } };
-  $('tabs').onauxclick = e => { const b = e.target.closest('[data-i]'); if (b && e.button === 1 && b.dataset.i !== '+' && tabs.length > 1) { tabs.splice(+b.dataset.i, 1); cur = Math.min(cur, tabs.length - 1); drawTabs(); show(); } };
+  $('tabs').onclick = e => { const b = e.target.closest('[data-i]'); if (!b) return; if (b.dataset.i === '+') addTab(T().path ?? ''); else { cur = +b.dataset.i; drawTabs(); show(); if (T().stale) { T().stale = false; reload(); } } };
+  $('tabs').onauxclick = e => { const b = e.target.closest('[data-i]'); if (b && e.button === 1 && b.dataset.i !== '+' && tabs.length > 1) { post({ cmd: 'fs.watch', tab: tabs[+b.dataset.i].id, path: '' }); tabs.splice(+b.dataset.i, 1); cur = Math.min(cur, tabs.length - 1); drawTabs(); show(); } };
 

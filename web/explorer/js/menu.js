@@ -1,5 +1,14 @@
 // Le menu contextuel de la liste.
   // ---------------- menu contextuel ----------------
+  // Le menu « Affichage » : ce que montre la liste (réglages partagés par toutes les fenêtres).
+  $('cView').onclick = () => {
+    const r = $('cView').getBoundingClientRect(), on = k => settings[k] === true;
+    KdxFrame.menu([
+      ['Éléments cachés', () => setSetting('show.hidden', !on('show.hidden')), { key: on('show.hidden') ? 'oui' : 'non' }],
+      ['Extensions des fichiers', () => setSetting('show.ext', !showExt()), { key: showExt() ? 'oui' : 'non' }],
+    ], r.left, r.bottom + 2, 'Affichage');
+  };
+
   document.addEventListener('mousedown', e => { if (!e.target.closest('.menu')) $('layer').querySelector('.menu')?.remove(); });
   $('files').oncontextmenu = e => {
     e.preventDefault(); const t = T(), r = e.target.closest('[data-i]'), s = selected();

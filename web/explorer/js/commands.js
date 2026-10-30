@@ -7,9 +7,10 @@
     const t = T(); const idx = t.rows.findIndex(i => i.n === (name ?? [...t.sel][0])); if (idx < 0) return;
     const it = t.rows[idx]; ensureVisible(idx); const row = $('files').querySelector(`.fr[data-i="${idx}"]`); if (!row || it.drive) return;
     row.scrollIntoView({ block: 'nearest' });
-    const cell = row.querySelector('.nm'); cell.innerHTML = pix(iconOf(it), 16) + `<input class="text-input" value="${esc(it.n)}" spellcheck="false">`;
-    const inp = cell.querySelector('input'); inp.focus(); const dot = it.d ? it.n.length : it.n.lastIndexOf('.'); inp.setSelectionRange(0, dot > 0 ? dot : it.n.length);
-    let done = false; const end = ok => { if (done) return; done = true; if (ok && inp.value && inp.value !== it.n) post({ cmd: 'fs.rename', path: pathOf(it), name: inp.value, tab: t.id }); else show(true); };
+    const cell = row.querySelector('.nm'); const shown = dispName(it), tail = it.n.slice(shown.length);   // l'extension masquée se retrouve au bout du nom
+    cell.innerHTML = pix(iconOf(it), 16) + `<input class="text-input" value="${esc(shown)}" spellcheck="false">`;
+    const inp = cell.querySelector('input'); inp.focus(); const dot = it.d ? shown.length : shown.lastIndexOf('.'); inp.setSelectionRange(0, dot > 0 ? dot : shown.length);
+    let done = false; const end = ok => { if (done) return; done = true; if (ok && inp.value && inp.value + tail !== it.n) post({ cmd: 'fs.rename', path: pathOf(it), name: inp.value + tail, tab: t.id }); else show(true); };
     inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') end(true); else if (e.key === 'Escape') end(false); };
     inp.onblur = () => end(true);
   }

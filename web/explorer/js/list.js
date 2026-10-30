@@ -17,7 +17,7 @@
   // Les éléments par nom (pour retrouver la sélection sans parcourir toute la liste).
   function byName(t) { if (t.bnVer !== t.ver || !t.bn) { t.bn = new Map(t.items.map(i => [i.n, i])); t.bnVer = t.ver; } return t.bn; }
 
-  const rowHtml = (it, i, t) => `<div class="fr ${t.sel.has(it.n) ? 'sel' : ''} ${it.h ? 'hid' : ''} ${clip.cut && clip.paths.includes(joinP(t.path, it.n)) ? 'cut' : ''}" data-i="${i}"><span class="nm">${pix(iconOf(it), 16)}<span>${esc(it.n)}</span></span><span class="f">${dateOf(it.m)}</span><span class="f">${typeOf(it)}</span><span class="f r">${it.drive ? sizeOf(it.free) + ' libres' : sizeOf(it.s)}</span></div>`;
+  const rowHtml = (it, i, t) => `<div class="fr ${t.sel.has(it.n) ? 'sel' : ''} ${it.h ? 'hid' : ''} ${clip.cut && clip.paths.includes(joinP(t.path, it.n)) ? 'cut' : ''}" data-i="${i}"><span class="nm">${pix(iconOf(it), 16)}<span>${esc(dispName(it))}</span></span><span class="f">${dateOf(it.m)}</span><span class="f">${typeOf(it)}</span><span class="f r">${it.drive ? sizeOf(it.free) + ' libres' : sizeOf(it.s)}</span></div>`;
 
   // Dessine les lignes qui touchent la zone visible (plus quelques-unes de marge), entre deux espaceurs qui gardent la hauteur et la barre de défilement de la liste entière.
   function paintRows(force) {
@@ -72,12 +72,15 @@
   let lastShow = 0;
   handlers['fs.list'] = m => {
     const t = tabs.find(x => x.id === m.tab); if (!t) return;
+    // Le dossier affiché a disparu (supprimé, déplacé, disque retiré) : on remonte au dossier parent le plus proche qui existe.
+    if (m.error && m.error.startsWith('Dossier introuvable') && t.mode === 'reload' && t.path) { const up = parentOf(t.path); t.loading = false; go(up == null ? '' : up, 'push'); return; }
     if (m.error) { t.loading = false; $('orb').className = 'orb red'; $('st1').textContent = m.error; $('st2').textContent = ''; $('st3').textContent = ''; t.want = t.path; return; }
     const keep = t.mode === 'reload' && t.path === m.path ? new Set(t.sel) : new Set();
     if (t.mode === 'push' && t.path !== m.path) { t.hist.splice(t.idx + 1); t.hist.push(m.path); t.idx = t.hist.length - 1; }
     if (t.mode === 'back') t.idx = Math.max(0, t.idx - 1); if (t.mode === 'fwd') t.idx = Math.min(t.hist.length - 1, t.idx + 1);
     Object.assign(t, { path: m.path, items: m.items, free: m.free, ver: (t.ver | 0) + 1, loading: !!m.more, sel: t.pendingSel ? new Set([t.pendingSel]) : keep, anchor: -1 }); t.pendingSel = null;
     if (!m.more && t.mode === 'reload') pruneSel(t);
+    if (t.watched !== m.path) { t.watched = m.path; post({ cmd: 'fs.watch', tab: t.id, path: m.path }); }   // le programme prévient quand le dossier change (fs.changed)
     drawTabs(); if (t === T()) { show(t.mode === 'reload'); lastShow = performance.now(); if (t.renameAfter) { const n = t.renameAfter; t.renameAfter = null; rename(n); } }
     log('liste affichée : ' + m.path + ' (' + m.items.length + (m.more ? ', suite en cours' : '') + ')');
   };
@@ -98,3 +101,19 @@
     reload();
   };
   const reload = () => go(T().path, 'reload');
+  // Un réglage a changé (ici ou dans une autre fenêtre) : les éléments cachés demandent une relecture de tous les onglets (l'actif tout de suite), les extensions un simple redessin.
+  let shownHidden = false;
+  function onSettings() {
+    const t = T(), hid = settings['show.hidden'] === true;
+    if (hid !== shownHidden) { shownHidden = hid; for (const x of tabs) x.stale = true; if (t) { t.stale = false; reload(); } return; }
+    if (t && t.rows) paintRows(true);
+  }
+  // Le dossier d'un onglet a changé hors de la fenêtre : on le relit (sélection et défilement gardés), sauf pendant un renommage ou un glisser (on attend la fin) ; un onglet caché se relit quand on y revient.
+  const busy = () => !!(typeof drag !== 'undefined' && drag) || !!document.activeElement?.closest?.('#files input');
+  handlers['fs.changed'] = m => {
+    const t = tabs.find(x => x.id === m.tab); if (!t || t.path !== m.path) return;
+    if (t !== T()) { t.stale = true; return; }
+    if (busy()) { t.dirty = true; return; }
+    reload();
+  };
+  setInterval(() => { const t = T(); if (t && t.dirty && !busy()) { t.dirty = false; reload(); } }, 700);
