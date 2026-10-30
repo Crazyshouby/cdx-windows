@@ -1,4 +1,4 @@
-// Pont entre les pages et le programme .NET qui les héberge (kdx-shell, kdx-explorer ou kdx-browser).
+// Aides communes des pages de kdx-windows, au-dessus du pont de la suite (kdx-bridge.js) : post, log, icônes, gestionnaires de messages.
 // Les pages sont servies par WebView2 sous https://kdx.shell/ (le dossier web/) : /kdx/kdx-ui.css, /kdx/fonts.css, /kdx/icons.js.
 { const t = new URLSearchParams(location.search).get('theme'); if (t) document.documentElement.dataset.theme = t; }
 const hasHost =!!(window.chrome && window.chrome.webview);
@@ -24,9 +24,11 @@ function gotIcon(key, png) {
   iconWaiting.delete(key);
 }
 
-const handlers = {};
+// Un gestionnaire posé dans `handlers` (handlers.tasks = m => ...) est branché sur le pont de la suite (kdx-bridge.js, chargé avant) et reçoit le message entier.
+const bound = new Set(), table = {};
+const handlers = new Proxy(table, { set(o, type, fn) { o[type] = fn; if (!bound.has(type)) { bound.add(type); kdx.on(type, (value, m) => { if (table[type]) table[type](m); }); } return true; } });
 window.__handlers = handlers;   // pour les pages de test
-if (hasHost) window.chrome.webview.addEventListener('message', e => { const m = e.data; if (m.type === 'icon') gotIcon((m.size || 16) + '|' + m.path, m.png); else if (handlers[m.type]) handlers[m.type](m); });
+kdx.on('icon', (value, m) => gotIcon((m.size || 16) + '|' + m.path, m.png));
 // L'accent de la suite a changé (%APPDATA%\KDX\suite.json) : le programme le pousse à toutes ses pages.
-handlers.theme = m => { if (m.value) document.documentElement.dataset.theme = m.value; };
+kdx.on('theme', v => { if (v) document.documentElement.dataset.theme = v; });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

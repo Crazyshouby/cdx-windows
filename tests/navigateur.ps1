@@ -1,10 +1,14 @@
 ﻿# Série de tests du navigateur KDX par le canal de contrôle (aucune entrée simulée). Prérequis : un fichier %LOCALAPPDATA%\KdxShell\debug.txt, puis
 # (re)lancer kdx-browser.exe : il ouvre alors le canal « KdxBrowserCtl » (utilisateur courant seulement). Le test ouvre le navigateur, navigue sur example.org et
 # example.com (accès réseau), télécharge un fichier depuis un serveur Python local temporaire, et nettoie derrière lui. Supprimer debug.txt ensuite.
+param([string]$Bin)
 $ErrorActionPreference = 'Continue'
-$data = "$env:LOCALAPPDATA\KdxShell"
+# Isolé si KDX_DATA_DIR / KDX_PIPE_PREFIX sont posés (comme bus.ps1) : ni le vrai profil du navigateur ni le vrai bus ne sont touchés.
+$data = if ($env:KDX_DATA_DIR) { $env:KDX_DATA_DIR } else { "$env:LOCALAPPDATA\KdxShell" }
+$pipe = $(if ($env:KDX_PIPE_PREFIX) { $env:KDX_PIPE_PREFIX } else { 'kdx.' }) + 'browser.ctl'
+if (-not $Bin) { $Bin = Join-Path $PSScriptRoot '..\bin' }
 function Ctl([string]$line) {
-  $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', 'kdx.browser.ctl', [System.IO.Pipes.PipeDirection]::InOut)
+  $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipe, [System.IO.Pipes.PipeDirection]::InOut)
   $c.Connect(5000)
   $w = New-Object System.IO.StreamWriter($c); $w.AutoFlush = $true; $r = New-Object System.IO.StreamReader($c)
   $w.WriteLine($line); $res = $r.ReadLine(); $c.Dispose(); $res
@@ -20,7 +24,7 @@ $ext = "$data\extensions\kdx-test"; New-Item -ItemType Directory $ext -Force | O
 "document.documentElement.setAttribute('data-kdx-ext','ok');" | Set-Content "$ext\c.js" -Encoding ascii
 
 "1. ouverture"
-Start-Process (Join-Path $PSScriptRoot '..\bin\kdx-browser.exe') -ArgumentList '--theme', 'rouge'; Start-Sleep 7
+Start-Process (Join-Path $Bin 'kdx-browser.exe') -ArgumentList '--theme', 'rouge'; Start-Sleep 7
 $s = St; Show-Tabs $s
 Check "un onglet, page « Nouvel onglet » interne" (@($s.tabs).Count -eq 1 -and $s.tabs[0].Url -like '*interne.html?p=newtab*')
 
@@ -57,7 +61,7 @@ Check "favori écrit dans favoris.json" ((Get-Content "$data\favoris.json" -Raw)
 "5. recherche web depuis la barre d'adresse"
 Ctl 'cmd {"cmd":"br.go","url":"charte graphique pixel"}' | Out-Null; Start-Sleep 5
 $s = St
-Check "un texte qui n'est pas une adresse part en recherche ($($s.tabs[1].Url.Substring(0, [Math]::Min(48, $s.tabs[1].Url.Length)))…)" ($s.tabs[1].Url -like 'https://www.google.com/search?q=*')
+Check "un texte qui n'est pas une adresse part en recherche ($($s.tabs[1].Url.Substring(0, [Math]::Min(48, $s.tabs[1].Url.Length)))…)" ($s.tabs[1].Url -like 'https://www.google.com/search?q=*' -or $s.tabs[1].Url -like 'https://www.google.com/sorry/*')   # Google renvoie vers sa page anti-robot (« sorry ») quand le test a tourné plusieurs fois de suite
 
 "6. pages internes"
 Ctl 'cmd {"cmd":"br.internal","p":"historique"}' | Out-Null; Start-Sleep 3
