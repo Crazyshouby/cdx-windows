@@ -13,6 +13,8 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
     readonly SideButtons side;
     CoreWebView2Environment env;
     int count;
+    public readonly JobQueue Jobs = new();   // copier, déplacer, supprimer, chercher : en arrière-plan, l'un après l'autre (lot 4)
+    readonly Dictionary<(HostForm, string), CancellationTokenSource> lists = new();   // la lecture de dossier en cours de chaque onglet
     public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
     public ExplorerApp(string theme)
@@ -21,7 +23,29 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
         _ = Anchor.Handle;
         if (theme == null) watch = Suite.Watch(this.theme, a => { this.theme = a; foreach (var w in windows.ToArray()) w.Send(new { type = "theme", value = a }); });
         side = new SideButtons(() => windows.ToArray());
+        Jobs.Changed += j => Anchor.BeginInvoke(new Action(() => Broadcast(new { type = "fs.job", job = JobInfo(j) })));
     }
+
+    static object JobInfo(Job j) => new { id = j.Id, kind = j.Kind, title = j.Title, state = j.State.ToString().ToLowerInvariant(), done = j.Done, total = j.Total, speed = j.Speed, current = j.Current, error = j.Error };
+
+    void Broadcast(object msg) { foreach (var w in windows.ToArray()) if (!w.IsDisposed) w.Send(msg); }
+
+    // Lit un dossier hors du fil d'interface : une nouvelle demande pour le même onglet annule la précédente ; une réponse devenue inutile n'est jamais envoyée.
+    void ListAsync(HostForm from, string path, string tab)
+    {
+        var key = (from, tab ?? "");
+        if (lists.TryGetValue(key, out var old)) old.Cancel();
+        var cts = lists[key] = new CancellationTokenSource(); var ct = cts.Token;
+        _ = Task.Run(() => { try { return Fs.List(path, tab, ct); } catch (OperationCanceledException) { return null; } catch (Exception ex) { return new { type = "fs.list", tab, error = ex.Message }; } })
+            .ContinueWith(t => Anchor.BeginInvoke(new Action(() =>
+            {
+                if (lists.TryGetValue(key, out var cur) && cur == cts) lists.Remove(key);
+                if (ct.IsCancellationRequested || from.IsDisposed || t.IsFaulted || t.Result == null) return;
+                from.Send(t.Result);
+            })));
+    }
+
+    void CancelLists(HostForm f) { foreach (var k in lists.Keys.Where(k => k.Item1 == f).ToList()) { lists[k].Cancel(); lists.Remove(k); } }
 
     public bool Closing { get; private set; }
 
@@ -35,7 +59,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             env ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview-explorer"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
             var f = new ExplorerForm(this);
             windows.Add(f);
-            f.FormClosed += (s, e) => { windows.Remove(f); if (windows.Count == 0) ExitThread(); };
+            f.FormClosed += (s, e) => { CancelLists(f); windows.Remove(f); if (windows.Count == 0) ExitThread(); };
             double scale = f.DeviceDpi / 96.0;
             int off = (count++ % 6) * 28;
             f.Bounds = new Rectangle(160 + off, 70 + off, (int)(1180 * scale), (int)(720 * scale));
@@ -126,6 +150,18 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
                 return;
             }
             if (cmd == "fs.dragout") { DragOut(from, r); return; }
+            if (cmd == "fs.list") { ListAsync(from, r.TryGetProperty("path", out var lp) && lp.ValueKind == JsonValueKind.String ? lp.GetString() : null, r.TryGetProperty("tab", out var lt) && lt.ValueKind == JsonValueKind.String ? lt.GetString() : null); return; }
+            if (cmd == "fs.settings.get") { from.Send(new { type = "settings", values = Settings.All() }); return; }
+            if (cmd == "fs.settings.set")
+            {
+                if (r.TryGetProperty("key", out var sk) && sk.ValueKind == JsonValueKind.String && Settings.Set(sk.GetString(), r.TryGetProperty("value", out var sv) ? sv : default)) Broadcast(new { type = "settings", values = Settings.All() });
+                return;
+            }
+            if (cmd is "fs.job.pause" or "fs.job.resume" or "fs.job.cancel")
+            {
+                if (r.TryGetProperty("id", out var jid) && jid.TryGetInt32(out int id)) { if (cmd == "fs.job.pause") Jobs.Pause(id); else if (cmd == "fs.job.resume") Jobs.Resume(id); else Jobs.Cancel(id); }
+                return;
+            }
             if (cmd.StartsWith("fs.")) { Fs.Handle(from.Handle, from.Send, cmd, r); return; }
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             if (Host.CommonMessage(from, cmd, r)) return;

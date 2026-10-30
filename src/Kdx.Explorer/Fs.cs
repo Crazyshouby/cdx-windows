@@ -41,7 +41,8 @@ static class Fs
         return new { type = "fs.list", tab, path = "", items, free = -1L };
     }
 
-    public static object List(string path, string tab)
+    // `ct` : la lecture s'arrête dès que la page a demandé un autre dossier pour cet onglet (OperationCanceledException, que l'appelant ignore).
+    public static object List(string path, string tab, CancellationToken ct = default)
     {
         try
         {
@@ -51,6 +52,7 @@ static class Fs
             var items = new List<object>();
             foreach (var e in di.EnumerateFileSystemInfos())
             {
+                ct.ThrowIfCancellationRequested();
                 try
                 {
                     var a = e.Attributes;
@@ -64,6 +66,7 @@ static class Fs
             Host.Log($"explorateur : {di.FullName} ({items.Count} éléments)");
             return new { type = "fs.list", tab, path = di.FullName, items, free };
         }
+        catch (OperationCanceledException) { throw; }
         catch (UnauthorizedAccessException) { return new { type = "fs.list", tab, error = "Accès refusé : " + path }; }
         catch (Exception ex) { return new { type = "fs.list", tab, error = ex.Message }; }
     }

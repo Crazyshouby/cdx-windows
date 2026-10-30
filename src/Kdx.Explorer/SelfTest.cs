@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -102,6 +103,58 @@ static class SelfTest
             Check("destination qui n'existe pas : message d'erreur, fichier intact", HasError() && File.Exists(Path.Combine(cible, "b.txt")));
             Do($"{{\"cmd\":\"fs.drop\",\"paths\":[\"relatif/x.txt\",\"\"],\"dir\":{J(cible)},\"move\":true,\"tab\":\"t\"}}");
             Check("chemins relatifs ou vides ignorés sans erreur", !HasError());
+
+            // --- réglages (explorer.json) : écriture atomique, relecture, refus des clés et valeurs invalides ---
+            Settings.Reset();
+            using (var sj = JsonDocument.Parse("{\"a\":1,\"b\":[1,2,3]}"))
+            {
+                Check("réglages : une clé valide s'enregistre", Settings.Set("vue.dossier", sj.RootElement));
+                Check("réglages : une clé hors du motif est refusée (majuscule, chemin, vide)", !Settings.Set("Vue", sj.RootElement) && !Settings.Set("../x", sj.RootElement) && !Settings.Set("", sj.RootElement) && !Settings.Set(null, sj.RootElement));
+            }
+            Settings.Reset();
+            Check("réglages : relus depuis le fichier après oubli de la mémoire", Settings.Get("vue.dossier")?["b"]?.AsArray().Count == 3 && File.Exists(Settings.FilePath) && !File.Exists(Settings.FilePath + ".tmp"));
+            using (var nul = JsonDocument.Parse("null")) Check("réglages : une valeur null efface la clé", Settings.Set("vue.dossier", nul.RootElement) && Settings.Get("vue.dossier") == null);
+            using (var big = JsonDocument.Parse("\"" + new string('x', 300 * 1024) + "\"")) Check("réglages : une valeur de plus de 256 Ko est refusée", !Settings.Set("gros", big.RootElement));
+            File.WriteAllText(Settings.FilePath, "{ pas du json"); Settings.Reset();
+            Check("réglages : un fichier illisible donne des réglages vides sans exception", Settings.All().ValueKind == JsonValueKind.Object && Settings.Get("vue.dossier") == null);
+            File.Delete(Settings.FilePath); Settings.Reset();
+
+            // --- file de tâches : ordre, avancement, pause, reprise, annulation ---
+            var q = new JobQueue(); var order = new List<int>(); var seen = new List<JobState>();
+            q.Changed += j => { lock (seen) seen.Add(j.State); };
+            var j1 = q.Enqueue("copy", "un", jb => { order.Add(1); jb.Report(50, 100, "a.txt"); });
+            var j2 = q.Enqueue("copy", "deux", jb => { order.Add(2); });
+            bool WaitState(Job j, JobState s, int ms = 5000) { var sw = Stopwatch.StartNew(); while (sw.ElapsedMilliseconds < ms) { if (j.State == s) return true; Thread.Sleep(20); } return j.State == s; }
+            Check("tâches : exécutées l'une après l'autre, dans l'ordre", WaitState(j1, JobState.Done) && WaitState(j2, JobState.Done) && order.SequenceEqual(new[] { 1, 2 }));
+            Check("tâches : l'avancement est gardé (50 sur 100, élément courant)", j1.Done == 50 && j1.Total == 100 && j1.Current == "a.txt");
+            Check("tâches : chaque changement d'état est signalé", seen.Contains(JobState.Queued) && seen.Contains(JobState.Running) && seen.Contains(JobState.Done));
+            var gate = new ManualResetEventSlim(false); int steps = 0;
+            var j3 = q.Enqueue("copy", "long", jb => { for (int i = 0; i < 400; i++) { jb.WaitIfPaused(); Interlocked.Increment(ref steps); Thread.Sleep(10); if (i == 2) gate.Set(); } });
+            gate.Wait(3000);
+            Check("tâches : une pause arrête l'avancement", q.Pause(j3.Id) && j3.State == JobState.Paused);
+            Thread.Sleep(150); int frozen = steps; Thread.Sleep(250);
+            Check("tâches : en pause, plus aucun pas n'est fait", steps == frozen);
+            Check("tâches : la reprise relance l'avancement", q.Resume(j3.Id) && (WaitState(j3, JobState.Running) && SpinWait.SpinUntil(() => steps > frozen + 2, 2000)));
+            var j4 = q.Enqueue("copy", "attend", jb => { order.Add(4); });
+            Check("tâches : une tâche en attente annulée ne démarre jamais", q.Cancel(j4.Id) && j4.State == JobState.Canceled);
+            Check("tâches : annuler la tâche en cours l'arrête (même après une pause)", q.Pause(j3.Id) && q.Cancel(j3.Id) && WaitState(j3, JobState.Canceled) && steps < 400 && !order.Contains(4));
+            var j5 = q.Enqueue("copy", "échoue", jb => throw new IOException("disque plein"));
+            Check("tâches : une exception met la tâche en échec avec son message, la file continue", WaitState(j5, JobState.Failed) && j5.Error == "disque plein");
+            var j6 = q.Enqueue("copy", "après", jb => { order.Add(6); });
+            Check("tâches : la file continue après un échec", WaitState(j6, JobState.Done) && order.Contains(6));
+            q.Prune(2);
+            Check("tâches : Prune ne garde que les dernières tâches terminées", q.Snapshot().Count == 2);
+
+            // --- lecture annulable d'un dossier ---
+            string big2 = Path.Combine(dir, "gros"); Directory.CreateDirectory(big2);
+            for (int i = 0; i < 300; i++) File.WriteAllText(Path.Combine(big2, "f" + i + ".txt"), "x");
+            using (var cs = new CancellationTokenSource())
+            {
+                cs.Cancel(); bool cancelled = false;
+                try { Fs.List(big2, "t", cs.Token); } catch (OperationCanceledException) { cancelled = true; }
+                Check("lecture de dossier : un jeton annulé arrête la lecture (OperationCanceledException)", cancelled);
+            }
+            Check("lecture de dossier : sans annulation, les 300 fichiers sont rendus", ((dynamic)Fs.List(big2, "t")).items.Count == 300);
 
             Do($"{{\"cmd\":\"fs.delete\",\"paths\":[{J(Path.Combine(dir, "sous"))},{J(Path.Combine(dir, "b (2).txt"))}],\"tab\":\"t\"}}");
             Check("suppression : dossier et fichier partis (corbeille)", !Directory.Exists(Path.Combine(dir, "sous")) && !File.Exists(Path.Combine(dir, "b (2).txt")));

@@ -31,7 +31,7 @@ src\Kdx.Repos\      kdx-repos : Git.cs (recherche et lecture de git, jamais d'é
 web\kdx\            la charte (copie exacte de kdx-ui/dist : node tools/charte-sync.mjs --write kdx-windows) et host.js, le pont des pages
 web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
 couche1\            le cadre des fenêtres de Windows aux couleurs de la charte (DWM), réversible
-tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
+tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste lue en arrière-plan et annulable, réglages persistants), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
 ```
 
 ## Essais (aucune entrée simulée)
@@ -48,6 +48,13 @@ tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, re
 - **Bus** : un tube `\\.\pipe\kdx.<nom>` par programme (`Bus.cs`), messages `{type, from, data}` validés par liste blanche : `notify` (shell), `open-path` et `select` (Explorateur),
   `open-url` (navigateur, http et https seulement), `show` (Dépôts). Lancer `kdx-browser.exe <adresse>` alors qu'il tourne déjà passe par ce bus. Spécification : `kdx-ui/docs/SUITE.md`.
 - Essais : `kdx-shell --selftest-bus` (19 vérifications), `tests\bus.ps1` (essai de bout en bout isolé : ni le vrai bus, ni le vrai `suite.json`, ni le vrai profil du navigateur).
+
+## Socle de l'Explorateur (lot 0 du plan « l'Explorateur se suffit à lui-même »)
+- **Page en modules** : `web/explorer/explorer.html` (balisage), `explorer.css`, `js/*.js` (core, tabs, list, nav, select, commands, menu, keys, dnd, boot) + `preview.js`, scripts classiques qui partagent leurs noms.
+- **Réglages** (`Settings.cs`) : `explorer.json` dans le dossier de données, une clé à la fois (`fs.settings.get` / `fs.settings.set`, clés `[a-z0-9._-]`, 256 Ko au plus, écriture atomique), renvoyés à toutes les fenêtres ;
+  côté page `settings` et `setSetting(clé, valeur)`.
+- **Tâches de fond** (`Jobs.cs`) : file d'attente (copier, déplacer, supprimer, chercher), avancement, vitesse lissée, pause, reprise, annulation ; messages `fs.job` à toutes les fenêtres (utilisée par le lot 4).
+- **Liste en arrière-plan** : `fs.list` ne bloque plus le fil d'interface ; une nouvelle demande pour le même onglet annule la précédente.
 
 ## Glisser-déposer de l'Explorateur
 - **Dans la fenêtre** : une ligne (ou la sélection) se dépose sur un dossier de la liste, un lieu de la barre latérale ou un onglet. Comme dans Windows : sur le même disque on déplace, d'un disque à l'autre on copie ;

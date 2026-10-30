@@ -2,6 +2,10 @@
   fillPix();
   const $ = id => document.getElementById(id);
   const sep = '\\';
+  // Les réglages (éléments cachés, extensions, vue par dossier, épinglés...) vivent dans l'hôte (explorer.json) et sont partagés par toutes les fenêtres ; onSettings() est appelé à chaque changement.
+  let settings = {};
+  const setSetting = (key, value) => { settings[key] = value; post({ cmd: 'fs.settings.set', key, value: value === undefined ? null : value }); };
+  handlers.settings = m => { settings = m.values || {}; if (typeof onSettings === 'function') onSettings(); };
   const IC = { image: 'png jpg jpeg gif bmp webp svg ico', musique: 'mp3 wav flac ogg m4a aac', video: 'mp4 mkv avi mov webm wmv', journal: 'txt md log json xml csv ini cfg yml yaml toml', apps: 'exe msi bat cmd lnk' };
   const TYPES = { png: 'Image PNG', jpg: 'Image JPEG', jpeg: 'Image JPEG', gif: 'Image GIF', svg: 'Image SVG', webp: 'Image WebP', bmp: 'Image BMP', ico: 'Icône', pdf: 'Document PDF', txt: 'Document texte', md: 'Document Markdown', json: 'Fichier JSON', xml: 'Fichier XML', csv: 'Fichier CSV',
     mp3: 'Fichier MP3', wav: 'Fichier WAV', flac: 'Fichier FLAC', mp4: 'Vidéo MP4', mkv: 'Vidéo MKV', avi: 'Vidéo AVI', zip: 'Dossier compressé', exe: 'Application', msi: 'Installeur', lnk: 'Raccourci', docx: 'Document Word', xlsx: 'Feuille de calcul', pptx: 'Présentation', css: 'Feuille de style', js: 'Fichier JavaScript', html: 'Page HTML', rs: 'Source Rust', cs: 'Source C#', py: 'Script Python' };
