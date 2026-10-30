@@ -41,34 +41,57 @@ static class Fs
         return new { type = "fs.list", tab, path = "", items, free = -1L };
     }
 
-    // `ct` : la lecture s'arrête dès que la page a demandé un autre dossier pour cet onglet (OperationCanceledException, que l'appelant ignore).
-    public static object List(string path, string tab, CancellationToken ct = default)
+    // Faut-il montrer les éléments cachés et système ? Réglage « show.hidden » de l'Explorateur (faux par défaut), le même pour toutes les fenêtres.
+    static bool ShowHidden() => Settings.Get("show.hidden") is { } n && n.GetValueKind() == JsonValueKind.True;
+
+    // Lit un dossier et l'envoie par paquets de `chunk` éléments : « fs.list » (le premier, avec le chemin et l'espace libre ; `more` dit s'il en vient d'autres) puis « fs.list.more ».
+    // Un très grand dossier s'affiche donc dès le premier paquet. `ct` : la lecture s'arrête dès que la page a demandé un autre dossier pour cet onglet (OperationCanceledException,
+    // que l'appelant ignore). Un élément caché est marqué h:true (la page l'estompe).
+    public static void ListStream(string path, string tab, CancellationToken ct, Action<object> emit, int chunk = 4000)
     {
         try
         {
-            if (string.IsNullOrEmpty(path)) return ListDrives(tab);
+            if (string.IsNullOrEmpty(path)) { emit(ListDrives(tab)); return; }
             var di = new DirectoryInfo(path);
-            if (!di.Exists) return new { type = "fs.list", tab, error = "Dossier introuvable : " + path };
-            var items = new List<object>();
+            if (!di.Exists) { emit(new { type = "fs.list", tab, error = "Dossier introuvable : " + path }); return; }
+            bool showHidden = ShowHidden();
+            long free = -1; try { free = new DriveInfo(di.Root.FullName).AvailableFreeSpace; } catch { }
+            string full = di.FullName;
+            var items = new List<object>(Math.Min(chunk, 4096)); bool first = true; int total = 0;
             foreach (var e in di.EnumerateFileSystemInfos())
             {
                 ct.ThrowIfCancellationRequested();
                 try
                 {
                     var a = e.Attributes;
-                    if ((a & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
+                    bool hid = (a & (FileAttributes.Hidden | FileAttributes.System)) != 0;
+                    if (hid && !showHidden) continue;
                     bool d = (a & FileAttributes.Directory) != 0;
-                    items.Add(new { n = e.Name, d, s = d ? -1L : ((FileInfo)e).Length, m = new DateTimeOffset(e.LastWriteTime).ToUnixTimeMilliseconds() });
+                    long m = new DateTimeOffset(e.LastWriteTime).ToUnixTimeMilliseconds();
+                    items.Add(hid ? new { n = e.Name, d, s = d ? -1L : ((FileInfo)e).Length, m, h = true } : new { n = e.Name, d, s = d ? -1L : ((FileInfo)e).Length, m });
+                    total++;
                 }
                 catch { }
+                if (items.Count >= chunk)
+                {
+                    emit(first ? new { type = "fs.list", tab, path = full, items, free, more = true } : (object)new { type = "fs.list.more", tab, path = full, items, more = true });
+                    items = new List<object>(Math.Min(chunk, 4096)); first = false;
+                }
             }
-            long free = -1; try { free = new DriveInfo(di.Root.FullName).AvailableFreeSpace; } catch { }
-            Host.Log($"explorateur : {di.FullName} ({items.Count} éléments)");
-            return new { type = "fs.list", tab, path = di.FullName, items, free };
+            emit(first ? new { type = "fs.list", tab, path = full, items, free, more = false } : (object)new { type = "fs.list.more", tab, path = full, items, more = false });
+            Host.Log($"explorateur : {full} ({total} éléments)");
         }
         catch (OperationCanceledException) { throw; }
-        catch (UnauthorizedAccessException) { return new { type = "fs.list", tab, error = "Accès refusé : " + path }; }
-        catch (Exception ex) { return new { type = "fs.list", tab, error = ex.Message }; }
+        catch (UnauthorizedAccessException) { emit(new { type = "fs.list", tab, error = "Accès refusé : " + path }); }
+        catch (Exception ex) { emit(new { type = "fs.list", tab, error = ex.Message }); }
+    }
+
+    // La lecture d'un coup (essais, commandes synchrones) : un seul message, tous les éléments.
+    public static object List(string path, string tab, CancellationToken ct = default)
+    {
+        object result = null;
+        ListStream(path, tab, ct, o => result = o, int.MaxValue);
+        return result;
     }
 
     // Aperçu d'un fichier texte : les 64 premiers Ko, décodés en UTF-16 / UTF-8 (avec ou sans BOM), à défaut en Latin-1. Un octet nul = binaire.

@@ -5,7 +5,7 @@
   function newFolder() { if (T().path) { T().renameAfter = 'Nouveau dossier'; post({ cmd: 'fs.newfolder', dir: T().path, tab: T().id }); } }
   function rename(name) {
     const t = T(); const idx = t.rows.findIndex(i => i.n === (name ?? [...t.sel][0])); if (idx < 0) return;
-    const it = t.rows[idx], row = $('files').children[idx]; if (!row || it.drive) return;
+    const it = t.rows[idx]; ensureVisible(idx); const row = $('files').querySelector(`.fr[data-i="${idx}"]`); if (!row || it.drive) return;
     row.scrollIntoView({ block: 'nearest' });
     const cell = row.querySelector('.nm'); cell.innerHTML = pix(iconOf(it), 16) + `<input class="text-input" value="${esc(it.n)}" spellcheck="false">`;
     const inp = cell.querySelector('input'); inp.focus(); const dot = it.d ? it.n.length : it.n.lastIndexOf('.'); inp.setSelectionRange(0, dot > 0 ? dot : it.n.length);

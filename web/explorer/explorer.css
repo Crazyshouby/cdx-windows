@@ -22,6 +22,7 @@
   .fr .r { text-align: right; }
   .fr .f { color: var(--faint); }
   .fr.cut { opacity: .5; }
+  .fr.hid { opacity: .6; }   /* élément caché ou système (visible quand « Éléments cachés » est coché) */
   .lhead.o6 { padding: 0 16px 0 7px; }   /* 1 px de bordure de la liste + 6 px de la bordure des lignes à gauche ; 15 px de barre de défilement + 1 px à droite */   /* les colonnes : --kdx-cols, posé par kdx-columns.js */
   .fr input { width: 100%; height: 20px; padding: 0 4px; }
   .lh.rev::after { border-top: 0; border-bottom: 5px solid #fff; }

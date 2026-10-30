@@ -1,7 +1,13 @@
 // La sélection à la souris (clic, Ctrl, Maj, double-clic) et l'ouverture.
   // ---------------- sélection et ouverture ----------------
   const pathOf = it => it.p || joinP(T().path, it.n);
-  const selected = () => { const t = T(); return (t.rows || []).filter(i => t.sel.has(i.n)); };
+  // Les éléments sélectionnés (ceux que le filtre cache ne comptent pas : on n'agit jamais sur ce qu'on ne voit pas).
+  const selected = () => {
+    const t = T(); if (!t || !t.items) return [];
+    const bn = byName(t), f = t.filter.toLowerCase(), out = [];
+    for (const n of t.sel) { const it = bn.get(n); if (it && (!f || it.n.toLowerCase().includes(f))) out.push(it); }
+    return out;
+  };
   function open(it) { if (it.d) { go(pathOf(it), 'push'); $('find').value = ''; T().filter = ''; } else post({ cmd: 'fs.open', path: pathOf(it) }); }
   $('files').onmousedown = e => {
     if (e.target.closest('input')) return;

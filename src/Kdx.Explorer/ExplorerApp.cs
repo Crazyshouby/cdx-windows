@@ -36,13 +36,10 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
         var key = (from, tab ?? "");
         if (lists.TryGetValue(key, out var old)) old.Cancel();
         var cts = lists[key] = new CancellationTokenSource(); var ct = cts.Token;
-        _ = Task.Run(() => { try { return Fs.List(path, tab, ct); } catch (OperationCanceledException) { return null; } catch (Exception ex) { return new { type = "fs.list", tab, error = ex.Message }; } })
-            .ContinueWith(t => Anchor.BeginInvoke(new Action(() =>
-            {
-                if (lists.TryGetValue(key, out var cur) && cur == cts) lists.Remove(key);
-                if (ct.IsCancellationRequested || from.IsDisposed || t.IsFaulted || t.Result == null) return;
-                from.Send(t.Result);
-            })));
+        // chaque paquet repart vers la page dans l'ordre, sur le fil d'interface ; un paquet devenu inutile (autre dossier demandé, fenêtre fermée) n'est jamais envoyé
+        void Emit(object msg) => Anchor.BeginInvoke(new Action(() => { if (!ct.IsCancellationRequested && !from.IsDisposed) from.Send(msg); }));
+        _ = Task.Run(() => { try { Fs.ListStream(path, tab, ct, Emit); } catch (OperationCanceledException) { } catch (Exception ex) { Emit(new { type = "fs.list", tab, error = ex.Message }); } })
+            .ContinueWith(t => Anchor.BeginInvoke(new Action(() => { if (lists.TryGetValue(key, out var cur) && cur == cts) lists.Remove(key); })));
     }
 
     void CancelLists(HostForm f) { foreach (var k in lists.Keys.Where(k => k.Item1 == f).ToList()) { lists[k].Cancel(); lists.Remove(k); } }
