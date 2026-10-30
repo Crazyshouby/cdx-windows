@@ -55,6 +55,19 @@ try {
   Js "document.querySelector('#chips [data-f=all]').click(); const f=document.getElementById('find'); f.value='vide'; f.dispatchEvent(new Event('input'))" | Out-Null
   Check "la recherche « vide » ne laisse que « vide »" (Until { (JsInt "document.querySelectorAll('#rows .fr').length") -eq 1 -and (Js "document.querySelector('#rows .fr b').textContent") -eq 'vide' } 3000)
 
+  # --- colonnes redimensionnables (kdx-columns.js) ---
+  Js "document.getElementById('find').value=''; document.getElementById('find').dispatchEvent(new Event('input')); document.querySelector('#chips [data-f=all]').click()" | Out-Null
+  Check "l'en-tête a une poignée sur chaque colonne sauf la dernière" ((JsInt "document.querySelectorAll('#lhead .kdx-colrz').length") -eq 3)
+  $w0 = Js "JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))"
+  Js "(() => { const h = document.querySelector('#lhead .kdx-colrz'), x = h.getBoundingClientRect().left; for (const [t, d] of [['pointerdown', 0], ['pointermove', -60], ['pointerup', -60]]) h.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 5, clientX: x + d })); })()" | Out-Null
+  $w1 = Js "JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))"
+  $a = $w0 | ConvertFrom-Json; $b = $w1 | ConvertFrom-Json
+  Check "tirer le bord de « Projet » de 60 px à gauche le rétrécit de 60 et élargit la colonne suivante de 60 ($w0 -> $w1)" (($a[0] - $b[0]) -eq 60 -and ($b[1] - $a[1]) -eq 60 -and $a[2] -eq $b[2])
+  Check "les lignes de la liste suivent les colonnes de l'en-tête" ((Js "(() => { const r = document.querySelector('#rows .fr'), h = document.querySelectorAll('#lhead > .lh'); return [0, 1, 2, 3].every(i => Math.abs(r.children[i].getBoundingClientRect().width - h[i].getBoundingClientRect().width) <= 1); })()") -eq 'true')
+  Check "tirer un bord ne change pas le tri" ((Js "document.querySelector('#lhead .lh.on').dataset.k") -eq 'd')
+  Js "document.querySelector('#lhead .kdx-colrz').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))" | Out-Null
+  Check "un double-clic sur une poignée rend les largeurs d'origine" ((Js "JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))") -eq $w0)
+
   # --- masquer un projet (réglage de l'application, enregistré dans repos.json) ---
   Js "document.getElementById('find').value=''; document.getElementById('find').dispatchEvent(new Event('input')); document.querySelector('#rows .fr[data-p*=vide]').click()" | Out-Null
   Js "document.querySelector('#pv [data-a=hide]').click()" | Out-Null

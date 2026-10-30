@@ -24,7 +24,7 @@
   .col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
   .side .row-item { cursor: default; }
   .side .head { margin-top: 10px; padding: 5px 8px 5px 6px; color: var(--faint); }
-  .fr { display: grid; grid-template-columns: 1fr 170px 170px 90px; gap: 0; align-items: center; height: 26px; border-left: 6px solid transparent; border-bottom: 1px solid var(--line); cursor: default; }
+  .fr { display: grid; grid-template-columns: var(--kdx-cols, minmax(80px, 1fr) 170px 170px 90px); gap: 0; align-items: center; height: 26px; border-left: 6px solid transparent; border-bottom: 1px solid var(--line); cursor: default; }
   .fr:hover { background: var(--row-hover); }
   .fr.sel { background: var(--row-sel); box-shadow: inset 0 0 0 1px var(--row-sel-ring); }
   .fr > * { padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -33,10 +33,10 @@
   .fr .r { text-align: right; }
   .fr .f { color: var(--faint); }
   .fr.cut { opacity: .5; }
-  .lhead.o6 { padding-left: 6px; grid-template-columns: 1fr 170px 170px 90px; }
+  .lhead.o6 { padding: 0 16px 0 7px; }   /* 1 px de bordure de la liste + 6 px de la bordure des lignes à gauche ; 15 px de barre de défilement + 1 px à droite */   /* les colonnes : --kdx-cols, posé par kdx-columns.js */
   .fr input { width: 100%; height: 20px; padding: 0 4px; }
   .lh.rev::after { border-top: 0; border-bottom: 5px solid #fff; }
-  #files { outline: none; }
+  #files { outline: none; scrollbar-gutter: stable; }   /* la place de la barre de défilement est toujours réservée : les colonnes restent sous leurs en-têtes */
   .empty { padding: 30px; text-align: center; color: var(--faint); }
   /* poignées de bord : remplacent le cadre redimensionnable de Windows */
   /* volet d'aperçu */
@@ -58,6 +58,7 @@
 <script src="/kdx/icons.js"></script>
 <script src="/kdx/kdx-bridge.js"></script>
 <script src="/kdx/kdx-frame.js"></script>
+<script src="/kdx/kdx-columns.js"></script>
 <script src="/kdx/host.js"></script>
 </head>
 <body>
@@ -262,7 +263,8 @@
   });
 
   // ---------------- cadre de la fenêtre ----------------
-  KdxFrame.init();   // barre de titre, boutons et bords : kdx-frame.js (la barre se double-clique pour agrandir)
+  KdxFrame.init();
+  KdxColumns.init({ head: $('lhead'), cols: ['1fr', 170, 170, 90], key: 'explorateur' });   // colonnes redimensionnables (double-clic sur une poignée : largeurs d'origine)   // barre de titre, boutons et bords : kdx-frame.js (la barre se double-clique pour agrandir)
 
   // ---------------- démarrage ----------------
   if (hasHost) post({ cmd: 'fs.places' });

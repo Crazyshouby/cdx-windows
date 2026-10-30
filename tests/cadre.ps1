@@ -31,6 +31,17 @@ try {
     Check "le pont de la charte est détecté (kdx.host = webview2)" ((Ctl $p "$e window.kdx && kdx.host") -eq '"webview2"')
     Check "KdxFrame est chargé et la barre de titre est branchée (data-act sur les trois boutons)" ((Ctl $p "$e typeof KdxFrame.init + ' ' + document.querySelectorAll('.tb-btn[data-act]').length") -eq '"function 3"')
     Check "la barre se double-clique pour agrandir (data-dblclick = max)" ((Ctl $p "$e document.getElementById('tb').dataset.dblclick") -eq '"max"')
+    if ($app.n -eq 'Explorateur') {
+      # colonnes redimensionnables (kdx-columns.js) : poignées, bord tiré, lignes alignées, retour aux largeurs d'origine
+      Check "les colonnes ont des poignées (3) et les lignes suivent l'en-tête" ((Ctl $p "$e document.querySelectorAll('#lhead .kdx-colrz').length") -eq '3')
+      $c0 = Ctl $p "$e JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))"
+      Ctl $p "$e (() => { const h = document.querySelectorAll('#lhead .kdx-colrz')[1], x = h.getBoundingClientRect().left; for (const [t, d] of [['pointerdown', 0], ['pointermove', 40], ['pointerup', 40]]) h.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 5, clientX: x + d })); })()" | Out-Null
+      $c1 = Ctl $p "$e JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))"
+      $x0 = ($c0 | ConvertFrom-Json | ConvertFrom-Json); $x1 = ($c1 | ConvertFrom-Json | ConvertFrom-Json)
+      Check "tirer le bord de « Modifié le » de 40 px : elle gagne 40, « Type » perd 40 ($x0 -> $x1)" (($x1[1] - $x0[1]) -eq 40 -and ($x0[2] - $x1[2]) -eq 40 -and $x0[0] -eq $x1[0])
+      Ctl $p "$e document.querySelector('#lhead .kdx-colrz').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))" | Out-Null
+      Check "un double-clic sur une poignée rend les largeurs d'origine" ((Ctl $p "$e JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))") -eq $c0)
+    }
     $w0 = [int](Ctl $p "$e window.outerWidth")
     Ctl $p "$e document.getElementById('bmax').click()" | Out-Null
     $grown = Until { [int](Ctl $p "$e window.outerWidth") -ne $w0 } 4000
