@@ -83,6 +83,27 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
         }
     }
 
+    // Le glisser vers l'extérieur : la page détecte que le pointeur quitte la fenêtre avec des éléments saisis et nous les confie ; Windows prend le relais (boucle de glisser-déposer
+    // native, annulable par Échap) et le résultat revient à la page (fs.dragend) pour qu'elle relise le dossier si les éléments ont été déplacés.
+    void DragOut(HostForm from, JsonElement r)
+    {
+        var paths = r.TryGetProperty("paths", out var pv) && pv.ValueKind == JsonValueKind.Array
+            ? pv.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()).Where(p => p.Length <= 520 && Path.IsPathRooted(p) && (File.Exists(p) || Directory.Exists(p))).Take(5000).ToArray()
+            : Array.Empty<string>();
+        if (paths.Length == 0) return;
+        from.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                var data = new DataObject(DataFormats.FileDrop, paths);
+                var effect = from.DoDragDrop(data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
+                Host.Log("glisser vers l'extérieur : " + paths.Length + " élément(s), effet " + effect);
+                from.Send(new { type = "fs.dragend", effect = (int)effect });
+            }
+            catch (Exception ex) { Host.Log("glisser vers l'extérieur : " + ex.Message); from.Send(new { type = "fs.dragend", effect = 0 }); }
+        }));
+    }
+
     public void OnMessage(HostForm from, string json)
     {
         try
@@ -97,6 +118,13 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
                 _ = Task.Run(() => { if (!Bus.Send("browser", "open-file", new { path = file }, "explorer", launch: true)) Anchor.BeginInvoke(new Action(() => Fs.Handle(owner, send, cmd, rr))); });
                 return;
             }
+            if (cmd == "fs.dropfiles")
+            {
+                string dir = r.TryGetProperty("dir", out var dv) && dv.ValueKind == JsonValueKind.String ? dv.GetString() : null, tab = r.TryGetProperty("tab", out var tv) && tv.ValueKind == JsonValueKind.String ? tv.GetString() : null;
+                Fs.DropFiles(from.Send, from.DroppedPaths, dir, r.TryGetProperty("move", out var mv) && mv.ValueKind == JsonValueKind.True, tab);
+                return;
+            }
+            if (cmd == "fs.dragout") { DragOut(from, r); return; }
             if (cmd.StartsWith("fs.")) { Fs.Handle(from.Handle, from.Send, cmd, r); return; }
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             if (Host.CommonMessage(from, cmd, r)) return;

@@ -57,6 +57,30 @@ static class SelfTest
             Do($"{{\"cmd\":\"fs.paste\",\"dir\":{J(Path.Combine(dir, "sous"))},\"tab\":\"t\"}}");
             Check("couper-coller : déplacé (absent de l'origine)", File.Exists(Path.Combine(dir, "sous", "renomme.txt")) && !File.Exists(Path.Combine(dir, "renomme.txt")));
 
+            // --- glisser-déposer (fs.drop) : déplacer, copier, refus d'un dossier dans lui-même ---
+            string cible = Path.Combine(dir, "cible"); Directory.CreateDirectory(cible);
+            File.WriteAllText(Path.Combine(dir, "dnd1.txt"), "dnd");
+            bool HasError() => replies.Count > 0 && replies[0].TryGetProperty("error", out var er) && er.ValueKind == JsonValueKind.String;
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(dir, "dnd1.txt"))}],\"dir\":{J(cible)},\"move\":true,\"tab\":\"t\"}}");
+            Check("glisser : déplacer un fichier dans un dossier", !HasError() && File.Exists(Path.Combine(cible, "dnd1.txt")) && !File.Exists(Path.Combine(dir, "dnd1.txt")));
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(dir, "b.txt"))}],\"dir\":{J(cible)},\"move\":false,\"tab\":\"t\"}}");
+            Check("glisser avec Ctrl : copier (l'original reste)", !HasError() && File.Exists(Path.Combine(cible, "b.txt")) && File.Exists(Path.Combine(dir, "b.txt")));
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(cible, "dnd1.txt"))}],\"dir\":{J(cible)},\"move\":false,\"tab\":\"t\"}}");
+            Check("copier dans le dossier d'origine : « dnd1 (2).txt »", File.Exists(Path.Combine(cible, "dnd1 (2).txt")));
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(cible, "dnd1.txt"))}],\"dir\":{J(cible)},\"move\":true,\"tab\":\"t\"}}");
+            Check("déplacer dans le dossier d'origine : rien ne change, pas d'erreur", !HasError() && File.Exists(Path.Combine(cible, "dnd1.txt")) && Directory.GetFiles(cible).Length == 3);
+            string sub2 = Path.Combine(cible, "sub2"); Directory.CreateDirectory(sub2);
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(cible)}],\"dir\":{J(sub2)},\"move\":true,\"tab\":\"t\"}}");
+            Check("un dossier ne se déplace pas dans son propre sous-dossier (refus, rien de perdu)", HasError() && Directory.Exists(cible) && Directory.Exists(sub2));
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(cible)}],\"dir\":{J(cible)},\"move\":false,\"tab\":\"t\"}}");
+            Check("ni dans lui-même en copie", HasError() && !Directory.Exists(cible + " (2)"));
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(dir, "Nouveau dossier"))}],\"dir\":{J(cible)},\"move\":true,\"tab\":\"t\"}}");
+            Check("glisser un dossier dans un autre : déplacé avec son contenu", Directory.Exists(Path.Combine(cible, "Nouveau dossier")) && !Directory.Exists(Path.Combine(dir, "Nouveau dossier")));
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(cible, "b.txt"))}],\"dir\":{J(Path.Combine(dir, "n-existe-pas"))},\"move\":true,\"tab\":\"t\"}}");
+            Check("destination qui n'existe pas : message d'erreur, fichier intact", HasError() && File.Exists(Path.Combine(cible, "b.txt")));
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[\"relatif/x.txt\",\"\"],\"dir\":{J(cible)},\"move\":true,\"tab\":\"t\"}}");
+            Check("chemins relatifs ou vides ignorés sans erreur", !HasError());
+
             Do($"{{\"cmd\":\"fs.delete\",\"paths\":[{J(Path.Combine(dir, "sous"))},{J(Path.Combine(dir, "b (2).txt"))}],\"tab\":\"t\"}}");
             Check("suppression : dossier et fichier partis (corbeille)", !Directory.Exists(Path.Combine(dir, "sous")) && !File.Exists(Path.Combine(dir, "b (2).txt")));
         }

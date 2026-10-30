@@ -113,6 +113,37 @@ static class Fs
         Clipboard.SetDataObject(data, true);
     }
 
+    // Glisser-déposer : déplace (move) ou copie des éléments vers un dossier, avec les règles du presse-papiers (Paste) : les boîtes de Windows règlent les conflits de noms,
+    // coller dans le dossier d'origine donne « nom (2) ». Rend un message d'erreur (ou null). Un dossier ne se place jamais dans lui-même ; déplacer dans le dossier d'origine ne fait rien.
+    public static string Transfer(IEnumerable<string> sources, string dir, bool move)
+    {
+        if (string.IsNullOrEmpty(dir) || dir.Length > 520 || !Path.IsPathRooted(dir) || !Directory.Exists(dir)) return "Dossier de destination introuvable.";
+        string dirN = dir.TrimEnd('\\');
+        foreach (var raw in sources)
+        {
+            if (string.IsNullOrEmpty(raw) || raw.Length > 520 || !Path.IsPathRooted(raw)) continue;
+            string src = raw.TrimEnd('\\'); bool isDir = Directory.Exists(src);
+            if (!isDir && !File.Exists(src)) continue;
+            string name = Path.GetFileName(src);
+            if (name.Length == 0) continue;   // la racine d'un disque ne se déplace pas
+            if (isDir && (string.Equals(src, dirN, StringComparison.OrdinalIgnoreCase) || dirN.StartsWith(src + "\\", StringComparison.OrdinalIgnoreCase))) return "Impossible de placer un dossier dans lui-même.";
+            bool sameDir = string.Equals(Path.GetDirectoryName(src), dirN, StringComparison.OrdinalIgnoreCase);
+            if (move && sameDir) continue;
+            string dst = sameDir ? UniquePath(dir, name) : Path.Combine(dir, name);
+            if (move) { if (isDir) FileSystem.MoveDirectory(src, dst, UIOption.AllDialogs); else FileSystem.MoveFile(src, dst, UIOption.AllDialogs); }
+            else { if (isDir) FileSystem.CopyDirectory(src, dst, UIOption.AllDialogs); else FileSystem.CopyFile(src, dst, UIOption.AllDialogs); }
+        }
+        return null;
+    }
+
+    // Des fichiers glissés depuis une autre application (l'Explorateur de Windows, le Bureau) : leurs chemins viennent de WebView2 (HostForm.DroppedPaths).
+    public static void DropFiles(Action<object> send, IEnumerable<string> paths, string dir, bool move, string tab)
+    {
+        try { send(new { type = "fs.done", tab, error = Transfer(paths ?? Array.Empty<string>(), dir, move) }); }
+        catch (OperationCanceledException) { send(new { type = "fs.done", tab }); }
+        catch (Exception ex) { Host.Log("explorateur : dépôt de fichiers a échoué : " + ex.Message); send(new { type = "fs.done", tab, error = ex.Message }); }
+    }
+
     static void Paste(string dir)
     {
         var data = Clipboard.GetDataObject();
@@ -181,6 +212,7 @@ static class Fs
                 case "fs.preview": send(Preview(Str("path"), tab)); break;
                 case "fs.copy": SetClipboard(Paths(), r.TryGetProperty("cut", out var c) && c.GetBoolean()); break;
                 case "fs.paste": Paste(Str("dir")); send(new { type = "fs.done", tab }); break;
+                case "fs.drop": send(new { type = "fs.done", tab, error = Transfer(Paths(), Str("dir"), r.TryGetProperty("move", out var mv) && mv.ValueKind == JsonValueKind.True) }); break;
             }
         }
         catch (OperationCanceledException) { send(new { type = "fs.done", tab }); }

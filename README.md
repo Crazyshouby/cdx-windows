@@ -12,7 +12,7 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 | Programme | Rôle | Instance | Données |
 |---|---|---|---|
 | `bin\kdx-shell.exe` | la barre, le menu Démarrer, le centre rapide, Alt+Tab, la touche Windows, la liaison avec AudioLinker | une | `journal.log` |
-| `bin\kdx-explorer.exe [--theme t] [dossier]` | l'Explorateur : une fenêtre par dossier ouvert, s'arrête avec la dernière | une (un second lancement ouvre une fenêtre dans la première) | `journal-explorer.log` |
+| `bin\kdx-explorer.exe [--theme t] [dossier]` | l'Explorateur : une fenêtre par dossier ouvert, s'arrête avec la dernière ; **glisser-déposer** (voir ci-dessous) | une (un second lancement ouvre une fenêtre dans la première) | `journal-explorer.log` |
 | `bin\kdx-browser.exe [--theme t] [adresse]` | le navigateur à onglets | une (un second lancement ouvre un onglet) | `journal-browser.log`, profil `navigateur\` |
 | `bin\kdx-repos.exe [--theme t]` | **Dépôts** : tous les projets git du PC (ce qui reste à enregistrer ou à envoyer sur GitHub), en lecture seule | une (un second lancement passe devant) | `journal-repos.log`, `repos.json` (dossiers explorés, projets masqués) |
 
@@ -31,7 +31,7 @@ src\Kdx.Repos\      kdx-repos : Git.cs (recherche et lecture de git, jamais d'é
 web\kdx\            la charte (copie exacte de kdx-ui/dist : node tools/charte-sync.mjs --write kdx-windows) et host.js, le pont des pages
 web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
 couche1\            le cadre des fenêtres de Windows aux couleurs de la charte (DWM), réversible
-tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables)
+tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), dnd.ps1 (glisser-déposer de l'Explorateur : 24 vérifications, dans la vraie fenêtre isolée)
 ```
 
 ## Essais (aucune entrée simulée)
@@ -48,6 +48,16 @@ tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, re
 - **Bus** : un tube `\\.\pipe\kdx.<nom>` par programme (`Bus.cs`), messages `{type, from, data}` validés par liste blanche : `notify` (shell), `open-path` et `select` (Explorateur),
   `open-url` (navigateur, http et https seulement), `show` (Dépôts). Lancer `kdx-browser.exe <adresse>` alors qu'il tourne déjà passe par ce bus. Spécification : `kdx-ui/docs/SUITE.md`.
 - Essais : `kdx-shell --selftest-bus` (19 vérifications), `tests\bus.ps1` (essai de bout en bout isolé : ni le vrai bus, ni le vrai `suite.json`, ni le vrai profil du navigateur).
+
+## Glisser-déposer de l'Explorateur
+- **Dans la fenêtre** : une ligne (ou la sélection) se dépose sur un dossier de la liste, un lieu de la barre latérale ou un onglet. Comme dans Windows : sur le même disque on déplace, d'un disque à l'autre on copie ;
+  **Ctrl** copie, **Maj** déplace, **Échap** annule. Une ligne fantôme suit le pointeur et dit ce qui va se passer (« Déplacer vers « X » »), la cible s'éclaire, la liste défile près de ses bords.
+  Refusés : un dossier sur lui-même ou dans l'un de ses sous-dossiers, et déplacer dans le dossier d'origine (ne fait rien). Les conflits de noms passent par les boîtes de Windows.
+- **Depuis une autre application** (Explorateur de Windows, Bureau) : les fichiers se déposent sur la liste (le dossier courant), un dossier, un lieu ou un onglet ; copiés, ou déplacés avec Maj.
+  Les chemins viennent de WebView2 (`postMessageWithAdditionalObjects`, `HostForm.DroppedPaths`).
+- **Vers une autre application** : quand le pointeur quitte la fenêtre avec des éléments saisis, la page envoie `fs.dragout` et Windows prend le relais (`DoDragDrop`, fichiers réels) ; la liste est relue ensuite.
+- **Essais** : `kdx-explorer --selftest-fs` (déplacer, copier, refus, noms uniques) et `tests\dnd.ps1` (la page pilotée par des événements de pointeur fabriqués, jamais la vraie souris). **Pas essayés automatiquement** :
+  le glisser depuis et vers une autre application (il demande un vrai glisser de Windows) ; à essayer à la main.
 
 ## Synergies (phase 4)
 - **Notifications** : `notify` sur le bus du shell → une cloche et le nombre de notifications non vues dans la barre (place fixe), la liste dans le centre rapide (50 au plus, « Effacer »).

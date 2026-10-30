@@ -13,6 +13,8 @@ namespace Kdx;
 class HostForm : Form
 {
     protected readonly IHostApp app;
+    // Les chemins des fichiers glissés sur la page depuis une autre application, pour le message en cours (postMessageWithAdditionalObjects) ; null sinon.
+    public string[] DroppedPaths { get; private set; }
     public readonly WebView2 Web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.FromArgb(0x33, 0x33, 0x33) };
 
     public HostForm(IHostApp a, string name)
@@ -43,7 +45,11 @@ class HostForm : Form
         MapExtraHosts(c);
         // Une navigation hors des pages de la charte est refusée : sans cela, le bouton « précédent » de la souris (ou un lien) remplacerait la page.
         c.NavigationStarting += (s, e) => { if (!e.Uri.StartsWith("https://kdx.shell/")) { e.Cancel = true; Host.Log("navigation refusée : " + e.Uri); } };
-        c.WebMessageReceived += (s, e) => app.OnMessage(this, e.WebMessageAsJson);
+        c.WebMessageReceived += (s, e) =>
+        {
+            DroppedPaths = e.AdditionalObjects?.OfType<CoreWebView2File>().Select(f => f.Path).ToArray();
+            try { app.OnMessage(this, e.WebMessageAsJson); } finally { DroppedPaths = null; }
+        };
         c.Navigate("https://kdx.shell/" + page);
     }
 
