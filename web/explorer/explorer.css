@@ -1,0 +1,55 @@
+  /* L'Explorateur de windows-ui.html, en vrai. La fenêtre remplit la page ; les poignées de bord (.rz) remplacent le cadre de Windows. */
+  .tabs { cursor: default; }
+  .tab { max-width: 200px; }
+  .mbar { display: flex; flex: none; }
+  .mb { height: 22px; padding: 0 12px; margin-right: -1px; font: inherit; color: var(--text); cursor: default; background: var(--btn); border: 1px solid #000; box-shadow: var(--bevel); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .mb:hover { background: #3b3b3b; }
+  .mb:active { background: #2a2a2a; box-shadow: var(--bevel-down); }
+  .mb.off { color: var(--faint); }
+  .mb.on { background: #2a2a2a; box-shadow: var(--bevel-down); }
+  .nav { display: flex; gap: 5px; flex: none; align-items: center; }
+  .nav .btn { padding: 0 10px; }
+  .split { flex: 1; min-height: 0; display: flex; gap: 5px; }
+  .col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
+  .side .row-item { cursor: default; }
+  .side .head { margin-top: 10px; padding: 5px 8px 5px 6px; color: var(--faint); }
+  .fr { display: grid; grid-template-columns: var(--kdx-cols, minmax(80px, 1fr) 170px 170px 90px); gap: 0; align-items: center; height: 26px; border-left: 6px solid transparent; border-bottom: 1px solid var(--line); cursor: default; }
+  .fr:hover { background: var(--row-hover); }
+  .fr.sel { background: var(--row-sel); box-shadow: inset 0 0 0 1px var(--row-sel-ring); }
+  .fr > * { padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fr .nm { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .fr .nm span:last-child { overflow: hidden; text-overflow: ellipsis; }
+  .fr .r { text-align: right; }
+  .fr .f { color: var(--faint); }
+  .fr.cut { opacity: .5; }
+  .lhead.o6 { padding: 0 16px 0 7px; }   /* 1 px de bordure de la liste + 6 px de la bordure des lignes à gauche ; 15 px de barre de défilement + 1 px à droite */   /* les colonnes : --kdx-cols, posé par kdx-columns.js */
+  .fr input { width: 100%; height: 20px; padding: 0 4px; }
+  .lh.rev::after { border-top: 0; border-bottom: 5px solid #fff; }
+  #files { outline: none; scrollbar-gutter: stable; }   /* la place de la barre de défilement est toujours réservée : les colonnes restent sous leurs en-têtes */
+  .empty { padding: 30px; text-align: center; color: var(--faint); }
+  /* poignées de bord : remplacent le cadre redimensionnable de Windows */
+  /* volet d'aperçu */
+  .pv { flex: none; width: 340px; }
+  .pvbox { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); overflow: hidden; }
+  .pvmid { flex: 1; min-height: 0; display: grid; place-items: center; padding: 10px; overflow: hidden; }
+  .pvmid img, .pvmid video { max-width: 100%; max-height: 100%; }
+  .pvbox iframe { flex: 1; border: 0; width: 100%; background: #fff; }
+  .pvbox .log { flex: 1; border: 0; box-shadow: none; padding: 6px 8px; white-space: pre-wrap; }
+  .pvinfo { flex: none; padding: 6px 4px 2px; line-height: 1.5; min-height: 52px; }
+  .pvn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .menu { position: fixed; z-index: 80; }
+  .menu-item .k { margin-left: auto; padding-left: 28px; color: var(--faint); }
+  .menu-item.off { color: var(--faint); }
+  .menu-item.off:hover { background: none; box-shadow: none; }
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .45); }
+  .veil .win { position: relative; inset: auto; width: 460px; }
+  /* glisser-déposer : la ligne fantôme qui suit le pointeur, la cible éclairée, le curseur selon l'action */
+  .dnd-ghost { position: fixed; z-index: 90; pointer-events: none; display: flex; align-items: center; gap: 8px; max-width: 340px; padding: 4px 10px; background: var(--panel); border: 1px solid #000; box-shadow: var(--ring), 3px 4px 0 rgba(0, 0, 0, .5); white-space: nowrap; }
+  .dnd-ghost .t { overflow: hidden; text-overflow: ellipsis; }
+  .dnd-ghost .t i { display: block; color: var(--faint); font-style: normal; }
+  .fr.dnd-over, #side .row-item.dnd-over, .tab.dnd-over { background: var(--row-sel); box-shadow: inset 0 0 0 2px var(--a-edge); }
+  .fr.dnd-src { opacity: .55; }
+  body.dnd, body.dnd * { user-select: none; }
+  body.dnd.cp, body.dnd.cp * { cursor: copy !important; }
+  body.dnd.mv, body.dnd.mv * { cursor: move !important; }
+  body.dnd.no, body.dnd.no * { cursor: not-allowed !important; }
