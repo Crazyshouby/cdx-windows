@@ -15,7 +15,8 @@ let bad = 0;
 for (const [rel, info] of Object.entries(m.files)) {
   const f = path.join(root, rel);
   if (!fs.existsSync(f)) { console.log('ABSENT   ' + rel); bad++; continue; }
-  const h = crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+  // Les fins de ligne ne comptent pas : git les convertit en CRLF à l'extraction sous Windows (core.autocrlf), l'empreinte reste celle du fichier LF de kdx-ui.
+  const h = crypto.createHash('sha256').update(Buffer.from(fs.readFileSync(f).toString('latin1').replace(/\r\n/g, '\n'), 'latin1')).digest('hex');
   if (h !== info.sha256) { console.log('MODIFIÉ  ' + rel + '  (attendu : copie de kdx-ui ' + m.kdxUi + ' / ' + info.from + ')'); bad++; }
 }
 console.log(bad ? `${bad} copie(s) de la charte à resynchroniser : node tools/charte-sync.mjs --write <application> dans kdx-ui` : `copies de la charte conformes (kdx-ui ${m.kdxUi}, ${Object.keys(m.files).length} fichiers)`);

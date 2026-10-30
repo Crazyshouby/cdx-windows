@@ -11,15 +11,15 @@
     },
     "web/kdx/fonts.css": {
       "from": "fonts.css",
-      "sha256": "807e66f40d2da77f858ad0383231fbadf89b2b6eb73397e99e8c191b5febb58b"
+      "sha256": "42e6d1d1f8f7268a15631b5d982fc41a9080665140bfc3d844f88480ecdca0c7"
     },
     "web/kdx/icons.js": {
       "from": "icons.js",
-      "sha256": "e285b99c7172f5d45ffd579115cc6447e214f458864b520c91bf9b5140052ee8"
+      "sha256": "3e225987c4d5e6526cc42e42c94e1e716ff53b003bc23de80b1617295ad788b5"
     },
     "tools/kdx-verify.mjs": {
       "from": "kdx-verify.mjs",
-      "sha256": "92a9568326cf493ee5a9ccb66bdee00d0662e922981a3f77966a04d66a831a84"
+      "sha256": "49afd3380630058abf08a44d3f84632054db182fce837d9eeb791fbf270dbe1a"
     }
   }
 }
