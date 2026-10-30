@@ -76,6 +76,28 @@ static class SelfTest
             Check("ni dans lui-même en copie", HasError() && !Directory.Exists(cible + " (2)"));
             Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(dir, "Nouveau dossier"))}],\"dir\":{J(cible)},\"move\":true,\"tab\":\"t\"}}");
             Check("glisser un dossier dans un autre : déplacé avec son contenu", Directory.Exists(Path.Combine(cible, "Nouveau dossier")) && !Directory.Exists(Path.Combine(dir, "Nouveau dossier")));
+            // --- noms déjà pris : la page décide (jamais de boîte de Windows), rien n'est touché tant qu'elle n'a pas répondu ---
+            File.WriteAllText(Path.Combine(cible, "x.txt"), "ancien"); File.WriteAllText(Path.Combine(dir, "x.txt"), "nouveau");
+            string Conf(string c) => c == null ? "" : $",\"conflict\":\"{c}\"";
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(dir, "x.txt"))}],\"dir\":{J(cible)},\"move\":false,\"tab\":\"t\"}}");
+            Check("un nom déjà pris : message fs.conflict avec le nom, rien n'est touché", replies.Count == 1 && replies[0].GetProperty("type").GetString() == "fs.conflict" && replies[0].GetProperty("names")[0].GetString() == "x.txt" && File.ReadAllText(Path.Combine(cible, "x.txt")) == "ancien");
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(dir, "x.txt"))}],\"dir\":{J(cible)},\"move\":false,\"tab\":\"t\"{Conf("skip")}}}");
+            Check("réponse « ignorer » : le fichier de la destination reste, pas de copie", File.ReadAllText(Path.Combine(cible, "x.txt")) == "ancien" && !File.Exists(Path.Combine(cible, "x (2).txt")));
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(dir, "x.txt"))}],\"dir\":{J(cible)},\"move\":false,\"tab\":\"t\"{Conf("keep")}}}");
+            Check("réponse « garder les deux » : « x (2).txt » créé, l'ancien intact", File.ReadAllText(Path.Combine(cible, "x (2).txt")) == "nouveau" && File.ReadAllText(Path.Combine(cible, "x.txt")) == "ancien");
+            Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(dir, "x.txt"))}],\"dir\":{J(cible)},\"move\":true,\"tab\":\"t\"{Conf("replace")}}}");
+            Check("réponse « remplacer » (déplacement) : la destination prend le contenu, l'original disparaît", File.ReadAllText(Path.Combine(cible, "x.txt")) == "nouveau" && !File.Exists(Path.Combine(dir, "x.txt")) && !HasError());
+
+            // --- fichiers venus d'une autre application ou d'une autre fenêtre : même disque = déplacer, Ctrl = copier ---
+            Check("même disque détecté ; disque différent ou liste vide : non", Fs.SameVolume(new[] { Path.Combine(dir, "x.txt") }, cible) && !Fs.SameVolume(new[] { @"Z:\nulle-part\a.txt" }, cible) && !Fs.SameVolume(Array.Empty<string>(), cible));
+            File.WriteAllText(Path.Combine(dir, "ext1.txt"), "e1"); File.WriteAllText(Path.Combine(dir, "ext2.txt"), "e2"); File.WriteAllText(Path.Combine(dir, "ext3.txt"), "e3");
+            replies.Clear(); Fs.DropFiles(Send, new[] { Path.Combine(dir, "ext1.txt") }, cible, false, false, "t");
+            Check("déposé sans touche, même disque : déplacé", File.Exists(Path.Combine(cible, "ext1.txt")) && !File.Exists(Path.Combine(dir, "ext1.txt")));
+            replies.Clear(); Fs.DropFiles(Send, new[] { Path.Combine(dir, "ext2.txt") }, cible, false, true, "t");
+            Check("déposé avec Ctrl : copié (l'original reste)", File.Exists(Path.Combine(cible, "ext2.txt")) && File.Exists(Path.Combine(dir, "ext2.txt")));
+            replies.Clear(); File.WriteAllText(Path.Combine(cible, "ext3.txt"), "autre"); Fs.DropFiles(Send, new[] { Path.Combine(dir, "ext3.txt") }, cible, true, false, "t");
+            Check("déposé avec Maj sur un nom pris : message fs.conflict (avec le choix « déplacer » mémorisé), rien n'est touché", replies.Count == 1 && replies[0].GetProperty("type").GetString() == "fs.conflict" && replies[0].GetProperty("move").GetBoolean() && File.ReadAllText(Path.Combine(cible, "ext3.txt")) == "autre");
+
             Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(cible, "b.txt"))}],\"dir\":{J(Path.Combine(dir, "n-existe-pas"))},\"move\":true,\"tab\":\"t\"}}");
             Check("destination qui n'existe pas : message d'erreur, fichier intact", HasError() && File.Exists(Path.Combine(cible, "b.txt")));
             Do($"{{\"cmd\":\"fs.drop\",\"paths\":[\"relatif/x.txt\",\"\"],\"dir\":{J(cible)},\"move\":true,\"tab\":\"t\"}}");

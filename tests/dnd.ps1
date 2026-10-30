@@ -77,6 +77,20 @@ try {
   Start-Sleep -Milliseconds 600
   Check "et rien n'est déposé après l'annulation (dossierB n'a pas reçu un second b.txt)" (-not (Test-Path "$work\dossierB\b (2).txt"))
 
+  # --- un nom déjà pris : la page demande (boîte « Éléments existants »), jamais une boîte de Windows (cachée, elle bloquait tout) ---
+  Js "__t.press('b.txt'); const [x, y] = __t.mid(__t.row('dossierB')); __t.move(x - 30, y); __t.move(x, y); __t.up(x, y)" | Out-Null
+  Check "b.txt existe déjà dans dossierB : la boîte « Éléments existants » s'ouvre dans la page, avec le nom" (Until { (Js "!!document.querySelector('#layer .veil') && document.querySelector('#layer .veil').textContent.includes('b.txt') && document.querySelector('#layer .veil').textContent.includes('existe déjà')") -eq 'true' } 6000)
+  Check "elle offre quatre réponses : garder les deux, remplacer, ignorer, annuler" ((Js "document.querySelectorAll('#layer [data-c]').length") -eq '4')
+  Js "document.querySelectorAll('#layer [data-c]')[3].click()" | Out-Null
+  Start-Sleep -Milliseconds 600
+  Check "Annuler : la boîte se ferme et rien n'est copié" ((Js "!document.querySelector('#layer .veil')") -eq 'true' -and -not (Test-Path "$work\dossierB\b (2).txt"))
+  Js "__t.press('b.txt'); const [x, y] = __t.mid(__t.row('dossierB')); __t.move(x - 30, y); __t.move(x, y); __t.up(x, y)" | Out-Null
+  Check "de nouveau la boîte" (Until { (Js "!!document.querySelector('#layer .veil')") -eq 'true' } 6000)
+  Js "document.querySelectorAll('#layer [data-c]')[0].click()" | Out-Null
+  Check "Garder les deux (déplacement) : « b (2).txt » arrive dans dossierB, l'ancien b.txt de dossierB reste" (Until { (Test-Path "$work\dossierB\b (2).txt") -and (Test-Path "$work\dossierB\b.txt") -and -not (Test-Path "$work\b.txt") } 6000)
+  Set-Content "$work\b.txt" 'b'; Js "reload()" | Out-Null   # b.txt resert aux essais suivants
+  Check "la liste est relue (b.txt est de retour)" (Until { (Js "__t.names()") -like '*b.txt*' } 6000)
+
   # --- un clic simple ne déclenche aucun glisser ---
   Js "__t.press('b.txt'); __t.move(__t.mid(__t.row('b.txt'))[0] + 3, __t.mid(__t.row('b.txt'))[1]); __t.up(0, 0)" | Out-Null
   Check "un petit mouvement (moins de 6 px) n'est pas un glisser" ((Js "!document.querySelector('.dnd-ghost')") -eq 'true')

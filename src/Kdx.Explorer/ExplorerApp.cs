@@ -121,7 +121,8 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             if (cmd == "fs.dropfiles")
             {
                 string dir = r.TryGetProperty("dir", out var dv) && dv.ValueKind == JsonValueKind.String ? dv.GetString() : null, tab = r.TryGetProperty("tab", out var tv) && tv.ValueKind == JsonValueKind.String ? tv.GetString() : null;
-                Fs.DropFiles(from.Send, from.DroppedPaths, dir, r.TryGetProperty("move", out var mv) && mv.ValueKind == JsonValueKind.True, tab);
+                bool Flag(string k) => r.TryGetProperty(k, out var fv) && fv.ValueKind == JsonValueKind.True;
+                Fs.DropFiles(from.Send, from.DroppedPaths, dir, Flag("shift"), Flag("ctrl"), tab);
                 return;
             }
             if (cmd == "fs.dragout") { DragOut(from, r); return; }

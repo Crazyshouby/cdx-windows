@@ -31,7 +31,7 @@ src\Kdx.Repos\      kdx-repos : Git.cs (recherche et lecture de git, jamais d'é
 web\kdx\            la charte (copie exacte de kdx-ui/dist : node tools/charte-sync.mjs --write kdx-windows) et host.js, le pont des pages
 web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
 couche1\            le cadre des fenêtres de Windows aux couleurs de la charte (DWM), réversible
-tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), dnd.ps1 (glisser-déposer de l'Explorateur : 24 vérifications, dans la vraie fenêtre isolée)
+tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
 ```
 
 ## Essais (aucune entrée simulée)
@@ -52,11 +52,14 @@ tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, re
 ## Glisser-déposer de l'Explorateur
 - **Dans la fenêtre** : une ligne (ou la sélection) se dépose sur un dossier de la liste, un lieu de la barre latérale ou un onglet. Comme dans Windows : sur le même disque on déplace, d'un disque à l'autre on copie ;
   **Ctrl** copie, **Maj** déplace, **Échap** annule. Une ligne fantôme suit le pointeur et dit ce qui va se passer (« Déplacer vers « X » »), la cible s'éclaire, la liste défile près de ses bords.
-  Refusés : un dossier sur lui-même ou dans l'un de ses sous-dossiers, et déplacer dans le dossier d'origine (ne fait rien). Les conflits de noms passent par les boîtes de Windows.
-- **Depuis une autre application** (Explorateur de Windows, Bureau) : les fichiers se déposent sur la liste (le dossier courant), un dossier, un lieu ou un onglet ; copiés, ou déplacés avec Maj.
+  Refusés : un dossier sur lui-même ou dans l'un de ses sous-dossiers, et déplacer dans le dossier d'origine (ne fait rien).
+  **Un nom déjà pris** dans la destination ouvre une boîte de la fenêtre (« Garder les deux », « Remplacer », « Ignorer », « Annuler ») : rien n'est touché avant la réponse. Les boîtes de conflit de Windows
+  ne sont pas utilisées pour les glissés : sans fenêtre parente, l'une d'elles est restée cachée derrière les autres et a bloqué l'Explorateur (30/10/2026).
+- **Depuis une autre application ou une autre fenêtre de l'Explorateur** : les fichiers se déposent sur la liste (le dossier courant), un dossier, un lieu ou un onglet ; comme dans Windows, déplacés sur le même disque,
+  copiés d'un disque à l'autre ; Ctrl copie, Maj déplace.
   Les chemins viennent de WebView2 (`postMessageWithAdditionalObjects`, `HostForm.DroppedPaths`).
 - **Vers une autre application** : quand le pointeur quitte la fenêtre avec des éléments saisis, la page envoie `fs.dragout` et Windows prend le relais (`DoDragDrop`, fichiers réels) ; la liste est relue ensuite.
-- **Essais** : `kdx-explorer --selftest-fs` (déplacer, copier, refus, noms uniques) et `tests\dnd.ps1` (la page pilotée par des événements de pointeur fabriqués, jamais la vraie souris). **Pas essayés automatiquement** :
+- **Essais** : `kdx-explorer --selftest-fs` (déplacer, copier, refus, noms uniques) et `tests\dnd.ps1` (la page pilotée par des événements de pointeur fabriqués, jamais la vraie souris ; conflits de noms compris). **Pas essayés automatiquement** :
   le glisser depuis et vers une autre application (il demande un vrai glisser de Windows) ; à essayer à la main.
 
 ## Synergies (phase 4)

@@ -113,12 +113,17 @@ static class Fs
         Clipboard.SetDataObject(data, true);
     }
 
-    // Glisser-déposer : déplace (move) ou copie des éléments vers un dossier, avec les règles du presse-papiers (Paste) : les boîtes de Windows règlent les conflits de noms,
-    // coller dans le dossier d'origine donne « nom (2) ». Rend un message d'erreur (ou null). Un dossier ne se place jamais dans lui-même ; déplacer dans le dossier d'origine ne fait rien.
-    public static string Transfer(IEnumerable<string> sources, string dir, bool move)
+    // Glisser-déposer : déplace (move) ou copie des éléments vers un dossier. Un dossier ne se place jamais dans lui-même ; déplacer dans le dossier d'origine ne fait rien ; copier dans le dossier
+    // d'origine donne « nom (2) ». Un nom déjà pris dans la destination est un CONFLIT : sans consigne (onConflict null), rien n'est fait et les noms sont rendus pour que la page demande ;
+    // avec « replace » (remplacer), « keep » (garder les deux : « nom (2) ») ou « skip » (ignorer), l'opération suit. Les conflits ne passent jamais par les boîtes de Windows : elles s'ouvrent
+    // sans fenêtre parente, peuvent rester cachées derrière les autres, et bloquent le fil d'interface pendant le glisser-déposer.
+    public sealed record TransferResult(string Error, List<string> Conflicts);
+
+    public static TransferResult Transfer(IEnumerable<string> sources, string dir, bool move, string onConflict = null)
     {
-        if (string.IsNullOrEmpty(dir) || dir.Length > 520 || !Path.IsPathRooted(dir) || !Directory.Exists(dir)) return "Dossier de destination introuvable.";
+        if (string.IsNullOrEmpty(dir) || dir.Length > 520 || !Path.IsPathRooted(dir) || !Directory.Exists(dir)) return new("Dossier de destination introuvable.", null);
         string dirN = dir.TrimEnd('\\');
+        var items = new List<(string src, bool isDir, string name, bool sameDir)>();
         foreach (var raw in sources)
         {
             if (string.IsNullOrEmpty(raw) || raw.Length > 520 || !Path.IsPathRooted(raw)) continue;
@@ -126,20 +131,52 @@ static class Fs
             if (!isDir && !File.Exists(src)) continue;
             string name = Path.GetFileName(src);
             if (name.Length == 0) continue;   // la racine d'un disque ne se déplace pas
-            if (isDir && (string.Equals(src, dirN, StringComparison.OrdinalIgnoreCase) || dirN.StartsWith(src + "\\", StringComparison.OrdinalIgnoreCase))) return "Impossible de placer un dossier dans lui-même.";
+            if (isDir && (string.Equals(src, dirN, StringComparison.OrdinalIgnoreCase) || dirN.StartsWith(src + "\\", StringComparison.OrdinalIgnoreCase))) return new("Impossible de placer un dossier dans lui-même.", null);
             bool sameDir = string.Equals(Path.GetDirectoryName(src), dirN, StringComparison.OrdinalIgnoreCase);
             if (move && sameDir) continue;
-            string dst = sameDir ? UniquePath(dir, name) : Path.Combine(dir, name);
-            if (move) { if (isDir) FileSystem.MoveDirectory(src, dst, UIOption.AllDialogs); else FileSystem.MoveFile(src, dst, UIOption.AllDialogs); }
+            items.Add((src, isDir, name, sameDir));
+        }
+        var conflicts = items.Where(i => !i.sameDir && Path.Exists(Path.Combine(dir, i.name))).Select(i => i.name).ToList();
+        if (conflicts.Count > 0 && onConflict == null) return new(null, conflicts);
+        foreach (var (src, isDir, name, sameDir) in items)
+        {
+            string dst = Path.Combine(dir, name); bool exists = !sameDir && Path.Exists(dst), overwrite = false;
+            if (sameDir) dst = UniquePath(dir, name);
+            else if (exists)
+            {
+                if (onConflict == "skip") continue;
+                if (onConflict == "keep") dst = UniquePath(dir, name); else overwrite = onConflict == "replace";
+            }
+            if (overwrite)   // sans boîte de dialogue : le choix est déjà fait
+            {
+                if (move) { if (isDir) FileSystem.MoveDirectory(src, dst, true); else FileSystem.MoveFile(src, dst, true); }
+                else { if (isDir) FileSystem.CopyDirectory(src, dst, true); else FileSystem.CopyFile(src, dst, true); }
+            }
+            else if (move) { if (isDir) FileSystem.MoveDirectory(src, dst, UIOption.AllDialogs); else FileSystem.MoveFile(src, dst, UIOption.AllDialogs); }
             else { if (isDir) FileSystem.CopyDirectory(src, dst, UIOption.AllDialogs); else FileSystem.CopyFile(src, dst, UIOption.AllDialogs); }
         }
-        return null;
+        return new(null, null);
     }
 
-    // Des fichiers glissés depuis une autre application (l'Explorateur de Windows, le Bureau) : leurs chemins viennent de WebView2 (HostForm.DroppedPaths).
-    public static void DropFiles(Action<object> send, IEnumerable<string> paths, string dir, bool move, string tab)
+    // Tous les éléments sont-ils sur le disque (ou le partage) de la destination ?
+    public static bool SameVolume(IEnumerable<string> paths, string dir)
     {
-        try { send(new { type = "fs.done", tab, error = Transfer(paths ?? Array.Empty<string>(), dir, move) }); }
+        string root(string p) { try { return Path.GetPathRoot(p) ?? ""; } catch { return ""; } }
+        string dr = root(dir); var valid = paths.Where(p => !string.IsNullOrEmpty(p) && Path.IsPathRooted(p)).ToList();
+        return dr.Length > 0 && valid.Count > 0 && valid.All(p => string.Equals(root(p), dr, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Le résultat d'un dépôt, à renvoyer à la page : « fs.done » (avec l'erreur éventuelle) ou « fs.conflict » (noms déjà pris ; la page demande, puis renvoie fs.drop avec sa réponse).
+    static object Outcome(TransferResult r, string tab, IEnumerable<string> paths, string dir, bool move)
+        => r.Conflicts is { Count: > 0 } ? new { type = "fs.conflict", tab, paths = paths.ToArray(), dir, move, names = r.Conflicts } : new { type = "fs.done", tab, error = r.Error };
+
+    // Des fichiers glissés depuis une autre application (l'Explorateur de Windows, le Bureau) ou une autre fenêtre de l'Explorateur : leurs chemins viennent de WebView2 (HostForm.DroppedPaths).
+    // Comme dans Windows : Maj déplace, Ctrl copie ; sans touche, on déplace sur le même disque et on copie d'un disque à l'autre.
+    public static void DropFiles(Action<object> send, IEnumerable<string> paths, string dir, bool shift, bool ctrl, string tab)
+    {
+        var list = (paths ?? Array.Empty<string>()).ToList();
+        bool move = shift || (!ctrl && SameVolume(list, dir));
+        try { send(Outcome(Transfer(list, dir, move), tab, list, dir, move)); }
         catch (OperationCanceledException) { send(new { type = "fs.done", tab }); }
         catch (Exception ex) { Host.Log("explorateur : dépôt de fichiers a échoué : " + ex.Message); send(new { type = "fs.done", tab, error = ex.Message }); }
     }
@@ -212,7 +249,13 @@ static class Fs
                 case "fs.preview": send(Preview(Str("path"), tab)); break;
                 case "fs.copy": SetClipboard(Paths(), r.TryGetProperty("cut", out var c) && c.GetBoolean()); break;
                 case "fs.paste": Paste(Str("dir")); send(new { type = "fs.done", tab }); break;
-                case "fs.drop": send(new { type = "fs.done", tab, error = Transfer(Paths(), Str("dir"), r.TryGetProperty("move", out var mv) && mv.ValueKind == JsonValueKind.True) }); break;
+                case "fs.drop":
+                    {
+                        bool mv = r.TryGetProperty("move", out var mvv) && mvv.ValueKind == JsonValueKind.True;
+                        var ps = Paths(); string dir = Str("dir");
+                        send(Outcome(Transfer(ps, dir, mv, Str("conflict")), tab, ps, dir, mv));
+                        break;
+                    }
             }
         }
         catch (OperationCanceledException) { send(new { type = "fs.done", tab }); }
