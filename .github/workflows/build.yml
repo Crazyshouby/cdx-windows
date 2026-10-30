@@ -15,6 +15,10 @@ jobs:
       - name: Charter copies are untouched
         run: node tools/kdx-verify.mjs web/kdx/kdx-sync.json
 
+      # Les pages de la suite suivent les règles de la charte (CHARTE.md §8) ; les copies de web/kdx sont contrôlées à la source.
+      - name: Pages follow the charter
+        run: node tools/charte-lint.mjs web --manifest web/kdx/kdx-sync.json
+
       - name: Build
         run: dotnet build Kdx.sln -c Release -o bin
 
