@@ -57,7 +57,7 @@
     $('st2').textContent = n ? `${n} sélectionné${n > 1 ? 's' : ''}${bytes ? ' (' + sizeOf(bytes) + ')' : ''}` : '';
     $('st3').textContent = t.free >= 0 ? `Espace libre : ${sizeOf(t.free)}` : '';
     $('orb').className = t.loading ? 'orb amber pulse' : 'orb green';
-    drawSide();
+    drawSide(); prefetchOpenWith();
     if (window.updatePreview) updatePreview();
   }
   function drawSide() {
@@ -97,7 +97,8 @@
   handlers['fs.done'] = m => {
     const t = tabs.find(x => x.id === m.tab) || T();
     if (m.error) { $('orb').className = 'orb red'; $('st1').textContent = m.error; }
-    if (m.select) t.pendingSel = m.select.split(sep).pop();
+    if (m.select) { t.pendingSel = m.select.split(sep).pop(); if (t.wantRename) t.renameAfter = t.pendingSel; }   // « Nouveau » : l'élément créé est sélectionné et son nom s'édite
+    t.wantRename = false;
     reload();
   };
   const reload = () => go(T().path, 'reload');

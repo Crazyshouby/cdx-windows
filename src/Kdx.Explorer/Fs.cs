@@ -122,7 +122,7 @@ static class Fs
         catch (Exception ex) { return new { type = "fs.preview", path, kind = "error", error = ex.Message }; }
     }
 
-    static string UniquePath(string dir, string name)
+    internal static string UniquePath(string dir, string name)
     {
         string p = Path.Combine(dir, name);
         if (!Path.Exists(p)) return p;
@@ -246,6 +246,29 @@ static class Fs
                 case "fs.open": Process.Start(new ProcessStartInfo(Str("path")) { UseShellExecute = true }); Host.Log("explorateur : ouvert " + Str("path")); break;
                 case "fs.copypath":   // « Copier le chemin » : chaque chemin entre guillemets, un par ligne (comme Windows)
                     { var ps = Paths().Where(p => !string.IsNullOrEmpty(p) && p.Length <= 520).Take(5000).ToArray(); if (ps.Length > 0) Clipboard.SetText(string.Join("\r\n", ps.Select(p => "\"" + p + "\""))); break; }
+                case "fs.openwith": if (!ShellData.OpenWithRun(Str("exe"), Str("path"))) send(new { type = "fs.done", tab, error = "Impossible d'ouvrir avec ce programme." }); break;
+                case "fs.openas": ShellData.OpenAsDialog(Str("path")); break;
+                case "fs.terminal": ShellData.OpenTerminal(Str("path")); break;
+                case "fs.sendto":
+                    {
+                        var (sdir, sexe) = ShellData.SendToTarget(Str("item")); var ps = Paths();
+                        if (sdir != null) send(Outcome(Transfer(ps, sdir, false), tab, ps, sdir, false));   // une copie, avec la boîte « Éléments existants » si un nom est pris
+                        else if (sexe != null) ShellData.RunProgramOn(sexe, ps);
+                        else send(new { type = "fs.done", tab, error = "Destination introuvable." });
+                        break;
+                    }
+                case "fs.new":
+                    {
+                        string np = ShellData.CreateNew(Str("dir"), Str("ext"));
+                        send(np != null ? new { type = "fs.done", tab, select = np, error = (string)null } : new { type = "fs.done", tab, select = (string)null, error = "Impossible de créer ce fichier." });
+                        break;
+                    }
+                case "fs.newshortcut":
+                    {
+                        string sp = ShellData.CreateShortcut(Str("dir"), Str("name"), Str("target"));
+                        send(sp != null ? new { type = "fs.done", tab, select = sp, error = (string)null } : new { type = "fs.done", tab, select = (string)null, error = "Impossible de créer le raccourci (cible vide ?)." });
+                        break;
+                    }
                 case "fs.props": SHObjectProperties(owner, 0x2 /* SHOP_FILEPATH */, Str("path"), null); break;
                 case "fs.newfolder":
                     {

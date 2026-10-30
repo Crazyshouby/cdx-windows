@@ -170,6 +170,100 @@ try {
   Js "const f = document.getElementById('files'), b = f.getBoundingClientRect(); const r = [...f.querySelectorAll('.fr')][0].getBoundingClientRect(); T().sel = new Set(['b.txt']); show(true); f.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, buttons: 1, pointerId: 12, ctrlKey: true, clientX: b.left + 120, clientY: b.bottom - 16 })); document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, buttons: 1, pointerId: 12, clientX: b.left + 150, clientY: r.top + 4 })); document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 12 }))" | Out-Null
   Check "avec Ctrl, le rectangle s'ajoute à la sélection existante (b.txt et au moins un autre)" ((Js "T().sel.has('b.txt') && T().sel.size >= 2") -eq 'true')
 
+  # --- menu contextuel complet (éléments, fond, sous-menus) ---
+  New-Item -ItemType Directory "$work\menus\sousdossier" | Out-Null
+  Set-Content "$work\menus\note.txt" 'n'; Set-Content "$work\menus\autre.txt" 'a'
+  $wjm = "$work\menus".Replace([string][char]92, [string][char]92 + [string][char]92)
+  Js "go('$wjm', 'push')" | Out-Null
+  Check "un dossier de menus s'ouvre (3 éléments)" (Until { (Js "T().path") -eq "$work\menus" -and (Js "T().items.length") -eq '3' } 8000)
+  Check "Windows a fourni les données du menu (modèles « Nouveau » dont le texte)" (Until { (Js "menuData.news.some(k => k.ext === '.txt')") -eq 'true' } 8000)
+  # tout ce qui part vers l'hôte et lancerait quelque chose est intercepté
+  Js "window.__spy = []; window.__real = window.__real || window.chrome.webview.postMessage; window.chrome.webview.postMessage = o => { window.__spy.push(o); if (!['fs.terminal', 'fs.openwith', 'fs.openas', 'fs.copypath', 'fs.sendto', 'fs.props'].includes(o.cmd)) window.__real.call(window.chrome.webview, o); }" | Out-Null
+  function Menu { Js "[...document.querySelectorAll('.menu')].map(m => [...m.querySelectorAll('.menu-item')].map(e => e.querySelector('span:not(.chk):not(.pix):not(.subarrow)')?.textContent).join('|')).join(' // ')" }
+  function MenuTitle { Js "document.querySelector('.menu .menu-title')?.textContent" }
+  function MenuClick([string]$text) { Js "const it = [...document.querySelectorAll('.menu .menu-item')].find(e => e.querySelector('span:not(.chk):not(.pix):not(.subarrow)')?.textContent === '$text'); if (it) it.click(); return !!it" }
+  function RightClick([string]$name) { Js "const r = __rowOf('$name'); const b = r.getBoundingClientRect(); r.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 60), clientY: Math.round(b.top + 8) }))" | Out-Null }
+  Js "window.__rowOf = n => [...document.querySelectorAll('#files .fr')].find(r => r.querySelector('.nm span:last-child').textContent === n)" | Out-Null
+  Js "T().sel = new Set(); show(true)" | Out-Null
+  RightClick 'note.txt'
+  Check "un clic droit sur un fichier non sélectionné le sélectionne et ouvre son menu (titre = le nom)" (((Sel) -eq 'note.txt') -and ((MenuTitle) -eq 'note.txt'))
+  $m = Menu
+  Check "menu d'un fichier : Ouvrir, Ouvrir avec, terminal, Couper, Copier, Copier le chemin, Envoyer vers, Renommer, Supprimer, Propriétés" ($m -match 'Ouvrir\|Ouvrir avec\|Ouvrir dans un terminal\|Couper\|Copier\|Copier le chemin\|Envoyer vers\|Renommer\|Supprimer\|Propriétés')
+  Check "un fichier n'offre ni « nouvel onglet » ni « nouvelle fenêtre »" ($m -notmatch 'nouvel onglet|nouvelle fenêtre')
+  Check "les éléments à sous-menu portent une flèche (Ouvrir avec, Envoyer vers)" ((Js "document.querySelectorAll('.menu .subarrow').length") -eq '2')
+  MenuClick 'Ouvrir avec' | Out-Null
+  Check "« Ouvrir avec » ouvre un sous-menu avec « Choisir une autre application… »" (Until { (Menu) -match ' // .*Choisir une autre application' } 4000)
+  Js "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
+  Start-Sleep -Milliseconds 400
+  RightClick 'note.txt'; MenuClick 'Ouvrir avec' | Out-Null
+  Check "la liste des programmes pour .txt est arrivée (au moins un programme avant « Choisir… »)" (Until { $mm = Menu; $mm -match ' // ' -and ($mm -split ' // ')[1].Split('|').Count -ge 3 } 6000)
+  $app1 = Js "[...document.querySelectorAll('.menu')][1].querySelector('.menu-item span').textContent"
+  MenuClick $app1 | Out-Null
+  Check "choisir un programme (« $app1 ») envoie fs.openwith avec son exécutable et le fichier (intercepté, rien n'est lancé)" ((Js "JSON.stringify(window.__spy.filter(m => m.cmd === 'fs.openwith').map(m => [m.exe.toLowerCase().endsWith('.exe'), m.path.endsWith('note.txt')]))") -like '*[true,true]*')
+  Check "le menu se referme après l'action" ((Js "document.querySelectorAll('.menu').length") -eq '0')
+  RightClick 'note.txt'; MenuClick 'Ouvrir avec' | Out-Null; Start-Sleep -Milliseconds 400; MenuClick 'Choisir une autre application…' | Out-Null
+  Check "« Choisir une autre application… » envoie fs.openas (intercepté)" ((Js "window.__spy.filter(m => m.cmd === 'fs.openas').length") -ge 1)
+  RightClick 'note.txt'; MenuClick 'Ouvrir dans un terminal' | Out-Null
+  Check "« Ouvrir dans un terminal » sur un fichier ouvre le terminal dans son dossier (intercepté)" ((Js "JSON.stringify(window.__spy.filter(m => m.cmd === 'fs.terminal').map(m => m.path))") -like "*menus*")
+  RightClick 'note.txt'; MenuClick 'Copier le chemin' | Out-Null
+  Check "« Copier le chemin » envoie fs.copypath avec le chemin complet (intercepté : le presse-papiers de Valentin reste intact)" ((Js "JSON.stringify(window.__spy.filter(m => m.cmd === 'fs.copypath').map(m => m.paths))") -like '*menus\\note.txt*')
+  RightClick 'note.txt'; MenuClick 'Envoyer vers' | Out-Null
+  Check "« Envoyer vers » ouvre un sous-menu (les destinations de Windows, ou « Aucune destination »)" (Until { (Menu) -match ' // ' } 4000)
+  $dest = Js "[...document.querySelectorAll('.menu')][1].querySelector('.menu-item')?.className"
+  if ($dest -notmatch 'off') {
+    $destName = Js "[...document.querySelectorAll('.menu')][1].querySelector('.menu-item span').textContent"
+    MenuClick $destName | Out-Null
+    Check "choisir une destination envoie fs.sendto avec l'élément de la liste et le fichier (intercepté)" ((Js "JSON.stringify(window.__spy.filter(m => m.cmd === 'fs.sendto').map(m => [m.item.length > 0, m.paths.length, m.paths[0].endsWith('note.txt')]))") -like '*[true,1,true]*')
+  } else { Check "(aucune destination « Envoyer vers » sur ce PC : essai de l'envoi passé)" $true; Js "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null }
+  RightClick 'sousdossier'
+  $m = Menu
+  Check "menu d'un dossier : « Ouvrir dans un nouvel onglet » et « …une nouvelle fenêtre » en plus" ($m -match 'Ouvrir dans un nouvel onglet\|Ouvrir dans une nouvelle fenêtre')
+  Check "pas d'« Ouvrir avec » pour un dossier" ($m -notmatch 'Ouvrir avec')
+  MenuClick 'Ouvrir dans un nouvel onglet' | Out-Null
+  Check "« Ouvrir dans un nouvel onglet » ouvre un onglet sur le dossier" (Until { (Js "tabs.length") -eq '2' -and (Js "T().path") -eq "$work\menus\sousdossier" } 6000)
+  Js "tabs.splice(1, 1); cur = 0; drawTabs(); show()" | Out-Null
+  Js "T().sel = new Set(['note.txt', 'autre.txt']); show(true)" | Out-Null
+  RightClick 'note.txt'
+  Check "avec deux éléments sélectionnés : le titre dit « 2 éléments », « Ouvrir » et « Renommer » sont grisés" (((MenuTitle) -eq '2 éléments') -and ((Js "[...document.querySelectorAll('.menu-item.off')].map(e => e.querySelector('span:not(.chk):not(.pix)').textContent).sort().join('|')") -eq 'Ouvrir|Renommer'))
+  Js "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
+  # le fond de la liste
+  Js "T().sel = new Set(); show(true); const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
+  $m = Menu
+  Check "menu du fond : Nouveau, Coller, Trier par, Afficher, Actualiser, terminal, Propriétés" (($m -match 'Nouveau\|Coller\|Trier par\|Afficher\|Actualiser\|Ouvrir dans un terminal\|Propriétés') -and ((MenuTitle) -eq 'menus'))
+  MenuClick 'Trier par' | Out-Null
+  Check "« Trier par » : Nom, Date, Type, Taille, Croissant, Décroissant ; Nom est coché" (Until { (Menu) -match ' // Nom\|Date de modification\|Type\|Taille\|Croissant\|Décroissant' } 4000)
+  Check "…la case de « Nom » et de « Croissant » est cochée" ((Js "[...document.querySelectorAll('.menu')][1].querySelectorAll('.chk.on').length") -eq '2')
+  MenuClick 'Taille' | Out-Null
+  Check "choisir « Taille » trie par taille (et le menu se ferme)" (((Js "T().sortK") -eq 's') -and ((Js "document.querySelectorAll('.menu').length") -eq '0'))
+  Js "const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
+  MenuClick 'Trier par' | Out-Null; Start-Sleep -Milliseconds 300; MenuClick 'Décroissant' | Out-Null
+  Check "« Décroissant » inverse le tri" ((Js "T().rev") -eq 'true')
+  Js "T().sortK = 'n'; T().rev = false; show(true)" | Out-Null
+  Js "const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
+  MenuClick 'Afficher' | Out-Null
+  Check "« Afficher » : Éléments cachés et Extensions des fichiers, avec leur état coché" (Until { (Menu) -match ' // Éléments cachés\|Extensions des fichiers' } 4000)
+  Js "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
+  # Nouveau
+  Js "const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
+  MenuClick 'Nouveau' | Out-Null
+  Check "« Nouveau » : Dossier, Raccourci…, puis les modèles de Windows (Document texte)" (Until { (Menu) -match ' // Dossier\|Raccourci…\|Document texte' } 4000)
+  MenuClick 'Dossier' | Out-Null
+  Check "« Nouveau > Dossier » crée « Nouveau dossier » et ouvre la saisie de son nom" ((Until { Test-Path "$work\menus\Nouveau dossier" } 6000) -and (Until { (Js "document.querySelector('#files input')?.value") -eq 'Nouveau dossier' } 6000))
+  Js "document.querySelector('#files input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
+  Start-Sleep -Milliseconds 500
+  Js "const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
+  MenuClick 'Nouveau' | Out-Null; Start-Sleep -Milliseconds 300; MenuClick 'Document texte' | Out-Null
+  Check "« Nouveau > Document texte » crée un .txt vide et ouvre la saisie de son nom" ((Until { Test-Path "$work\menus\Nouveau document texte.txt" } 6000) -and (Until { (Js "!!document.querySelector('#files input')") } 6000))
+  Js "document.querySelector('#files input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
+  Start-Sleep -Milliseconds 500
+  Js "const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
+  MenuClick 'Nouveau' | Out-Null; Start-Sleep -Milliseconds 300; MenuClick 'Raccourci…' | Out-Null
+  Check "« Nouveau > Raccourci… » ouvre une boîte qui demande la cible" (Until { (Js "!!document.querySelector('#layer #askIn')") -eq 'true' } 4000)
+  Js "const i = document.getElementById('askIn'); i.value = '$($work.Replace('\', '\\'))\\petit'; document.getElementById('askOk').click()" | Out-Null
+  Check "valider crée « petit.lnk » qui pointe vers le dossier cible, et la saisie de son nom s'ouvre" ((Until { Test-Path "$work\menus\petit.lnk" } 8000) -and (Until { (Js "!!document.querySelector('#files input')") -eq 'true' } 6000))
+  Js "document.querySelector('#files input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
+  Js "window.chrome.webview.postMessage = window.__real" | Out-Null
+
   # --- le dossier affiché disparaît : on remonte au parent ---
   Js "go('$($work.Replace('\', '\\'))\\gros', 'push')" | Out-Null
   Until { (Js "T().items.length") -eq '20000' } 30000 | Out-Null

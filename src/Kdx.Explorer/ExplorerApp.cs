@@ -160,6 +160,19 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             if (cmd == "fs.dragout") { DragOut(from, r); return; }
             if (cmd == "fs.list") { ListAsync(from, r.TryGetProperty("path", out var lp) && lp.ValueKind == JsonValueKind.String ? lp.GetString() : null, r.TryGetProperty("tab", out var lt) && lt.ValueKind == JsonValueKind.String ? lt.GetString() : null); return; }
             if (cmd == "fs.newwindow") { Open(r.TryGetProperty("path", out var np) && np.ValueKind == JsonValueKind.String && np.GetString().Length > 0 && Directory.Exists(np.GetString()) ? np.GetString() : null); return; }
+            if (cmd == "fs.menudata")
+            {
+                _ = Task.Run(() => (sendto: ShellData.SendTo().Select(s => new { name = s.Name, path = s.Path, kind = s.Kind }).ToList(), news: ShellData.NewKinds().Select(k => new { name = k.Name, ext = k.Ext }).ToList()))
+                    .ContinueWith(t => Anchor.BeginInvoke(new Action(() => { if (!from.IsDisposed && !t.IsFaulted) from.Send(new { type = "menudata", sendto = t.Result.sendto, news = t.Result.news }); })));
+                return;
+            }
+            if (cmd == "fs.openwith.list")
+            {
+                string ext = r.TryGetProperty("ext", out var ev) && ev.ValueKind == JsonValueKind.String ? ev.GetString() : null;
+                _ = Task.Run(() => ShellData.OpenWith(ext).Select(p => new { name = p.name, exe = p.exe }).ToList())
+                    .ContinueWith(t => Anchor.BeginInvoke(new Action(() => { if (!from.IsDisposed && !t.IsFaulted) from.Send(new { type = "openwith", ext, items = t.Result }); })));
+                return;
+            }
             if (cmd == "fs.watch") { Watch(from, r.TryGetProperty("tab", out var wt) && wt.ValueKind == JsonValueKind.String ? wt.GetString() : null, r.TryGetProperty("path", out var wp) && wp.ValueKind == JsonValueKind.String ? wp.GetString() : null); return; }
             if (cmd == "fs.settings.get") { from.Send(new { type = "settings", values = Settings.All() }); return; }
             if (cmd == "fs.settings.set")

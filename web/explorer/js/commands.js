@@ -2,7 +2,7 @@
   // ---------------- commandes ----------------
   function copy(cut) { const s = selected(); if (!s.length) return; clip = { paths: s.map(pathOf), cut }; post({ cmd: 'fs.copy', paths: clip.paths, cut }); show(true); }
   function paste() { if (T().path) post({ cmd: 'fs.paste', dir: T().path, tab: T().id }); }
-  function newFolder() { if (T().path) { T().renameAfter = 'Nouveau dossier'; post({ cmd: 'fs.newfolder', dir: T().path, tab: T().id }); } }
+  function newFolder() { if (T().path) { T().wantRename = true; post({ cmd: 'fs.newfolder', dir: T().path, tab: T().id }); } }
   function rename(name) {
     const t = T(); const idx = t.rows.findIndex(i => i.n === (name ?? [...t.sel][0])); if (idx < 0) return;
     const it = t.rows[idx]; ensureVisible(idx); const row = $('files').querySelector(`.fr[data-i="${idx}"]`); if (!row || it.drive) return;
@@ -27,3 +27,15 @@
   }
   $('cNew').onclick = newFolder; $('cCut').onclick = () => copy(true); $('cCopy').onclick = () => copy(false); $('cPaste').onclick = paste; $('cRen').onclick = () => rename(); $('cDel').onclick = del; $('cRef').onclick = reload;
 
+
+  // Une boîte qui demande une ligne de texte : rend la saisie, ou null si on annule (Annuler, Échap).
+  function askText({ title = '', text = '', value = '', ok = 'OK' } = {}) {
+    return new Promise(resolve => {
+      $('layer').innerHTML = `<div class="veil"><div class="win active"><div class="tb"><span class="tb-title">${esc(title)}</span></div><div class="cb"><div style="padding:8px 4px;line-height:1.5">${esc(text)}</div><input id="askIn" class="text-input" type="text" spellcheck="false" autocomplete="off" value="${esc(value)}">
+        <div class="btns"><button class="primary" id="askOk">${esc(ok)}</button><button class="btn" id="askNo">Annuler</button></div></div></div></div>`;
+      const close = v => { $('layer').innerHTML = ''; $('files').focus(); resolve(v); };
+      $('askOk').onclick = () => close($('askIn').value.trim() || null); $('askNo').onclick = () => close(null);
+      $('askIn').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') close($('askIn').value.trim() || null); else if (e.key === 'Escape') close(null); };
+      $('askIn').focus(); $('askIn').select();
+    });
+  }

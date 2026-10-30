@@ -145,6 +145,28 @@ static class SelfTest
             q.Prune(2);
             Check("tâches : Prune ne garde que les dernières tâches terminées", q.Snapshot().Count == 2);
 
+            // --- ce que le menu emprunte à Windows : Ouvrir avec, Envoyer vers, Nouveau, raccourcis, terminal ---
+            var ow = ShellData.OpenWith(".txt");
+            Check("Ouvrir avec : « .txt » a au moins un programme, dont l'exécutable existe", ow.Count >= 1 && ow.All(p => File.Exists(p.exe) && p.exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && p.name.Length > 0));
+            Check("Ouvrir avec : une extension inconnue ou piégée donne une liste vide, sans exception", ShellData.OpenWith(".zzqq9").Count == 0 && ShellData.OpenWith("txt").Count == 0 && ShellData.OpenWith(".a\\b").Count == 0 && ShellData.OpenWith(null).Count == 0);
+            Check("Ouvrir avec : on ne lance qu'un .exe existant sur un fichier qui existe", !ShellData.OpenWithRun(@"C:\nulle\part.exe", Path.Combine(dir, "x.txt")) && !ShellData.OpenWithRun(Path.Combine(dir, "x.txt"), Path.Combine(dir, "x.txt")) && !ShellData.OpenWithRun(ow[0].exe, Path.Combine(dir, "n-existe-pas.txt")) && !ShellData.OpenWithRun(null, null));
+            var kinds = ShellData.NewKinds();
+            Check("Nouveau : Windows sait créer un document texte (modèle ShellNew de « .txt »)", kinds.Any(k => k.Ext == ".txt") && kinds.All(k => k.Name.Length > 0 && k.Ext != ".lnk"));
+            string nd = Path.Combine(dir, "nouveaux"); Directory.CreateDirectory(nd);
+            string n1 = ShellData.CreateNew(nd, ".txt"), n2 = ShellData.CreateNew(nd, ".txt");
+            Check("Nouveau : crée un fichier .txt vide, puis un second au nom différent", n1 != null && n2 != null && n1 != n2 && File.Exists(n1) && new FileInfo(n1).Length == 0 && n1.EndsWith(".txt") && Path.GetDirectoryName(n1) == nd);
+            Check("Nouveau : une extension sans modèle ou un dossier inexistant donne null", ShellData.CreateNew(nd, ".zzqq9") == null && ShellData.CreateNew(Path.Combine(dir, "nulle"), ".txt") == null && ShellData.CreateNew(nd, null) == null);
+            string lnk = ShellData.CreateShortcut(nd, "vers cible", cible);
+            Check("Raccourci : « vers cible.lnk » est créé et pointe vers le dossier", lnk != null && lnk.EndsWith("vers cible.lnk") && File.Exists(lnk) && ShellData.ResolveLink(lnk)?.target.TrimEnd('\\') == cible.TrimEnd('\\'));
+            string lnk2 = ShellData.CreateShortcut(nd, "vers cible", cible);
+            Check("Raccourci : un second du même nom devient « vers cible (2).lnk »", lnk2 != null && lnk2.EndsWith("vers cible (2).lnk"));
+            Check("Raccourci : une cible vide ou un dossier inexistant donne null", ShellData.CreateShortcut(nd, "x", "  ") == null && ShellData.CreateShortcut(Path.Combine(dir, "nulle"), "x", cible) == null);
+            var st = ShellData.SendTo();
+            Check("Envoyer vers : la liste se lit sans exception, chaque élément a un nom et un chemin qui existe", st.All(s => s.Name.Length > 0 && (File.Exists(s.Path) || Directory.Exists(s.Path))));
+            Check("Envoyer vers : un chemin qui n'est pas dans la liste est refusé (jamais un chemin quelconque)", ShellData.SendToTarget(cible) == (null, null) && ShellData.SendToTarget(lnk) == (null, null) && ShellData.SendToTarget(null) == (null, null));
+            var wt = ShellData.TerminalCommand(@"C:\Mes Dossiers\x", true); var cm = ShellData.TerminalCommand(@"C:\Mes Dossiers\x", false);
+            Check("Terminal : Windows Terminal reçoit -d et le dossier ; sinon cmd /k cd /d", wt.exe == "wt.exe" && wt.args.SequenceEqual(new[] { "-d", @"C:\Mes Dossiers\x" }) && wt.shell && cm.exe == "cmd.exe" && cm.args[0] == "/k" && cm.args[1].Contains("cd /d \"C:\\Mes Dossiers\\x\"") && !cm.shell);
+
             // --- lecture annulable d'un dossier ---
             string big2 = Path.Combine(dir, "gros"); Directory.CreateDirectory(big2);
             for (int i = 0; i < 300; i++) File.WriteAllText(Path.Combine(big2, "f" + i + ".txt"), "x");
