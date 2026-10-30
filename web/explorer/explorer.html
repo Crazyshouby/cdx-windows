@@ -24,12 +24,14 @@
     <div class="nav">
       <button class="btn" id="back" title="Précédent (Alt+←)">←</button><button class="btn" id="fwd" title="Suivant (Alt+→)">→</button><button class="btn" id="up" title="Dossier parent (Alt+↑)">↑</button>
       <input id="addr" class="text-input" type="text" spellcheck="false" autocomplete="off">
+      <button class="btn" id="bSearch" title="Rechercher dans les sous-dossiers (Ctrl+E)">Partout</button>
       <input id="find" class="text-input" type="text" placeholder="Rechercher ici…" spellcheck="false" autocomplete="off" style="flex:none;width:240px">
     </div>
     <div class="mbar">
       <button class="mb" id="cNew"><span class="pix" data-ic="dossier"></span>Nouveau dossier</button><button class="mb" id="cCut">Couper</button><button class="mb" id="cCopy">Copier</button><button class="mb" id="cPaste">Coller</button>
       <button class="mb" id="cRen"><span class="pix" data-ic="editer"></span>Renommer</button><button class="mb" id="cDel"><span class="pix" data-ic="supprimer"></span>Supprimer</button><button class="mb" id="cSel"><span class="pix" data-ic="liste"></span>Sélection</button><button class="mb" id="cView"><span class="pix" data-ic="liste"></span>Affichage</button><button class="mb" id="cRef"><span class="pix" data-ic="maj"></span>Actualiser</button><button class="mb" id="cPv" title="Aperçu (Alt+P)"><span class="pix" data-ic="image"></span>Aperçu</button>
     </div>
+    <div class="sbar" id="sbar" hidden><span id="sInfo"></span><select class="text-input" id="sKind"></select><select class="text-input" id="sDate"></select><select class="text-input" id="sSize"></select><button class="btn" id="sClose" title="Fermer la recherche (Échap)">Fermer</button></div>
     <div class="split">
       <div class="list side" id="side" style="flex:none;width:250px;background:var(--panel)"></div>
       <div class="col" style="flex:1">
@@ -55,6 +57,7 @@
 <script src="/explorer/js/commands.js"></script>
 <script src="/explorer/js/menu.js"></script>
 <script src="/explorer/js/keys.js"></script>
+<script src="/explorer/js/search.js"></script>
 <script src="/explorer/js/dnd.js"></script>
 <script src="/explorer/js/boot.js"></script>
 <script src="/explorer/preview.js"></script>

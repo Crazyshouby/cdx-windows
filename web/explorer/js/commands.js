@@ -1,10 +1,11 @@
 // Les commandes de fichiers : copier, couper, coller, nouveau dossier, renommer, supprimer, boîte de confirmation.
   // ---------------- commandes ----------------
   function copy(cut) { const s = selected(); if (!s.length) return; clip = { paths: s.map(pathOf), cut }; post({ cmd: 'fs.copy', paths: clip.paths, cut }); show(true); }
-  function paste() { if (T().path) post({ cmd: 'fs.paste', dir: T().path, tab: T().id }); }
-  function newFolder() { if (T().path) { T().wantRename = true; post({ cmd: 'fs.newfolder', dir: T().path, tab: T().id }); } }
+  function paste() { if (T().path && !T().search) post({ cmd: 'fs.paste', dir: T().path, tab: T().id }); }
+  function newFolder() { if (T().path && !T().search) { T().wantRename = true; post({ cmd: 'fs.newfolder', dir: T().path, tab: T().id }); } }
   function rename(name) {
-    const t = T(); const idx = t.rows.findIndex(i => i.n === (name ?? [...t.sel][0])); if (idx < 0) return;
+    const t = T(); if (t.search) { $('st2').textContent = "Renommer : ouvre d'abord le dossier (clic droit > Ouvrir l'emplacement)"; return; }
+    const idx = t.rows.findIndex(i => i.n === (name ?? [...t.sel][0])); if (idx < 0) return;
     const it = t.rows[idx]; ensureVisible(idx); const row = $('files').querySelector(`.fr[data-i="${idx}"]`); if (!row || it.drive) return;
     row.scrollIntoView({ block: 'nearest' });
     const cell = row.querySelector('.nm'); const shown = dispName(it), tail = it.n.slice(shown.length);   // l'extension masquée se retrouve au bout du nom

@@ -167,6 +167,43 @@ static class SelfTest
             var wt = ShellData.TerminalCommand(@"C:\Mes Dossiers\x", true); var cm = ShellData.TerminalCommand(@"C:\Mes Dossiers\x", false);
             Check("Terminal : Windows Terminal reçoit -d et le dossier ; sinon cmd /k cd /d", wt.exe == "wt.exe" && wt.args.SequenceEqual(new[] { "-d", @"C:\Mes Dossiers\x" }) && wt.shell && cm.exe == "cmd.exe" && cm.args[0] == "/k" && cm.args[1].Contains("cd /d \"C:\\Mes Dossiers\\x\"") && !cm.shell);
 
+            // --- recherche dans les sous-dossiers ---
+            string sr = Path.Combine(dir, "arbre"); Directory.CreateDirectory(Path.Combine(sr, "a", "b")); Directory.CreateDirectory(Path.Combine(sr, "c"));
+            void W(string rel, long bytes, DateTime? when = null) { string f = Path.Combine(sr, rel); File.WriteAllBytes(f, new byte[bytes]); if (when != null) File.SetLastWriteTime(f, when.Value); }
+            W("facture-2025.pdf", 2_000_000); W("facture-2026.pdf", 10); W(Path.Combine("a", "photo.JPG"), 5); W(Path.Combine("a", "b", "FACTURE vieille.txt"), 3, DateTime.Now.AddDays(-400));
+            W(Path.Combine("c", "musique.mp3"), 4); W(Path.Combine("c", "code.cs"), 7); W("notes.md", 1, DateTime.Now.AddDays(-3));
+            File.WriteAllText(Path.Combine(sr, "a", "secret.txt"), "s"); File.SetAttributes(Path.Combine(sr, "a", "secret.txt"), FileAttributes.Hidden);
+            Settings.Reset(); File.Delete(Settings.FilePath);
+            List<JsonElement> Find(string root, string q, string kind = "all", string date = "any", string size = "any", CancellationToken ct = default)
+            {
+                var got = new List<JsonElement>();
+                Search.Run(new SearchSpec(root, q, kind, date, size), "t", 1, ct, o => { using var d = JsonDocument.Parse(JsonSerializer.Serialize(o)); got.Add(d.RootElement.Clone()); });
+                return got;
+            }
+            string Rel(List<JsonElement> msgs) => string.Join(",", msgs.SelectMany(m => m.GetProperty("items").EnumerateArray()).Select(i => i.GetProperty("n").GetString()).OrderBy(x => x, StringComparer.Ordinal));
+            var fa = Find(sr, "facture");
+            Check("recherche : « facture » trouve les trois fichiers, sans tenir compte de la casse ni du sous-dossier", Rel(fa) == Path.Combine("a", "b", "FACTURE vieille.txt") + ",facture-2025.pdf,facture-2026.pdf");
+            Check("recherche : le dernier message dit done=true, truncated=false, et les chemins relatifs sont uniques", fa[^1].GetProperty("done").GetBoolean() && !fa[^1].GetProperty("truncated").GetBoolean() && fa.Take(fa.Count - 1).All(m => !m.GetProperty("done").GetBoolean()));
+            var one = fa.SelectMany(m => m.GetProperty("items").EnumerateArray()).First(i => i.GetProperty("b").GetString() == "FACTURE vieille.txt");
+            Check("recherche : un résultat porte son nom, son dossier relatif et son chemin complet", one.GetProperty("r").GetString() == Path.Combine("a", "b") && one.GetProperty("p").GetString() == Path.Combine(sr, "a", "b", "FACTURE vieille.txt") && !one.GetProperty("d").GetBoolean());
+            Check("recherche : plusieurs mots = tous doivent être dans le nom (« facture 2026 »)", Rel(Find(sr, "facture 2026")) == "facture-2026.pdf");
+            Check("recherche : joker « *.pdf » et « fact?re-20*6.pdf »", Rel(Find(sr, "*.pdf")) == "facture-2025.pdf,facture-2026.pdf" && Rel(Find(sr, "fact?re-20*6.pdf")) == "facture-2026.pdf");
+            Check("recherche : type « image », « audio », « code », « document »", Rel(Find(sr, "", "image")) == Path.Combine("a", "photo.JPG") && Rel(Find(sr, "", "audio")) == Path.Combine("c", "musique.mp3") && Rel(Find(sr, "", "code")) == Path.Combine("c", "code.cs") && Rel(Find(sr, "", "document")).Split(',').Length == 4);
+            Check("recherche : type « dossier » ne rend que les dossiers (a, a\\b, c)", Rel(Find(sr, "", "folder")) == "a," + Path.Combine("a", "b") + ",c");
+            Check("recherche : date « 7 derniers jours » exclut la facture de 400 jours", !Rel(Find(sr, "facture", "all", "week")).Contains("vieille") && Rel(Find(sr, "notes", "all", "week")) == "notes.md");
+            Check("recherche : date « aujourd'hui » exclut notes.md (il y a 3 jours)", !Rel(Find(sr, "", "all", "today")).Contains("notes.md"));
+            Check("recherche : taille « plus de 1 Mo » ne rend que la facture de 2 Mo, jamais un dossier", Rel(Find(sr, "", "all", "any", "medium")) == "facture-2025.pdf" && Rel(Find(sr, "", "all", "any", "small")).Contains("facture-2026.pdf") && !Rel(Find(sr, "", "all", "any", "small")).Split(',').Contains("a"));
+            Check("recherche : combiner nom + type + taille (« facture », documents, moins de 1 Mo) = facture-2026.pdf et la vieille", Rel(Find(sr, "facture", "document", "any", "small")) == Path.Combine("a", "b", "FACTURE vieille.txt") + ",facture-2026.pdf");
+            Check("recherche : les éléments cachés sont ignorés par défaut", !Rel(Find(sr, "secret")).Contains("secret"));
+            using (var tr = JsonDocument.Parse("true")) Settings.Set("show.hidden", tr.RootElement);
+            Check("recherche : avec show.hidden vrai, secret.txt est trouvé", Rel(Find(sr, "secret")) == Path.Combine("a", "secret.txt"));
+            File.Delete(Settings.FilePath); Settings.Reset();
+            Check("recherche : sans mot ni critère, tous les éléments (11 : 3 dossiers + 7 fichiers visibles + ... )".Substring(0, 0) + "recherche : sans mot ni critère, tout est rendu (3 dossiers + 7 fichiers visibles = 10)", Rel(Find(sr, "")).Split(',').Length == 10);
+            using (var cc = new CancellationTokenSource()) { cc.Cancel(); bool cancelled = false; try { Find(sr, "", ct: cc.Token); } catch (OperationCanceledException) { cancelled = true; } Check("recherche : un jeton annulé arrête le parcours (OperationCanceledException)", cancelled); }
+            Check("recherche : un dossier inexistant ne rend rien et ne plante pas", Find(Path.Combine(dir, "nulle"), "x").Count == 1 && Find(Path.Combine(dir, "nulle"), "x")[0].GetProperty("done").GetBoolean());
+            var swp = Stopwatch.StartNew(); var pm = Search.NameMatcher(string.Concat(Enumerable.Repeat("*a", 30)) + "b"); pm(new string('a', 5000));
+            Check("recherche : NameMatcher résiste à une requête de jokers pathologique (pas d'explosion, rend vite)", swp.ElapsedMilliseconds < 3000);
+
             // --- lecture annulable d'un dossier ---
             string big2 = Path.Combine(dir, "gros"); Directory.CreateDirectory(big2);
             for (int i = 0; i < 300; i++) File.WriteAllText(Path.Combine(big2, "f" + i + ".txt"), "x");

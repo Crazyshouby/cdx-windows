@@ -7,7 +7,7 @@
   handlers.openwith = m => { openWithCache[m.ext] = m.items || []; };
   const askOpenWith = ext => { if (ext && ext !== '.' && openWithCache[ext] === undefined) { openWithCache[ext] = null; post({ cmd: 'fs.openwith.list', ext }); } };
   // Quand un seul fichier est sélectionné, on prépare dès maintenant « Ouvrir avec » pour son extension (le menu s'ouvre alors sans attendre).
-  function prefetchOpenWith() { const t = T(); if (!t || t.sel.size !== 1) return; const it = byName(t).get([...t.sel][0]); if (it && !it.d && !it.drive) askOpenWith('.' + extOf(it.n)); }
+  function prefetchOpenWith() { const t = T(); if (!t || t.sel.size !== 1) return; const it = byName(t).get([...t.sel][0]); if (it && !it.d && !it.drive) askOpenWith('.' + extOf(it.b ?? it.n)); }
 
   const viewItems = () => [
     ['Éléments cachés', () => setSetting('show.hidden', settings['show.hidden'] !== true), { check: settings['show.hidden'] === true, key: 'Ctrl+H' }],
@@ -48,21 +48,22 @@
 
   // Le menu d'un ou plusieurs éléments sélectionnés.
   function itemMenu(s, t) {
-    const one = s.length === 1, it = s[0], paths = s.map(pathOf), ext = one && !it.d && !it.drive ? '.' + extOf(it.n) : null;
+    const one = s.length === 1, it = s[0], paths = s.map(pathOf), ext = one && !it.d && !it.drive ? '.' + extOf(it.b ?? it.n) : null;
     const out = [['Ouvrir', () => open(it), { icon: 'dossier', key: 'Entrée', disabled: !one }]];
+    if (t.search && one) out.push(["Ouvrir l'emplacement du dossier", () => showInFolder(it)]);
     if (ext) out.push(['Ouvrir avec', null, { sub: () => openWithItems(it, ext) }]);
     if (one && it.d) out.push(['Ouvrir dans un nouvel onglet', () => addTab(pathOf(it))], ['Ouvrir dans une nouvelle fenêtre', () => post({ cmd: 'fs.newwindow', path: pathOf(it) })]);
     if (one) out.push(['Ouvrir dans un terminal', () => post({ cmd: 'fs.terminal', path: it.d ? pathOf(it) : (parentOf(pathOf(it)) || t.path) })]);
     out.push(null,
       ['Couper', () => copy(true), { key: 'Ctrl+X' }], ['Copier', () => copy(false), { key: 'Ctrl+C' }], ['Copier le chemin', copyPath, { key: 'Ctrl+Maj+C' }], null,
       ['Envoyer vers', null, { sub: () => sendToItems(paths) }], null,
-      ['Renommer', () => rename(), { icon: 'editer', key: 'F2', disabled: !one }], ['Supprimer', del, { icon: 'supprimer', key: 'Suppr' }], null,
+      ['Renommer', () => rename(), { icon: 'editer', key: 'F2', disabled: !one || !!t.search }], ['Supprimer', del, { icon: 'supprimer', key: 'Suppr' }], null,
       ['Propriétés', showProps, { key: 'Alt+Entrée' }]);
     return out;
   }
   // Le menu du fond de la liste (aucun élément visé).
   function backgroundMenu(t) {
-    const no = !t.path;
+    const no = !t.path || !!t.search;   // pendant une recherche la liste montre des résultats, pas un dossier : rien à y créer ni coller
     return [
       ['Nouveau', null, { sub: newItems, disabled: no }],
       ['Coller', paste, { key: 'Ctrl+V', disabled: no }], null,

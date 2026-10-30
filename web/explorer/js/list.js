@@ -3,7 +3,7 @@
   const ROW_H = 26, OVER = 10;   // hauteur d'une ligne (celle de .fr) ; lignes gardées au-delà du bord visible
   const collator = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });   // bien plus rapide que localeCompare sur des dizaines de milliers de noms
   const cmp = t => { const k = t.sortK, s = t.rev ? -1 : 1;
-    const key = { n: it => it.n, m: it => it.m || 0, t: it => it._t ??= typeOf(it), s: it => it.s ?? -1 }[k];
+    const key = { n: it => it.b ?? it.n, m: it => it.m || 0, t: it => it._t ??= typeOf(it), s: it => it.s ?? -1 }[k];
     return (a, b) => { if (!!a.d !== !!b.d) return a.d ? -1 : 1; const x = key(a), y = key(b);
       return s * (typeof x === 'string' ? collator.compare(x, y) : (x - y)) || collator.compare(a.n, b.n); }; };
   // Les éléments à montrer, triés et filtrés ; le résultat est gardé tant que ni les éléments (t.ver), ni le tri, ni le filtre ne changent : un clic ne retrie jamais.
@@ -17,13 +17,13 @@
   // Les éléments par nom (pour retrouver la sélection sans parcourir toute la liste).
   function byName(t) { if (t.bnVer !== t.ver || !t.bn) { t.bn = new Map(t.items.map(i => [i.n, i])); t.bnVer = t.ver; } return t.bn; }
 
-  const rowHtml = (it, i, t) => `<div class="fr ${t.sel.has(it.n) ? 'sel' : ''} ${it.h ? 'hid' : ''} ${clip.cut && clip.paths.includes(joinP(t.path, it.n)) ? 'cut' : ''}" data-i="${i}"><span class="nm">${pix(iconOf(it), 16)}<span>${esc(dispName(it))}</span></span><span class="f">${dateOf(it.m)}</span><span class="f">${typeOf(it)}</span><span class="f r">${it.drive ? sizeOf(it.free) + ' libres' : sizeOf(it.s)}</span></div>`;
+  const rowHtml = (it, i, t) => `<div class="fr ${t.sel.has(it.n) ? 'sel' : ''} ${it.h ? 'hid' : ''} ${clip.cut && clip.paths.includes(pathOf(it)) ? 'cut' : ''}" data-i="${i}"><span class="nm">${pix(iconOf(it), 16)}<span>${esc(dispName(it))}${it.r !== undefined ? `<i class="rd">${esc(it.r || '.')}</i>` : ''}</span></span><span class="f">${dateOf(it.m)}</span><span class="f">${typeOf(it)}</span><span class="f r">${it.drive ? sizeOf(it.free) + ' libres' : sizeOf(it.s)}</span></div>`;
 
   // Dessine les lignes qui touchent la zone visible (plus quelques-unes de marge), entre deux espaceurs qui gardent la hauteur et la barre de défilement de la liste entière.
   function paintRows(force) {
     const t = T(), box = $('files'); if (!t || !t.rows) return;
     const rows = t.rows;
-    if (!rows.length) { box.innerHTML = `<div class="empty">${t.loading ? 'Lecture du dossier…' : t.filter ? 'Aucun résultat' : 'Ce dossier est vide'}</div>`; t.win = null; return; }
+    if (!rows.length) { const s = t.search; box.innerHTML = `<div class="empty">${s ? (s.running ? 'Recherche en cours…' : searchIdle(s) ? 'Tape un nom (ex. facture *.pdf) ou choisis un critère.' : 'Aucun résultat') : t.loading ? 'Lecture du dossier…' : t.filter ? 'Aucun résultat' : 'Ce dossier est vide'}</div>`; t.win = null; return; }
     const h = box.clientHeight || 400, st = box.scrollTop;
     const first = Math.max(0, Math.floor(st / ROW_H) - OVER), last = Math.min(rows.length - 1, Math.ceil((st + h) / ROW_H) + OVER);
     if (!force && t.win && t.win[0] === first && t.win[1] === last) return;
@@ -53,11 +53,13 @@
     $('ttl').textContent = baseOf(t.path) + ' — Explorateur'; post({ cmd: 'win.title', t: baseOf(t.path) + ' — Explorateur' });
     const bn = byName(t); let n = 0, bytes = 0;
     for (const name of t.sel) { const it = bn.get(name); if (it) { n++; if (it.s > 0) bytes += it.s; } }
-    $('st1').textContent = `${rows.length} élément${rows.length > 1 ? 's' : ''}${t.loading ? ' (lecture en cours…)' : ''}`;
+    const sr = t.search;
+    $('st1').textContent = sr ? (sr.running ? `Recherche… ${rows.length} trouvé${rows.length > 1 ? 's' : ''}, ${sr.scanned} éléments lus` : `${rows.length} résultat${rows.length > 1 ? 's' : ''}${sr.truncated ? ' (limité à 20 000)' : ''}`)
+      : `${rows.length} élément${rows.length > 1 ? 's' : ''}${t.loading ? ' (lecture en cours…)' : ''}`;
     $('st2').textContent = n ? `${n} sélectionné${n > 1 ? 's' : ''}${bytes ? ' (' + sizeOf(bytes) + ')' : ''}` : '';
     $('st3').textContent = t.free >= 0 ? `Espace libre : ${sizeOf(t.free)}` : '';
     $('orb').className = t.loading ? 'orb amber pulse' : 'orb green';
-    drawSide(); prefetchOpenWith();
+    drawSide(); prefetchOpenWith(); syncSearchUi();
     if (window.updatePreview) updatePreview();
   }
   function drawSide() {
@@ -75,6 +77,8 @@
     // Le dossier affiché a disparu (supprimé, déplacé, disque retiré) : on remonte au dossier parent le plus proche qui existe.
     if (m.error && m.error.startsWith('Dossier introuvable') && t.mode === 'reload' && t.path) { const up = parentOf(t.path); t.loading = false; go(up == null ? '' : up, 'push'); return; }
     if (m.error) { t.loading = false; $('orb').className = 'orb red'; $('st1').textContent = m.error; $('st2').textContent = ''; $('st3').textContent = ''; t.want = t.path; return; }
+    // Une relecture qui arrive pendant un renommage ou un glisser ne doit pas détruire le champ de saisie : on la laisse tomber, `dirty` en commande une autre dès que c'est fini.
+    if (t.mode === 'reload' && t === T() && t.path === m.path && busy()) { t.dirty = true; t.dropMore = !!m.more; return; }
     const keep = t.mode === 'reload' && t.path === m.path ? new Set(t.sel) : new Set();
     if (t.mode === 'push' && t.path !== m.path) { t.hist.splice(t.idx + 1); t.hist.push(m.path); t.idx = t.hist.length - 1; }
     if (t.mode === 'back') t.idx = Math.max(0, t.idx - 1); if (t.mode === 'fwd') t.idx = Math.min(t.hist.length - 1, t.idx + 1);
@@ -86,6 +90,7 @@
   };
   handlers['fs.list.more'] = m => {
     const t = tabs.find(x => x.id === m.tab); if (!t || t.path !== m.path) return;
+    if (t.dropMore) { if (!m.more) t.dropMore = false; return; }   // suite d'une liste laissée tomber (voir plus haut)
     for (const it of m.items) t.items.push(it);
     t.ver++; t.loading = !!m.more;
     if (!m.more && t.mode === 'reload') pruneSel(t);
@@ -101,7 +106,7 @@
     t.wantRename = false;
     reload();
   };
-  const reload = () => go(T().path, 'reload');
+  const reload = () => { if (T().search) { runSearch(); return; } go(T().path, 'reload'); };   // pendant une recherche, actualiser la relance
   // Un réglage a changé (ici ou dans une autre fenêtre) : les éléments cachés demandent une relecture de tous les onglets (l'actif tout de suite), les extensions un simple redessin.
   let shownHidden = false;
   function onSettings() {
@@ -112,7 +117,7 @@
   // Le dossier d'un onglet a changé hors de la fenêtre : on le relit (sélection et défilement gardés), sauf pendant un renommage ou un glisser (on attend la fin) ; un onglet caché se relit quand on y revient.
   const busy = () => !!(typeof drag !== 'undefined' && drag) || !!document.activeElement?.closest?.('#files input');
   handlers['fs.changed'] = m => {
-    const t = tabs.find(x => x.id === m.tab); if (!t || t.path !== m.path) return;
+    const t = tabs.find(x => x.id === m.tab); if (!t || t.path !== m.path || t.search) return;   // (pas de relecture pendant une recherche)
     if (t !== T()) { t.stale = true; return; }
     if (busy()) { t.dirty = true; return; }
     reload();

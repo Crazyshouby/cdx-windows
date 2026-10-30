@@ -15,6 +15,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
     int count;
     public readonly JobQueue Jobs = new();   // copier, déplacer, supprimer, chercher : en arrière-plan, l'un après l'autre (lot 4)
     readonly Dictionary<(HostForm, string), CancellationTokenSource> lists = new();   // la lecture de dossier en cours de chaque onglet
+    readonly Dictionary<(HostForm, string), CancellationTokenSource> searches = new();    // la recherche dans les sous-dossiers en cours de chaque onglet
     readonly Dictionary<(HostForm, string), DirWatcher> watchers = new();             // la surveillance du dossier de chaque onglet
     public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
@@ -53,7 +54,24 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
         catch (Exception ex) { Host.Log("surveillance de " + path + " impossible : " + ex.Message); }
     }
 
-    void CancelLists(HostForm f) { foreach (var k in watchers.Keys.Where(k => k.Item1 == f).ToList()) { watchers[k].Dispose(); watchers.Remove(k); }  foreach (var k in lists.Keys.Where(k => k.Item1 == f).ToList()) { lists[k].Cancel(); lists.Remove(k); } }
+    // Lance une recherche dans les sous-dossiers pour un onglet (remplace la précédente) ; les résultats reviennent par paquets (fs.found), le dernier avec done = true.
+    void SearchStart(HostForm from, JsonElement r)
+    {
+        string S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        string tab = S("tab"); int sid = r.TryGetProperty("sid", out var sv) && sv.TryGetInt32(out var si) ? si : 0; string root = S("root") ?? "";
+        var key = (from, tab ?? "");
+        if (searches.TryGetValue(key, out var old)) old.Cancel();
+        if (root.Length > 0 && (!Path.IsPathRooted(root) || root.Length > 520 || !Directory.Exists(root))) { from.Send(new { type = "fs.found", tab, sid, items = new object[0], scanned = 0, done = true, truncated = false, error = "Dossier introuvable : " + root }); return; }
+        var spec = new SearchSpec(root, (S("q") ?? "").Length > 200 ? S("q")[..200] : S("q"), S("kind"), S("date"), S("size"));
+        var cts = searches[key] = new CancellationTokenSource(); var ct = cts.Token;
+        void Emit(object msg) => Anchor.BeginInvoke(new Action(() => { if (!ct.IsCancellationRequested && !from.IsDisposed) from.Send(msg); }));
+        _ = Task.Run(() => { try { Search.Run(spec, tab, sid, ct, Emit); } catch (OperationCanceledException) { } catch (Exception ex) { Emit(new { type = "fs.found", tab, sid, items = new object[0], scanned = 0, done = true, truncated = false, error = ex.Message }); } })
+            .ContinueWith(t => Anchor.BeginInvoke(new Action(() => { if (searches.TryGetValue(key, out var cur) && cur == cts) searches.Remove(key); })));
+    }
+
+    void SearchStop(HostForm from, string tab) { if (searches.Remove((from, tab ?? ""), out var c)) c.Cancel(); }
+
+    void CancelLists(HostForm f) { foreach (var k in searches.Keys.Where(k => k.Item1 == f).ToList()) { searches[k].Cancel(); searches.Remove(k); }  foreach (var k in watchers.Keys.Where(k => k.Item1 == f).ToList()) { watchers[k].Dispose(); watchers.Remove(k); }  foreach (var k in lists.Keys.Where(k => k.Item1 == f).ToList()) { lists[k].Cancel(); lists.Remove(k); } }
 
     public bool Closing { get; private set; }
 
@@ -173,6 +191,8 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
                     .ContinueWith(t => Anchor.BeginInvoke(new Action(() => { if (!from.IsDisposed && !t.IsFaulted) from.Send(new { type = "openwith", ext, items = t.Result }); })));
                 return;
             }
+            if (cmd == "fs.search") { SearchStart(from, r); return; }
+            if (cmd == "fs.search.stop") { SearchStop(from, r.TryGetProperty("tab", out var sst) && sst.ValueKind == JsonValueKind.String ? sst.GetString() : null); return; }
             if (cmd == "fs.watch") { Watch(from, r.TryGetProperty("tab", out var wt) && wt.ValueKind == JsonValueKind.String ? wt.GetString() : null, r.TryGetProperty("path", out var wp) && wp.ValueKind == JsonValueKind.String ? wp.GetString() : null); return; }
             if (cmd == "fs.settings.get") { from.Send(new { type = "settings", values = Settings.All() }); return; }
             if (cmd == "fs.settings.set")

@@ -181,7 +181,7 @@ try {
   Js "window.__spy = []; window.__real = window.__real || window.chrome.webview.postMessage; window.chrome.webview.postMessage = o => { window.__spy.push(o); if (!['fs.terminal', 'fs.openwith', 'fs.openas', 'fs.copypath', 'fs.sendto', 'fs.props'].includes(o.cmd)) window.__real.call(window.chrome.webview, o); }" | Out-Null
   function Menu { Js "[...document.querySelectorAll('.menu')].map(m => [...m.querySelectorAll('.menu-item')].map(e => e.querySelector('span:not(.chk):not(.pix):not(.subarrow)')?.textContent).join('|')).join(' // ')" }
   function MenuTitle { Js "document.querySelector('.menu .menu-title')?.textContent" }
-  function MenuClick([string]$text) { Js "const it = [...document.querySelectorAll('.menu .menu-item')].find(e => e.querySelector('span:not(.chk):not(.pix):not(.subarrow)')?.textContent === '$text'); if (it) it.click(); return !!it" }
+  function MenuClick([string]$text) { $q = $text.Replace("'", [string][char]92 + "'"); Js "const it = [...document.querySelectorAll('.menu .menu-item')].find(e => e.querySelector('span:not(.chk):not(.pix):not(.subarrow)')?.textContent === '$q'); if (it) it.click(); return !!it" }   # l'apostrophe du libellé est protégée dans le JavaScript
   function RightClick([string]$name) { Js "const r = __rowOf('$name'); const b = r.getBoundingClientRect(); r.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 60), clientY: Math.round(b.top + 8) }))" | Out-Null }
   Js "window.__rowOf = n => [...document.querySelectorAll('#files .fr')].find(r => r.querySelector('.nm span:last-child').textContent === n)" | Out-Null
   Js "T().sel = new Set(); show(true)" | Out-Null
@@ -263,6 +263,73 @@ try {
   Check "valider crée « petit.lnk » qui pointe vers le dossier cible, et la saisie de son nom s'ouvre" ((Until { Test-Path "$work\menus\petit.lnk" } 8000) -and (Until { (Js "!!document.querySelector('#files input')") -eq 'true' } 6000))
   Js "document.querySelector('#files input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
   Js "window.chrome.webview.postMessage = window.__real" | Out-Null
+
+  # --- recherche dans les sous-dossiers ---
+  New-Item -ItemType Directory "$work\recherche\a\b", "$work\recherche\c" | Out-Null
+  Set-Content "$work\recherche\facture-2025.pdf" 'p'; Set-Content "$work\recherche\a\photo.jpg" 'j'; Set-Content "$work\recherche\a\b\Facture vieille.txt" 't'
+  Set-Content "$work\recherche\c\musique.mp3" 'm'; Set-Content "$work\recherche\notes.md" 'n'
+  (Get-Item "$work\recherche\a\b\Facture vieille.txt").LastWriteTime = (Get-Date).AddDays(-400)
+  $wjr = "$work\recherche".Replace([string][char]92, [string][char]92 + [string][char]92)
+  Js "go('$wjr', 'push')" | Out-Null
+  Check "un dossier à sous-dossiers s'ouvre" (Until { (Js "T().path") -eq "$work\recherche" -and (Js "T().items.length") -eq '4' } 8000)
+  Js "document.getElementById('bSearch').click()" | Out-Null
+  Check "le bouton « Partout » ouvre la barre de critères (type, date, taille) et vide la liste" (((Js "!document.getElementById('sbar').hidden") -eq 'true') -and ((Js "T().rows.length") -eq '0') -and ((Js "document.getElementById('sKind').options.length") -eq '9'))
+  Check "la liste vide invite à taper un nom" ((Js "document.querySelector('#files .empty').textContent") -like 'Tape un nom*')
+  Js "const f = document.getElementById('find'); f.value = 'facture'; f.dispatchEvent(new Event('input'))" | Out-Null
+  Check "taper « facture » trouve les deux fichiers des sous-dossiers (recherche différée de 300 ms)" (Until { (Js "T().rows.map(r => r.b).sort().join(',')") -eq 'Facture vieille.txt,facture-2025.pdf' } 8000)
+  Check "le dossier de chaque résultat s'affiche en grisé après son nom (« a\b » pour la vieille facture)" ((Js "[...document.querySelectorAll('#files .fr .rd')].map(e => e.textContent).sort().join('|')") -eq ".|a\b")
+  Check "la barre d'état compte les résultats" (Until { (Js "document.getElementById('st1').textContent") -match '^2 résultats' } 6000)
+  Js "const s = document.getElementById('sDate'); s.value = 'year'; s.dispatchEvent(new Event('change'))" | Out-Null
+  Check "le critère « 12 derniers mois » écarte la facture de 400 jours" (Until { (Js "T().rows.map(r => r.b).join(',')") -eq 'facture-2025.pdf' } 8000)
+  Js "const s = document.getElementById('sDate'); s.value = 'any'; s.dispatchEvent(new Event('change')); const k = document.getElementById('sKind'); k.value = 'image'; k.dispatchEvent(new Event('change')); const f = document.getElementById('find'); f.value = ''; f.dispatchEvent(new Event('input'))" | Out-Null
+  Check "le type « Images » sans nom ne laisse que photo.jpg" (Until { (Js "T().rows.map(r => r.b).join(',')") -eq 'photo.jpg' } 8000)
+  Js "const k = document.getElementById('sKind'); k.value = 'all'; k.dispatchEvent(new Event('change')); const f = document.getElementById('find'); f.value = 'v*e.t?t'; f.dispatchEvent(new Event('input'))" | Out-Null
+  Check "le joker « v*e.t?t » trouve « Facture vieille.txt »... (le nom entier doit correspondre : rien)" (Until { (Js "T().rows.length") -eq '0' -and (Js "document.querySelector('#files .empty')?.textContent") -eq 'Aucun résultat' } 8000)
+  Js "const f = document.getElementById('find'); f.value = '*vieille.t?t'; f.dispatchEvent(new Event('input'))" | Out-Null
+  Check "« *vieille.t?t » trouve la vieille facture" (Until { (Js "T().rows.map(r => r.b).join(',')") -eq 'Facture vieille.txt' } 8000)
+  Js "T().sel = new Set([T().rows[0].n]); show(true)" | Out-Null
+  Js "window.__spy = []; window.__real = window.__real || window.chrome.webview.postMessage; window.chrome.webview.postMessage = o => { window.__spy.push(o); if (!['fs.open', 'fs.props', 'fs.copypath'].includes(o.cmd)) window.__real.call(window.chrome.webview, o); }" | Out-Null
+  Js "const r = document.querySelector('#files .fr'); r.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }))" | Out-Null
+  $m = Menu
+  Check "le menu d'un résultat propose « Ouvrir l'emplacement du dossier » et grise « Renommer »" (($m -match "Ouvrir\|Ouvrir l'emplacement du dossier") -and ((Js "[...document.querySelectorAll('.menu-item.off')].map(e => e.querySelector('span:not(.chk):not(.pix)').textContent).join('|')") -match 'Renommer'))
+  MenuClick "Ouvrir l'emplacement du dossier" | Out-Null
+  Check "« Ouvrir l'emplacement du dossier » ferme la recherche, ouvre a\b et sélectionne le fichier" (Until { (Js "T().path") -eq "$work\recherche\a\b" -and (Js "[...T().sel].join(',')") -eq 'Facture vieille.txt' -and (Js "!T().search") -eq 'true' } 8000)
+  Check "la barre de critères a disparu" ((Js "document.getElementById('sbar').hidden") -eq 'true')
+  Js "go('$wjr', 'push')" | Out-Null
+  Until { (Js "T().path") -eq "$work\recherche" } 6000 | Out-Null
+  Key 'e' '{ctrlKey:true}'
+  Check "Ctrl+E ouvre la recherche et met le curseur dans la zone de saisie" (((Js "!!T().search") -eq 'true') -and ((Js "document.activeElement.id") -eq 'find'))
+  Js "const f = document.getElementById('find'); f.value = 'photo'; f.dispatchEvent(new Event('input'))" | Out-Null
+  Until { (Js "T().rows.length") -eq '1' } 8000 | Out-Null
+  Js "document.getElementById('find').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
+  Check "Échap dans la zone de saisie ferme la recherche et rend le dossier (4 éléments)" (Until { (Js "!T().search") -eq 'true' -and (Js "T().items.length") -eq '4' -and (Js "T().path") -eq "$work\recherche" } 8000)
+  # ouvrir un résultat dossier / actualiser / changer de dossier
+  Key 'e' '{ctrlKey:true}'
+  Js "const k = document.getElementById('sKind'); k.value = 'folder'; k.dispatchEvent(new Event('change'))" | Out-Null
+  Check "type « Dossiers » : a, a\b et c" (Until { (Js "T().rows.map(r => r.n).sort().join(',')") -eq 'a,a\b,c' } 8000)
+  Js "document.querySelector('#files .fr').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 1 })); const r = [...document.querySelectorAll('#files .fr')].find(x => x.textContent.includes('c')); r.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, detail: 2 }))" | Out-Null
+  Check "double-cliquer un dossier résultat ouvre ce dossier (la recherche se ferme)" (Until { (Js "!T().search") -eq 'true' -and ((Js "T().path") -like '*recherche\*') } 8000)
+  Js "go('$wjr', 'push')" | Out-Null
+  Until { (Js "T().path") -eq "$work\recherche" } 6000 | Out-Null
+  Js "document.getElementById('bSearch').click(); const f = document.getElementById('find'); f.value = 'notes'; f.dispatchEvent(new Event('input'))" | Out-Null
+  Until { (Js "T().rows.length") -eq '1' } 8000 | Out-Null
+  Set-Content "$work\recherche\notes-bis.md" 'x'
+  Key 'F5'
+  Check "F5 pendant la recherche la relance : le nouveau fichier est trouvé (2 résultats)" (Until { (Js "T().rows.length") -eq '2' } 8000)
+  Js "document.getElementById('bSearch').click()" | Out-Null
+  Check "le bouton « Partout » une seconde fois referme la recherche" (Until { (Js "!T().search") -eq 'true' -and (Js "T().items.length") -ge 4 } 8000)
+  Remove-Item "$work\recherche\notes-bis.md"
+  # annulation d'une recherche longue : lancer sur un grand dossier puis fermer aussitôt
+  1..3000 | ForEach-Object { New-Item -ItemType Directory "$work\recherche\c\gros$_" -Force | Out-Null }
+  Js "document.getElementById('bSearch').click(); const f = document.getElementById('find'); f.value = 'gros'; f.dispatchEvent(new Event('input'))" | Out-Null
+  Start-Sleep -Milliseconds 500
+  Js "document.getElementById('sClose').click()" | Out-Null
+  Start-Sleep -Seconds 2
+  Check "fermer pendant la recherche : aucun résultat tardif ne revient dans la liste du dossier" (((Js "!T().search") -eq 'true') -and ((Js "T().items.every(i => i.b === undefined)") -eq 'true'))
+  Js "window.chrome.webview.postMessage = window.__real" | Out-Null
+  Remove-Item "$work\recherche\c\gros*" -Recurse -Force
+  Js "go('$($work.Replace('\', '\\'))\\petit', 'push')" | Out-Null
+  Until { (Js "T().path") -eq "$work\petit" } 8000 | Out-Null
 
   # --- le dossier affiché disparaît : on remonte au parent ---
   Js "go('$($work.Replace('\', '\\'))\\gros', 'push')" | Out-Null
