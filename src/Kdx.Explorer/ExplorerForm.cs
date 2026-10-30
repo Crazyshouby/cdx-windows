@@ -26,6 +26,7 @@ class ExplorerForm : HostForm
     // elle ignore le second des deux avis arrivés à moins de 250 ms.
     protected override void WndProc(ref Message m)
     {
+        if (ShellMenu.Active && ShellMenu.Forward(ref m)) return;   // les sous-menus du menu de Windows (« Plus d'options ») ont besoin de ces messages
         if (m.Msg == 0x0319 /* WM_APPCOMMAND */)
         {
             int cmd = (int)(((long)m.LParam >> 16) & 0x0FFF);

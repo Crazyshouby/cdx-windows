@@ -46,6 +46,10 @@
     return menuData.sendto.length ? menuData.sendto.map(d => [d.name, () => post({ cmd: 'fs.sendto', item: d.path, paths, tab: t.id })]) : [['Aucune destination', null, { disabled: true }]];
   };
 
+  // Le vrai menu de Windows pour ces éléments (tout ce que d'autres logiciels y ajoutent) : il s'ouvre sous le pointeur ; Windows exécute lui-même la commande choisie.
+  const moreOptions = paths => post({ cmd: 'fs.shellmenu', paths, shift: lastShift });
+  let lastShift = false; document.addEventListener('contextmenu', e => { lastShift = e.shiftKey; }, true);   // Maj + clic droit : le menu étendu de Windows
+
   // Le menu d'un ou plusieurs éléments sélectionnés.
   function itemMenu(s, t) {
     const one = s.length === 1, it = s[0], paths = s.map(pathOf), ext = one && !it.d && !it.drive ? '.' + extOf(it.b ?? it.n) : null;
@@ -58,7 +62,8 @@
       ['Couper', () => copy(true), { key: 'Ctrl+X' }], ['Copier', () => copy(false), { key: 'Ctrl+C' }], ['Copier le chemin', copyPath, { key: 'Ctrl+Maj+C' }], null,
       ['Envoyer vers', null, { sub: () => sendToItems(paths) }], null,
       ['Renommer', () => rename(), { icon: 'editer', key: 'F2', disabled: !one || !!t.search }], ['Supprimer', del, { icon: 'supprimer', key: 'Suppr' }], null,
-      ['Propriétés', showProps, { key: 'Alt+Entrée' }]);
+      ['Propriétés', showProps, { key: 'Alt+Entrée' }],
+      ["Plus d'options…", () => moreOptions(paths), { key: 'Maj+F10' }]);
     return out;
   }
   // Le menu du fond de la liste (aucun élément visé).
@@ -72,6 +77,7 @@
       ['Actualiser', reload, { icon: 'maj', key: 'F5' }], null,
       ['Ouvrir dans un terminal', () => post({ cmd: 'fs.terminal', path: t.path }), { disabled: no }],
       ['Propriétés', showProps, { key: 'Alt+Entrée', disabled: no }],
+      ["Plus d'options…", () => moreOptions([t.path]), { disabled: no }],
     ];
   }
 

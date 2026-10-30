@@ -204,6 +204,17 @@ static class SelfTest
             var swp = Stopwatch.StartNew(); var pm = Search.NameMatcher(string.Concat(Enumerable.Repeat("*a", 30)) + "b"); pm(new string('a', 5000));
             Check("recherche : NameMatcher résiste à une requête de jokers pathologique (pas d'explosion, rend vite)", swp.ElapsedMilliseconds < 3000);
 
+            // --- le menu de Windows (« Plus d'options ») : construit pour de bon, jamais affiché ---
+            string sm = Path.Combine(dir, "natif"); Directory.CreateDirectory(sm); string smf = Path.Combine(sm, "un.txt"), smg = Path.Combine(sm, "deux.txt"); File.WriteAllText(smf, "1"); File.WriteAllText(smg, "2");
+            Check("menu natif : seuls des éléments existants du même dossier sont acceptés", ShellMenu.Validate(new[] { smf, smg }).Length == 2 && File.Exists(Path.Combine(dir, "b.txt")) && ShellMenu.Validate(new[] { smf, Path.Combine(dir, "b.txt") }).Length == 0 && ShellMenu.Validate(new[] { smf, Path.Combine(sm, "nulle.txt") }).Length == 1 && ShellMenu.Validate(new[] { "relatif.txt", "" }).Length == 0 && ShellMenu.Validate(null).Length == 0);
+            var nat = ShellMenu.Probe(new[] { smf });
+            Check("menu natif : Windows construit un menu pour un fichier (au moins 5 entrées, toutes avec un libellé)", nat.Count >= 5 && nat.All(x => x.Length > 0));
+            Check("menu natif : il contient « Propriétés » (ou Properties)", nat.Any(x => x.StartsWith("Propriétés", StringComparison.OrdinalIgnoreCase) || x.StartsWith("Properties", StringComparison.OrdinalIgnoreCase)));
+            var natDir = ShellMenu.Probe(new[] { sm });
+            Check("menu natif : pour un dossier aussi, et pour deux fichiers", natDir.Count >= 5 && ShellMenu.Probe(new[] { smf, smg }).Count >= 3);
+            Check("menu natif : un chemin refusé ne plante pas et ne rend aucun menu (liste vide)", ShellMenu.Probe(new[] { Path.Combine(sm, "nulle.txt") }).Count == 0 && ShellMenu.Probe(new string[0]).Count == 0);
+            Check("menu natif : rien d'actif en dehors d'un affichage (Forward ne détourne aucun message)", !ShellMenu.Active);
+
             // --- lecture annulable d'un dossier ---
             string big2 = Path.Combine(dir, "gros"); Directory.CreateDirectory(big2);
             for (int i = 0; i < 300; i++) File.WriteAllText(Path.Combine(big2, "f" + i + ".txt"), "x");

@@ -264,6 +264,24 @@ try {
   Js "document.querySelector('#files input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
   Js "window.chrome.webview.postMessage = window.__real" | Out-Null
 
+  # --- « Plus d'options… » : le menu de Windows (le message est intercepté : le menu natif attend un vrai choix et bloquerait l'essai) ---
+  Js "go('$wjm', 'push')" | Out-Null
+  Until { (Js "T().path") -eq "$work\menus" -and (Js "T().items.length") -ge 3 } 8000 | Out-Null
+  Js "window.__spy = []; window.__real = window.__real || window.chrome.webview.postMessage; window.chrome.webview.postMessage = o => { window.__spy.push(o); if (o.cmd !== 'fs.shellmenu') window.__real.call(window.chrome.webview, o); }" | Out-Null
+  Js "T().sel = new Set(); show(true)" | Out-Null
+  RightClick 'note.txt'
+  Check "le menu d'un fichier se termine par « Propriétés » puis « Plus d'options… »" ((Menu) -match "Propriétés\|Plus d'options…$")
+  MenuClick "Plus d'options…" | Out-Null
+  Check "« Plus d'options… » envoie fs.shellmenu avec le chemin du fichier (intercepté)" ((Js "JSON.stringify(window.__spy.filter(m => m.cmd === 'fs.shellmenu').map(m => [m.paths.length, m.paths[0].endsWith('note.txt'), m.shift]))") -like '*[1,true,false]*')
+  Js "T().sel = new Set(['note.txt', 'autre.txt']); show(true)" | Out-Null
+  Key 'F10' '{shiftKey:true}'
+  Check "Maj+F10 envoie fs.shellmenu avec les deux fichiers sélectionnés" ((Js "JSON.stringify(window.__spy.filter(m => m.cmd === 'fs.shellmenu').map(m => m.paths.length))") -like '*2*')
+  Js "T().sel = new Set(); show(true); const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
+  Check "le menu du fond propose aussi « Plus d'options… »" ((Menu) -match "Propriétés\|Plus d'options…$")
+  MenuClick "Plus d'options…" | Out-Null
+  Check "pour le fond, le menu de Windows est demandé pour le dossier courant" ((Js "JSON.stringify(window.__spy.filter(m => m.cmd === 'fs.shellmenu').map(m => m.paths[0]))") -like '*menus*')
+  Js "window.chrome.webview.postMessage = window.__real" | Out-Null
+
   # --- recherche dans les sous-dossiers ---
   New-Item -ItemType Directory "$work\recherche\a\b", "$work\recherche\c" | Out-Null
   Set-Content "$work\recherche\facture-2025.pdf" 'p'; Set-Content "$work\recherche\a\photo.jpg" 'j'; Set-Content "$work\recherche\a\b\Facture vieille.txt" 't'

@@ -193,6 +193,15 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             }
             if (cmd == "fs.search") { SearchStart(from, r); return; }
             if (cmd == "fs.search.stop") { SearchStop(from, r.TryGetProperty("tab", out var sst) && sst.ValueKind == JsonValueKind.String ? sst.GetString() : null); return; }
+            if (cmd == "fs.shellmenu")
+            {
+                var sp = r.TryGetProperty("paths", out var spv) && spv.ValueKind == JsonValueKind.Array ? spv.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()).ToArray() : Array.Empty<string>();
+                bool shift = r.TryGetProperty("shift", out var shv) && shv.ValueKind == JsonValueKind.True;
+                var pt = Cursor.Position;   // le menu s'ouvre sous le pointeur (le clic qui l'a demandé)
+                try { if (ShellMenu.Show(from.Handle, sp, pt.X, pt.Y, shift) == 0) from.Send(new { type = "fs.done", tab = (string)null, error = "Windows n'a pas de menu pour cet élément." }); }
+                catch (Exception ex) { Host.Log("menu natif : " + ex.Message); from.Send(new { type = "fs.done", tab = (string)null, error = "Le menu de Windows n'a pas pu s'ouvrir : " + ex.Message }); }
+                return;
+            }
             if (cmd == "fs.watch") { Watch(from, r.TryGetProperty("tab", out var wt) && wt.ValueKind == JsonValueKind.String ? wt.GetString() : null, r.TryGetProperty("path", out var wp) && wp.ValueKind == JsonValueKind.String ? wp.GetString() : null); return; }
             if (cmd == "fs.settings.get") { from.Send(new { type = "settings", values = Settings.All() }); return; }
             if (cmd == "fs.settings.set")
