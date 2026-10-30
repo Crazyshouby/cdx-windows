@@ -159,6 +159,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             }
             if (cmd == "fs.dragout") { DragOut(from, r); return; }
             if (cmd == "fs.list") { ListAsync(from, r.TryGetProperty("path", out var lp) && lp.ValueKind == JsonValueKind.String ? lp.GetString() : null, r.TryGetProperty("tab", out var lt) && lt.ValueKind == JsonValueKind.String ? lt.GetString() : null); return; }
+            if (cmd == "fs.newwindow") { Open(r.TryGetProperty("path", out var np) && np.ValueKind == JsonValueKind.String && np.GetString().Length > 0 && Directory.Exists(np.GetString()) ? np.GetString() : null); return; }
             if (cmd == "fs.watch") { Watch(from, r.TryGetProperty("tab", out var wt) && wt.ValueKind == JsonValueKind.String ? wt.GetString() : null, r.TryGetProperty("path", out var wp) && wp.ValueKind == JsonValueKind.String ? wp.GetString() : null); return; }
             if (cmd == "fs.settings.get") { from.Send(new { type = "settings", values = Settings.All() }); return; }
             if (cmd == "fs.settings.set")

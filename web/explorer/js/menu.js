@@ -1,5 +1,15 @@
 // Le menu contextuel de la liste.
   // ---------------- menu contextuel ----------------
+  // Le menu « Sélection » : les mêmes actions que le clavier.
+  $('cSel').onclick = () => {
+    const r = $('cSel').getBoundingClientRect();
+    KdxFrame.menu([
+      ['Tout sélectionner', selectAll, { key: 'Ctrl+A' }],
+      ['Ne rien sélectionner', selectNone, { key: 'Échap' }],
+      ['Inverser la sélection', invertSelection, { key: 'Ctrl+Maj+I' }],
+    ], r.left, r.bottom + 2, 'Sélection');
+  };
+
   // Le menu « Affichage » : ce que montre la liste (réglages partagés par toutes les fenêtres).
   $('cView').onclick = () => {
     const r = $('cView').getBoundingClientRect(), on = k => settings[k] === true;

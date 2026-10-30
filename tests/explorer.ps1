@@ -88,6 +88,88 @@ try {
   Rename-Item "$work\petit\z.txt" 'a.txt'
   Until { (Js "T().rows.map(r => r.n).join(',')") -like '*a.txt*' } 6000 | Out-Null
 
+  # --- sélection avancée et raccourcis clavier (événements fabriqués) ---
+  New-Item -ItemType Directory "$work\touches" | Out-Null
+  foreach ($n in 'alpha', 'beta', 'bravo') { Set-Content "$work\touches\$n.txt" $n }
+  1..40 | ForEach-Object { Set-Content ("$work\touches\f{0:00}.txt" -f $_) 'f' }
+  Js "go('$($work.Replace('\', '\\'))\\touches', 'push')" | Out-Null
+  Check "un dossier de 43 fichiers s'ouvre" (Until { (Js "T().items.length") -eq '43' } 8000)
+  function Key([string]$k, [string]$mods = '{}') { Js "document.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key: '$k', bubbles: true, cancelable: true }, $mods)))" | Out-Null }
+  function Sel { Js "T().rows.filter(r => T().sel.has(r.n)).map(r => r.n).join(',')" }
+  Js "T().sel = new Set(); T().cursor = -1; show(true)" | Out-Null
+  Key 'ArrowDown'
+  Check "↓ sélectionne le premier élément" ((Sel) -eq 'alpha.txt')
+  Key 'ArrowDown'
+  Check "↓ encore : le deuxième" ((Sel) -eq 'beta.txt')
+  Key 'ArrowUp'
+  Check "↑ revient au premier" ((Sel) -eq 'alpha.txt')
+  Key 'End'
+  Check "Fin : le dernier élément, et la liste a défilé jusqu'à lui" (((Sel) -eq 'f40.txt') -and ([int](Js "document.getElementById('files').scrollTop") -gt 0))
+  Key 'Home'
+  Check "Début : le premier élément, liste remontée" (((Sel) -eq 'alpha.txt') -and ((Js "document.getElementById('files').scrollTop") -eq '0'))
+  Key 'ArrowDown' '{shiftKey:true}'; Key 'ArrowDown' '{shiftKey:true}'; Key 'ArrowDown' '{shiftKey:true}'
+  Check "Maj+↓ trois fois étend la sélection : quatre éléments depuis l'ancre" ((Sel) -eq 'alpha.txt,beta.txt,bravo.txt,f01.txt')
+  Key 'ArrowUp' '{shiftKey:true}'
+  Check "Maj+↑ la rétrécit d'un élément" ((Sel) -eq 'alpha.txt,beta.txt,bravo.txt')
+  Js "T().sel = new Set(); T().cursor = -1; T().anchor = -1; show(true)" | Out-Null
+  Key 'PageDown'
+  $pg = [int](Js "T().cursor")
+  Check "Page bas descend d'une page (curseur à l'indice $pg)" ($pg -ge 5 -and $pg -le 40)
+  Key 'a' '{ctrlKey:true}'
+  Check "Ctrl+A sélectionne tout (43)" ((Js "T().sel.size") -eq '43')
+  Key 'Escape'
+  Check "Échap désélectionne" ((Js "T().sel.size") -eq '0')
+  Js "T().sel = new Set(['alpha.txt']); show(true)" | Out-Null
+  Key 'I' '{ctrlKey:true, shiftKey:true}'
+  Check "Ctrl+Maj+I inverse la sélection (42 éléments, sans alpha.txt)" (((Js "T().sel.size") -eq '42') -and ((Js "T().sel.has('alpha.txt')") -eq 'false'))
+  Js "document.getElementById('cSel').click()" | Out-Null
+  Check "le bouton Sélection ouvre un menu (tout, rien, inverser)" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent).join('|')") -match 'Tout sélectionner.*Ne rien sélectionner.*Inverser' } 4000)
+  Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Inverser')).click()" | Out-Null
+  Check "« Inverser la sélection » du menu : seul alpha.txt est de nouveau sélectionné" ((Sel) -eq 'alpha.txt')
+  # saisie pour sauter
+  Js "T().sel = new Set(); T().cursor = -1; show(true)" | Out-Null
+  Key 'b'
+  Check "taper « b » saute à beta.txt" ((Sel) -eq 'beta.txt')
+  Key 'r'
+  Check "taper « r » aussitôt après (« br ») saute à bravo.txt" ((Sel) -eq 'bravo.txt')
+  Start-Sleep -Milliseconds 1300
+  Key 'b'
+  Check "une seconde plus tard la saisie est oubliée : « b » repart et cycle vers le b suivant (beta.txt)" ((Sel) -eq 'beta.txt')
+  Start-Sleep -Milliseconds 1300   # la saisie « b » doit être oubliée, sinon « bf »
+  Key 'f'; Key 'f' ; Key 'f'
+  Check "taper « fff » cycle d'un nom en « f » au suivant (f03.txt après trois « f »)" ((Sel) -eq 'f03.txt')
+  # tout ce qui part vers l'hôte est intercepté : aucune boîte de propriétés, rien dans le presse-papiers de Valentin
+  Js "window.__spy = []; window.__real = window.chrome.webview.postMessage; window.chrome.webview.postMessage = o => { window.__spy.push(o); if (!['fs.props', 'fs.copypath'].includes(o.cmd)) window.__real.call(window.chrome.webview, o); }" | Out-Null
+  Js "T().sel = new Set(['bravo.txt']); show(true)" | Out-Null
+  Key 'Enter' '{altKey:true}'
+  Check "Alt+Entrée demande les propriétés du fichier sélectionné" ((Js "JSON.stringify(window.__spy.filter(m => m.cmd === 'fs.props').map(m => m.path))") -like '*touches\\bravo.txt*')
+  Key 'C' '{ctrlKey:true, shiftKey:true}'
+  Check "Ctrl+Maj+C demande de copier le chemin (le message part avec le chemin complet) et le dit dans la barre d'état" (((Js "JSON.stringify(window.__spy.filter(m => m.cmd === 'fs.copypath').map(m => m.paths))") -like '*touches\\bravo.txt*') -and ((Js "document.getElementById('st2').textContent") -eq 'Chemin copié'))
+  Js "window.chrome.webview.postMessage = window.__real" | Out-Null
+  Key 'h' '{ctrlKey:true}'
+  Check "Ctrl+H coche « Éléments cachés » (réglage show.hidden)" (Until { (Js "settings['show.hidden']") -eq 'true' } 6000)
+  Key 'h' '{ctrlKey:true}'
+  Check "Ctrl+H une seconde fois le décoche" (Until { (Js "settings['show.hidden']") -eq 'false' } 6000)
+  Key 'n' '{ctrlKey:true}'
+  Check "Ctrl+N ouvre une nouvelle fenêtre de l'Explorateur" (Until { (Ctl 'state') -like '2 fenêtre*' } 15000)
+  Key 'F1'
+  Check "F1 ouvre l'aide « Raccourcis clavier » avec toute la table (plus de 30 raccourcis)" ((Js "document.querySelectorAll('#layer .kb .kbk').length") -gt 30)
+  Js "T().sel = new Set(['alpha.txt']); show(true)" | Out-Null
+  Key 'ArrowDown'
+  Check "boîte ouverte : les flèches ne déplacent pas la sélection de la liste en dessous" ((Sel) -eq 'alpha.txt')
+  Js "document.getElementById('layer').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
+  Check "Échap ferme l'aide" ((Js "!document.querySelector('#layer .veil')") -eq 'true')
+  # rectangle de sélection, dans un dossier court
+  Js "go('$($work.Replace('\', '\\'))\\petit', 'push')" | Out-Null
+  Until { (Js "T().path") -eq "$work\petit" -and (Js "T().items.length") -eq '3' } 8000 | Out-Null
+  Js "T().sel = new Set(); show(true)" | Out-Null
+  Js "const f = document.getElementById('files'), b = f.getBoundingClientRect(), x = b.left + 120, y0 = b.bottom - 16; f.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, buttons: 1, pointerId: 11, clientX: x, clientY: y0 })); document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, buttons: 1, pointerId: 11, clientX: x + 30, clientY: y0 - 30 })); document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, buttons: 1, pointerId: 11, clientX: x + 60, clientY: b.top + 6 }));" | Out-Null
+  Check "tirer un rectangle depuis l'espace vide dessine le rectangle et sélectionne les lignes touchées (3 fichiers)" (((Js "!!document.querySelector('.rubber')") -eq 'true') -and ((Js "T().sel.size") -eq '3'))
+  Js "document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 11 }))" | Out-Null
+  Check "relâcher retire le rectangle ; la sélection reste" (((Js "!document.querySelector('.rubber')") -eq 'true') -and ((Js "T().sel.size") -eq '3'))
+  Js "const f = document.getElementById('files'), b = f.getBoundingClientRect(); const r = [...f.querySelectorAll('.fr')][0].getBoundingClientRect(); T().sel = new Set(['b.txt']); show(true); f.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, buttons: 1, pointerId: 12, ctrlKey: true, clientX: b.left + 120, clientY: b.bottom - 16 })); document.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, buttons: 1, pointerId: 12, clientX: b.left + 150, clientY: r.top + 4 })); document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerId: 12 }))" | Out-Null
+  Check "avec Ctrl, le rectangle s'ajoute à la sélection existante (b.txt et au moins un autre)" ((Js "T().sel.has('b.txt') && T().sel.size >= 2") -eq 'true')
+
   # --- le dossier affiché disparaît : on remonte au parent ---
   Js "go('$($work.Replace('\', '\\'))\\gros', 'push')" | Out-Null
   Until { (Js "T().items.length") -eq '20000' } 30000 | Out-Null
