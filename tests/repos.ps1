@@ -68,6 +68,14 @@ try {
   Js "document.querySelector('#lhead .kdx-colrz').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))" | Out-Null
   Check "un double-clic sur une poignée rend les largeurs d'origine" ((Js "JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))") -eq $w0)
 
+  # --- la barre entre la liste et le détail (kdx-split.js) ---
+  $d0 = JsInt "Math.round(document.querySelector('.col.pv').getBoundingClientRect().width)"
+  Check "la barre entre la liste et le détail existe (détail de 380 px)" (((Js "document.querySelector('.col.pv').previousElementSibling.classList.contains('kdx-split')") -eq 'true') -and $d0 -eq 380)
+  Js "(() => { const s = document.querySelector('.col.pv').previousElementSibling.firstElementChild, x = s.getBoundingClientRect().left; for (const [t, d] of [['pointerdown', 0], ['pointermove', -50], ['pointerup', -50]]) s.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 5, clientX: x + d })); })()" | Out-Null
+  Check "tirer la barre de 50 px à gauche élargit le détail (380 -> 430)" ((JsInt "Math.round(document.querySelector('.col.pv').getBoundingClientRect().width)") -eq 430)
+  Js "document.querySelector('.col.pv').previousElementSibling.firstElementChild.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))" | Out-Null
+  Check "un double-clic sur la barre rend la largeur d'origine (380)" ((JsInt "Math.round(document.querySelector('.col.pv').getBoundingClientRect().width)") -eq 380)
+
   # --- masquer un projet (réglage de l'application, enregistré dans repos.json) ---
   Js "document.getElementById('find').value=''; document.getElementById('find').dispatchEvent(new Event('input')); document.querySelector('#rows .fr[data-p*=vide]').click()" | Out-Null
   Js "document.querySelector('#pv [data-a=hide]').click()" | Out-Null

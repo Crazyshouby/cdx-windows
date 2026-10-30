@@ -59,6 +59,7 @@
 <script src="/kdx/kdx-bridge.js"></script>
 <script src="/kdx/kdx-frame.js"></script>
 <script src="/kdx/kdx-columns.js"></script>
+<script src="/kdx/kdx-split.js"></script>
 <script src="/kdx/host.js"></script>
 </head>
 <body>
@@ -264,6 +265,8 @@
 
   // ---------------- cadre de la fenêtre ----------------
   KdxFrame.init();
+  KdxSplit.init({ pane: $('side'), side: 'left', key: 'explorateur-dossiers', min: 140, max: 520 });    // la barre entre les dossiers et le contenu
+  KdxSplit.init({ pane: $('pv'), side: 'right', key: 'explorateur-apercu', min: 200, max: 800 });       // la barre entre le contenu et l'aperçu
   KdxColumns.init({ head: $('lhead'), cols: ['1fr', 170, 170, 90], key: 'explorateur' });   // colonnes redimensionnables (double-clic sur une poignée : largeurs d'origine)   // barre de titre, boutons et bords : kdx-frame.js (la barre se double-clique pour agrandir)
 
   // ---------------- démarrage ----------------
