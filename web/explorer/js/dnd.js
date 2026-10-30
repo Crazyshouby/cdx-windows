@@ -13,12 +13,13 @@
     const el = document.elementFromPoint(x, y), t = T(); if (!el || !t) return null;
     let n;
     if ((n = el.closest('#files .fr[data-i]'))) { const it = t.rows && t.rows[+n.dataset.i]; return it && it.d && !it.drive && !(skip && skip.has(it.n)) ? { el: n, path: pathOf(it), name: it.n } : null; }
-    if ((n = el.closest('#side [data-p]'))) return n.dataset.p ? { el: n, path: n.dataset.p, name: n.textContent.trim() } : null;
+    if ((n = el.closest('#side [data-p]'))) return n.dataset.p ? { el: n, path: n.dataset.p, name: n.dataset.p === TRASH ? 'la Corbeille' : n.textContent.trim() } : null;
     if ((n = el.closest('#tabs [data-i]')) && n.dataset.i !== '+') { const tt = tabs[+n.dataset.i]; return tt && tt.path ? { el: n, path: tt.path, name: baseOf(tt.path) } : null; }
     return null;
   }
   // Que se passerait-il ? null : refusé (un dossier sur lui-même ou dans l'un de ses sous-dossiers, ou déplacer dans le dossier d'origine) ; sinon { copy }.
   function plan(target, paths, ev) {
+    if (target && target.path === TRASH) return paths.length && !inTrash() ? { copy: false, trash: true } : null;   // déposer sur la Corbeille : y mettre
     if (!target || !paths.length || paths.some(p => within(p, target.path))) return null;
     const copy = ev.ctrlKey || (!ev.shiftKey && paths.some(p => driveOf(p) !== driveOf(target.path)));
     if (!copy && paths.every(p => parentOf(p) != null && norm(parentOf(p)) === norm(target.path))) return null;
@@ -34,6 +35,7 @@
     dcand = { x: e.clientX, y: e.clientY, id: e.pointerId };
   });
   function startDrag() {
+    if (inTrash()) return false;   // on ne glisse rien hors de la corbeille (Restaurer est fait pour cela)
     const items = selected().filter(i => !i.drive); if (!items.length) return false;
     const ghost = document.createElement('div'); ghost.className = 'dnd-ghost';
     drag = { paths: items.map(pathOf), names: new Set(items.map(i => i.n)), ghost, id: dcand.id, target: null, plan: null, one: items.length === 1 ? items[0] : null };
@@ -58,7 +60,7 @@
     drag.target = tg; drag.plan = pl;
     setOver(pl ? tg.el : null);
     const what = drag.one ? drag.one.n : drag.paths.length + ' éléments';
-    g.innerHTML = pix(drag.one ? iconOf(drag.one) : 'dossier', 16) + `<span class="t">${esc(what)}${pl ? `<i>${pl.copy ? 'Copier' : 'Déplacer'} vers « ${esc(tg.name)} »</i>` : ''}</span>`;
+    g.innerHTML = pix(drag.one ? iconOf(drag.one) : 'dossier', 16) + `<span class="t">${esc(what)}${pl ? `<i>${pl.trash ? 'Mettre à la corbeille' : (pl.copy ? 'Copier' : 'Déplacer') + ' vers « ' + esc(tg.name) + ' »'}</i>` : ''}</span>`;
     g.style.left = Math.min(e.clientX + 14, innerWidth - g.offsetWidth - 4) + 'px'; g.style.top = Math.min(e.clientY + 12, innerHeight - g.offsetHeight - 4) + 'px';
     document.body.classList.toggle('cp', !!pl && pl.copy); document.body.classList.toggle('mv', !!pl && !pl.copy); document.body.classList.toggle('no', !pl);
     const fr = $('files').getBoundingClientRect();   // près du bord de la liste : elle défile
@@ -75,7 +77,8 @@
   document.addEventListener('pointerup', e => {
     if (!drag) { dcand = null; return; }
     const tg = drag.target, pl = drag.plan, paths = drag.paths; endDrag();
-    if (tg && pl) post({ cmd: 'fs.drop', paths, dir: tg.path, move: !pl.copy, tab: T().id });
+    if (tg && pl && pl.trash) post({ cmd: 'fs.delete', paths, tab: T().id });
+    else if (tg && pl) post({ cmd: 'fs.drop', paths, dir: tg.path, move: !pl.copy, tab: T().id });
   });
   document.addEventListener('pointercancel', () => { if (drag) endDrag(); });
   document.addEventListener('keydown', e => { if (drag && e.key === 'Escape') { e.stopPropagation(); endDrag(); } }, true);
@@ -95,7 +98,7 @@
 
   // Des fichiers glissés depuis une autre application : WebView2 les présente comme un glisser « Files » ; leurs chemins sont rendus par postMessageWithAdditionalObjects.
   const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-  function extTarget(e) { const t = dropTarget(e.clientX, e.clientY, null); if (t) return t; const cur = T(); return cur && cur.path ? { el: $('files'), path: cur.path, name: baseOf(cur.path) } : null; }
+  function extTarget(e) { const t = dropTarget(e.clientX, e.clientY, null); if (t && t.path === TRASH) return null; if (t) return t; if (inTrash()) return null; const cur = T(); return cur && cur.path ? { el: $('files'), path: cur.path, name: baseOf(cur.path) } : null; }
   document.addEventListener('dragover', e => {
     if (!hasFiles(e)) return;
     const tg = extTarget(e); if (!tg) { e.dataTransfer.dropEffect = 'none'; return; }

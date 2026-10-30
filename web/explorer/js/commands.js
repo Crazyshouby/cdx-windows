@@ -1,10 +1,10 @@
 // Les commandes de fichiers : copier, couper, coller, nouveau dossier, renommer, supprimer, boîte de confirmation.
   // ---------------- commandes ----------------
-  function copy(cut) { const s = selected(); if (!s.length) return; clip = { paths: s.map(pathOf), cut }; post({ cmd: 'fs.copy', paths: clip.paths, cut }); show(true); }
-  function paste() { if (T().path && !T().search) post({ cmd: 'fs.paste', dir: T().path, tab: T().id }); }
-  function newFolder() { if (T().path && !T().search) { T().wantRename = true; post({ cmd: 'fs.newfolder', dir: T().path, tab: T().id }); } }
+  function copy(cut) { if (inTrash()) return; const s = selected(); if (!s.length) return; clip = { paths: s.map(pathOf), cut }; post({ cmd: 'fs.copy', paths: clip.paths, cut }); show(true); }
+  function paste() { if (T().path && !T().search && !inTrash()) post({ cmd: 'fs.paste', dir: T().path, tab: T().id }); }
+  function newFolder() { if (T().path && !T().search && !inTrash()) { T().wantRename = true; post({ cmd: 'fs.newfolder', dir: T().path, tab: T().id }); } }
   function rename(name) {
-    const t = T(); if (t.search) { $('st2').textContent = "Renommer : ouvre d'abord le dossier (clic droit > Ouvrir l'emplacement)"; return; }
+    const t = T(); if (inTrash()) return; if (t.search) { $('st2').textContent = "Renommer : ouvre d'abord le dossier (clic droit > Ouvrir l'emplacement)"; return; }
     const idx = t.rows.findIndex(i => i.n === (name ?? [...t.sel][0])); if (idx < 0) return;
     const it = t.rows[idx]; ensureVisible(idx); const row = $('files').querySelector(`.fr[data-i="${idx}"]`); if (!row || it.drive) return;
     row.scrollIntoView({ block: 'nearest' });
@@ -15,8 +15,10 @@
     inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') end(true); else if (e.key === 'Escape') end(false); };
     inp.onblur = () => end(true);
   }
+  // Suppression : vers la corbeille (annulable) ; depuis la corbeille, ou avec Maj, pour de bon (confirmation).
   function del() {
     const s = selected(); if (!s.length) return;
+    if (inTrash()) { purgeSel(); return; }
     dialog({ title: 'Supprimer', icon: 'supprimer', text: s.length === 1 ? `Placer « ${s[0].n} » dans la corbeille ?` : `Placer ces ${s.length} éléments dans la corbeille ?`, yes: 'Oui', no: 'Non' },
       () => post({ cmd: 'fs.delete', paths: s.map(pathOf), tab: T().id }));
   }
@@ -40,3 +42,25 @@
       $('askIn').focus(); $('askIn').select();
     });
   }
+
+  const itemWord = n => n === 1 ? 'cet élément' : `ces ${n} éléments`;
+  // Supprimer pour de bon (Maj+Suppr) : pas de corbeille, pas d'annulation.
+  function delPerm() {
+    const s = selected(); if (!s.length || inTrash()) { if (inTrash()) purgeSel(); return; }
+    dialog({ title: 'Supprimer définitivement', icon: 'avertissement', text: s.length === 1 ? `Supprimer définitivement « ${dispName(s[0])} » ? Il n'ira pas à la corbeille : impossible de l'annuler.` : `Supprimer définitivement ces ${s.length} éléments ? Ils n'iront pas à la corbeille : impossible de l'annuler.`, yes: 'Supprimer', no: 'Annuler' },
+      () => post({ cmd: 'fs.deleteperm', paths: s.map(pathOf), tab: T().id }));
+  }
+  // La corbeille : restaurer, effacer pour de bon, vider.
+  function restoreSel() { const s = selected().filter(i => i.id); if (s.length) post({ cmd: 'fs.restore', ids: s.map(i => i.id), tab: T().id }); }
+  function purgeSel() {
+    const s = selected().filter(i => i.id); if (!s.length) return;
+    dialog({ title: 'Effacer définitivement', icon: 'avertissement', text: `Effacer définitivement ${itemWord(s.length)} de la corbeille ? C'est irréversible.`, yes: 'Effacer', no: 'Annuler' },
+      () => post({ cmd: 'fs.purge', ids: s.map(i => i.id), tab: T().id }));
+  }
+  function emptyTrash() {
+    const n = (T().items || []).length;
+    dialog({ title: 'Vider la corbeille', icon: 'avertissement', text: n ? `Supprimer définitivement les ${n} éléments de la corbeille ? C'est irréversible.` : 'Vider la corbeille de tous les disques ? C\'est irréversible.', yes: 'Vider', no: 'Annuler' },
+      () => post({ cmd: 'fs.emptybin', tab: T().id }));
+  }
+  const undo = () => post({ cmd: 'fs.undo', tab: T().id });
+  const redo = () => post({ cmd: 'fs.redo', tab: T().id });

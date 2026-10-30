@@ -23,7 +23,7 @@
   function paintRows(force) {
     const t = T(), box = $('files'); if (!t || !t.rows) return;
     const rows = t.rows;
-    if (!rows.length) { const s = t.search; box.innerHTML = `<div class="empty">${s ? (s.running ? 'Recherche en cours…' : searchIdle(s) ? 'Tape un nom (ex. facture *.pdf) ou choisis un critère.' : 'Aucun résultat') : t.loading ? 'Lecture du dossier…' : t.filter ? 'Aucun résultat' : 'Ce dossier est vide'}</div>`; t.win = null; return; }
+    if (!rows.length) { const s = t.search; box.innerHTML = `<div class="empty">${t.path === TRASH && !t.loading ? 'La corbeille est vide' : s ? (s.running ? 'Recherche en cours…' : searchIdle(s) ? 'Tape un nom (ex. facture *.pdf) ou choisis un critère.' : 'Aucun résultat') : t.loading ? 'Lecture du dossier…' : t.filter ? 'Aucun résultat' : 'Ce dossier est vide'}</div>`; t.win = null; return; }
     const h = box.clientHeight || 400, st = box.scrollTop;
     const first = Math.max(0, Math.floor(st / ROW_H) - OVER), last = Math.min(rows.length - 1, Math.ceil((st + h) / ROW_H) + OVER);
     if (!force && t.win && t.win[0] === first && t.win[1] === last) return;
@@ -49,14 +49,15 @@
     if (!keepScroll) $('files').scrollTop = 0;
     paintRows(true);
     document.querySelectorAll('#lhead .lh').forEach(b => { b.classList.toggle('on', b.dataset.k === t.sortK); b.classList.toggle('rev', b.dataset.k === t.sortK && t.rev); });
-    $('addr').value = t.path; $('back').disabled = t.idx <= 0; $('fwd').disabled = t.idx >= t.hist.length - 1; $('up').disabled = parentOf(t.path) == null;
+    const dh = document.querySelector('#lhead .lh[data-k="m"]'); if (dh && dh.firstChild && dh.firstChild.nodeType === 3) dh.firstChild.nodeValue = t.path === TRASH ? 'Supprimé le' : 'Modifié le';   // dans la corbeille, la date est celle de la suppression
+    $('addr').value = t.path === TRASH ? 'Corbeille' : t.path; $('back').disabled = t.idx <= 0; $('fwd').disabled = t.idx >= t.hist.length - 1; $('up').disabled = parentOf(t.path) == null;
     $('ttl').textContent = baseOf(t.path) + ' — Explorateur'; post({ cmd: 'win.title', t: baseOf(t.path) + ' — Explorateur' });
     const bn = byName(t); let n = 0, bytes = 0;
     for (const name of t.sel) { const it = bn.get(name); if (it) { n++; if (it.s > 0) bytes += it.s; } }
     const sr = t.search;
     $('st1').textContent = sr ? (sr.running ? `Recherche… ${rows.length} trouvé${rows.length > 1 ? 's' : ''}, ${sr.scanned} éléments lus` : `${rows.length} résultat${rows.length > 1 ? 's' : ''}${sr.truncated ? ' (limité à 20 000)' : ''}`)
       : `${rows.length} élément${rows.length > 1 ? 's' : ''}${t.loading ? ' (lecture en cours…)' : ''}`;
-    $('st2').textContent = n ? `${n} sélectionné${n > 1 ? 's' : ''}${bytes ? ' (' + sizeOf(bytes) + ')' : ''}` : '';
+    $('st2').textContent = flash && Date.now() < flash.until ? flash.text : n ? `${n} sélectionné${n > 1 ? 's' : ''}${bytes ? ' (' + sizeOf(bytes) + ')' : ''}` : '';
     $('st3').textContent = t.free >= 0 ? `Espace libre : ${sizeOf(t.free)}` : '';
     $('orb').className = t.loading ? 'orb amber pulse' : 'orb green';
     drawSide(); prefetchOpenWith(); syncSearchUi();
@@ -65,7 +66,7 @@
   function drawSide() {
     if (!places) return; const t = T();
     const row = p => `<div class="row-item ${p.path === t.path ? 'sel' : ''}" data-p="${esc(p.path)}">${pix(p.ic, 16)}<span class="grow">${esc(p.name)}</span></div>`;
-    $('side').innerHTML = places.places.map(row).join('') + `<div class="head">Ce PC</div>` + places.drives.map(row).join('') + `<div class="row-item ${t.path === '' ? 'sel' : ''}" data-p="">${pix('pc', 16)}<span class="grow">Tous les disques</span></div>`;
+    $('side').innerHTML = places.places.map(row).join('') + `<div class="head">Ce PC</div>` + places.drives.map(row).join('') + `<div class="row-item ${t.path === '' ? 'sel' : ''}" data-p="">${pix('pc', 16)}<span class="grow">Tous les disques</span></div>` + `<div class="row-item ${t.path === TRASH ? 'sel' : ''}" data-p="${TRASH}">${pix('supprimer', 16)}<span class="grow">Corbeille</span></div>`;
   }
   $('side').onclick = e => { const r = e.target.closest('[data-p]'); if (r) go(r.dataset.p, 'push'); };
 

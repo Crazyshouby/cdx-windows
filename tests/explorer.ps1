@@ -188,7 +188,7 @@ try {
   RightClick 'note.txt'
   Check "un clic droit sur un fichier non sélectionné le sélectionne et ouvre son menu (titre = le nom)" (((Sel) -eq 'note.txt') -and ((MenuTitle) -eq 'note.txt'))
   $m = Menu
-  Check "menu d'un fichier : Ouvrir, Ouvrir avec, terminal, Couper, Copier, Copier le chemin, Envoyer vers, Renommer, Supprimer, Propriétés" ($m -match 'Ouvrir\|Ouvrir avec\|Ouvrir dans un terminal\|Couper\|Copier\|Copier le chemin\|Envoyer vers\|Renommer\|Supprimer\|Propriétés')
+  Check "menu d'un fichier : Ouvrir, Ouvrir avec, terminal, Couper, Copier, Copier le chemin, Envoyer vers, Renommer, Supprimer, Propriétés" ($m -match 'Ouvrir\|Ouvrir avec\|Ouvrir dans un terminal\|Couper\|Copier\|Copier le chemin\|Envoyer vers\|Renommer\|Supprimer\|Supprimer définitivement\|Propriétés')
   Check "un fichier n'offre ni « nouvel onglet » ni « nouvelle fenêtre »" ($m -notmatch 'nouvel onglet|nouvelle fenêtre')
   Check "les éléments à sous-menu portent une flèche (Ouvrir avec, Envoyer vers)" ((Js "document.querySelectorAll('.menu .subarrow').length") -eq '2')
   MenuClick 'Ouvrir avec' | Out-Null
@@ -347,6 +347,83 @@ try {
   Js "window.chrome.webview.postMessage = window.__real" | Out-Null
   Remove-Item "$work\recherche\c\gros*" -Recurse -Force
   Js "go('$($work.Replace('\', '\\'))\\petit', 'push')" | Out-Null
+  Until { (Js "T().path") -eq "$work\petit" } 8000 | Out-Null
+
+  # --- corbeille et annuler/rétablir : la vraie corbeille de Windows, mais seulement avec des fichiers créés ici (retirés à la fin) ; "Vider la corbeille" n'est jamais envoyé à l'hôte ---
+  $wj = $work.Replace('\', '\\')
+  New-Item -ItemType Directory "$work\corb" | Out-Null
+  foreach ($n in 't1', 't2', 't3', 't4') { Set-Content "$work\corb\$n.txt" "contenu $n" }
+  Js "go('$wj\\corb', 'push')" | Out-Null
+  Until { (Js "T().items.length") -eq '4' } 8000 | Out-Null
+  function KeyOk([string]$k) { Key $k '{ ctrlKey: true }'; $true }   # Ctrl+<touche>, rend vrai pour s'enchaîner dans un Check
+  function Confirm-Dialog { Js "const b = document.getElementById('dy'); if (b) b.click(); return !!b" }
+  Js "T().sel = new Set(['t1.txt']); show(true)" | Out-Null
+  Key 'Delete'
+  Check "Suppr ouvre la boîte de confirmation (rien n'est supprimé avant la réponse)" (((Js "!!document.getElementById('dy')") -eq 'true') -and (Test-Path "$work\corb\t1.txt"))
+  Confirm-Dialog | Out-Null
+  Check "confirmer met le fichier à la corbeille : il disparaît du dossier et de la liste" ((Until { -not (Test-Path "$work\corb\t1.txt") } 6000) -and (Until { (Js "T().items.length") -eq '3' } 6000))
+  Check "le menu du fond propose « Annuler Supprimer »" (Until { (Js "undoState.undo") -eq 'Supprimer' } 4000)
+  Js "T().sel = new Set(['t2.txt']); show(true)" | Out-Null
+  Key 'Delete' '{ shiftKey: true }'
+  Check "Maj+Suppr demande une confirmation « définitive »" ((Js "document.querySelector('#layer .tb-title')?.textContent") -eq 'Supprimer définitivement')
+  Js "document.getElementById('dn').click()" | Out-Null
+  Check "refuser laisse le fichier en place" ((Test-Path "$work\corb\t2.txt") -and ((Js "!!document.getElementById('dy')") -eq 'false'))
+  # Ctrl+Z restaure t1 depuis la corbeille, Ctrl+Y le remet
+  Key 'z' '{ ctrlKey: true }'
+  Check "Ctrl+Z restaure le fichier supprimé, avec son contenu, et le dit dans la barre d'état" ((Until { Test-Path "$work\corb\t1.txt" } 6000) -and ((Get-Content "$work\corb\t1.txt" -Raw).Trim() -eq 'contenu t1') -and (Until { (Js "document.getElementById('st2').textContent") -eq 'Annulé : Supprimer' } 4000))
+  Check "après l'annulation, « Rétablir Supprimer » est proposé et « Annuler Supprimer » n'est plus proposé" ((Until { (Js "undoState.redo") -eq 'Supprimer' } 4000) -and ((Js "undoState.undo") -ne 'Supprimer'))
+  Key 'y' '{ ctrlKey: true }'
+  Check "Ctrl+Y remet le fichier à la corbeille" ((Until { -not (Test-Path "$work\corb\t1.txt") } 6000) -and ((Js "document.getElementById('st2').textContent") -eq 'Rétabli : Supprimer'))
+  # la vue Corbeille
+  Js "go('::corbeille', 'push')" | Out-Null
+  Check "la vue Corbeille liste l'élément supprimé (nom d'origine, dossier d'origine) et la barre d'adresse dit « Corbeille »" ((Until { (Js "T().items.some(i => i.b === 't1.txt' && i.o === '$wj\\corb\\t1.txt')") -eq 'true' } 8000) -and ((Js "document.getElementById('addr').value") -eq 'Corbeille'))
+  Check "la colonne de date s'appelle « Supprimé le » dans la corbeille" ((Js "document.querySelector('#lhead .lh[data-k=m]').firstChild.nodeValue.trim()") -eq 'Supprimé le')
+  Js "T().sel = new Set(T().items.filter(i => i.o && i.o.startsWith('$wj\\corb')).map(i => i.n)); show(true)" | Out-Null
+  Check "la sélection d'un élément de la corbeille ne vient pas d'un fichier ordinaire (identifiant de « `$I »)" ((Js "selected().length") -eq '1')
+  $menu = Js "const it = selected(); return itemMenu(it, T()).filter(x => x).map(x => x[0]).join('|')"
+  Check "menu d'un élément de la corbeille : Restaurer et Supprimer définitivement, rien d'autre" ($menu -eq 'Restaurer|Supprimer définitivement')
+  Js "window.__spy = []; window.__real = window.__real || window.chrome.webview.postMessage; window.chrome.webview.postMessage = o => { window.__spy.push(o); if (o.cmd !== 'fs.emptybin') window.__real.call(window.chrome.webview, o); }" | Out-Null
+  Js "emptyTrash()" | Out-Null
+  Check "« Vider la corbeille » demande confirmation et n'envoie rien tant qu'on ne confirme pas" (((Js "!!document.getElementById('dy')") -eq 'true') -and ((Js "window.__spy.filter(m => m.cmd === 'fs.emptybin').length") -eq '0'))
+  Js "document.getElementById('dn').click()" | Out-Null
+  Check "dans la corbeille, copier, coller, nouveau dossier, renommer et la recherche sont sans effet" ((Js "copy(false); paste(); newFolder(); rename(); startSearch(); window.__spy.filter(m => ['fs.copy','fs.paste','fs.newfolder'].includes(m.cmd)).length + ':' + !!T().search") -eq '0:false')
+  Js "window.chrome.webview.postMessage = window.__real" | Out-Null
+  Key 'Enter'
+  Check "Entrée restaure l'élément sélectionné : il revient dans son dossier et quitte la corbeille" ((Until { Test-Path "$work\corb\t1.txt" } 8000) -and (Until { (Js "T().items.every(i => i.b !== 't1.txt')") -eq 'true' } 8000))
+  # purge d'un élément (avec confirmation) : t3 supprimé puis effacé pour de bon depuis la corbeille
+  Js "go('$wj\\corb', 'push')" | Out-Null
+  Until { (Js "T().path") -eq "$work\corb" } 6000 | Out-Null
+  Js "post({ cmd: 'fs.delete', paths: ['$wj\\corb\\t3.txt'], tab: T().id })" | Out-Null
+  Until { -not (Test-Path "$work\corb\t3.txt") } 6000 | Out-Null
+  Js "go('::corbeille', 'push')" | Out-Null
+  Until { (Js "T().items.some(i => i.b === 't3.txt')") -eq 'true' } 8000 | Out-Null
+  Js "T().sel = new Set(T().items.filter(i => i.b === 't3.txt').map(i => i.n)); show(true)" | Out-Null
+  Key 'Delete'
+  Check "Suppr dans la corbeille demande « Effacer définitivement »" ((Js "document.querySelector('#layer .tb-title')?.textContent") -eq 'Effacer définitivement')
+  Confirm-Dialog | Out-Null
+  Check "confirmer efface l'élément de la corbeille pour de bon (il quitte la liste, ne revient pas dans le dossier)" ((Until { (Js "T().items.every(i => i.b !== 't3.txt')") -eq 'true' } 8000) -and -not (Test-Path "$work\corb\t3.txt"))
+  # annuler / rétablir : renommer, nouveau dossier
+  Js "go('$wj\\corb', 'push')" | Out-Null
+  Until { (Js "T().path") -eq "$work\corb" } 6000 | Out-Null
+  Js "post({ cmd: 'fs.rename', path: '$wj\\corb\\t4.txt', name: 't4-renomme.txt', tab: T().id })" | Out-Null
+  Check "renommer (message hôte) puis Ctrl+Z : l'ancien nom revient" ((Until { Test-Path "$work\corb\t4-renomme.txt" } 6000) -and (Until { (Js "undoState.undo") -eq 'Renommer' } 4000) -and (KeyOk 'z') -and (Until { Test-Path "$work\corb\t4.txt" } 6000) -and -not (Test-Path "$work\corb\t4-renomme.txt"))
+  Key 'y' '{ ctrlKey: true }'
+  Check "Ctrl+Y refait le renommage" ((Until { Test-Path "$work\corb\t4-renomme.txt" } 6000) -and -not (Test-Path "$work\corb\t4.txt"))
+  Js "post({ cmd: 'fs.newfolder', dir: '$wj\\corb', tab: T().id })" | Out-Null
+  Check "nouveau dossier puis Ctrl+Z : le dossier va à la corbeille (annulé), Ctrl+Y le ramène" ((Until { (Get-ChildItem "$work\corb" -Directory).Count -eq 1 } 6000) -and (KeyOk 'z') -and (Until { (Get-ChildItem "$work\corb" -Directory).Count -eq 0 } 6000) -and (KeyOk 'y') -and (Until { (Get-ChildItem "$work\corb" -Directory).Count -eq 1 } 6000))
+  # déposer sur la Corbeille de la barre latérale : le plan de glisser-déposer
+  Js "T().sel = new Set(['t2.txt']); show(true)" | Out-Null
+  Check "la barre latérale a une ligne « Corbeille » pour déposer des fichiers" ((Js "!!document.querySelector('#side [data-p=\""::corbeille\""]')") -eq 'true')
+  Check "Ctrl+Z, Ctrl+Y et Maj+Suppr figurent dans l'aide des raccourcis" ((Js "KEYS.filter(s => /Ctrl\+Z|Ctrl\+Y|Shift\+Delete/.test(s.k)).length") -ge 3)
+  # ménage : tout ce qui reste de l'essai dans la corbeille est effacé (la vraie corbeille de Valentin ne garde rien de nous)
+  Js "post({ cmd: 'fs.delete', paths: ['$wj\\corb\\t4-renomme.txt', '$wj\\corb\\t2.txt', '$wj\\corb\\t1.txt'], tab: T().id })" | Out-Null
+  Until { -not (Test-Path "$work\corb\t1.txt") } 6000 | Out-Null
+  Js "go('::corbeille', 'push')" | Out-Null
+  Until { (Js "T().path") -eq '::corbeille' } 6000 | Out-Null
+  Start-Sleep -Milliseconds 800
+  Js "post({ cmd: 'fs.purge', ids: T().items.filter(i => i.o && i.o.startsWith('$wj\\')).map(i => i.id), tab: T().id })" | Out-Null
+  Check "ménage : plus aucun élément de l'essai dans la corbeille" (Until { (Js "T().items.filter(i => i.o && i.o.startsWith('$wj\\')).length") -eq '0' } 8000)
+  Js "go('$wj\\petit', 'push')" | Out-Null
   Until { (Js "T().path") -eq "$work\petit" } 8000 | Out-Null
 
   # --- le dossier affiché disparaît : on remonte au parent ---

@@ -52,6 +52,7 @@ static class Fs
         try
         {
             if (string.IsNullOrEmpty(path)) { emit(ListDrives(tab)); return; }
+            if (path == Recycle.TrashPath) { emit(ListTrash(tab, ct)); return; }
             var di = new DirectoryInfo(path);
             if (!di.Exists) { emit(new { type = "fs.list", tab, error = "Dossier introuvable : " + path }); return; }
             bool showHidden = ShowHidden();
@@ -84,6 +85,14 @@ static class Fs
         catch (OperationCanceledException) { throw; }
         catch (UnauthorizedAccessException) { emit(new { type = "fs.list", tab, error = "Accès refusé : " + path }); }
         catch (Exception ex) { emit(new { type = "fs.list", tab, error = ex.Message }); }
+    }
+
+    // La corbeille comme un dossier : chaque élément porte son nom d'origine (b), son dossier d'origine (r), sa date de suppression (m), sa taille, son chemin dans la corbeille (p) et son identifiant (id).
+    static object ListTrash(string tab, CancellationToken ct)
+    {
+        var items = Recycle.List().Select(e => (object)new { n = Path.GetFileName(e.DataPath), b = Path.GetFileName(e.Original.TrimEnd('\\')), r = Path.GetDirectoryName(e.Original) ?? "", d = e.IsDir, s = e.IsDir ? -1L : e.Size, m = new DateTimeOffset(e.Deleted).ToUnixTimeMilliseconds(), p = e.DataPath, o = e.Original, id = e.Id }).ToList();
+        ct.ThrowIfCancellationRequested();
+        return new { type = "fs.list", tab, path = Recycle.TrashPath, items, free = -1L, more = false };
     }
 
     // La lecture d'un coup (essais, commandes synchrones) : un seul message, tous les éléments.
@@ -143,7 +152,7 @@ static class Fs
     // d'origine donne « nom (2) ». Un nom déjà pris dans la destination est un CONFLIT : sans consigne (onConflict null), rien n'est fait et les noms sont rendus pour que la page demande ;
     // avec « replace » (remplacer), « keep » (garder les deux : « nom (2) ») ou « skip » (ignorer), l'opération suit. Les conflits ne passent jamais par les boîtes de Windows : elles s'ouvrent
     // sans fenêtre parente, peuvent rester cachées derrière les autres, et bloquent le fil d'interface pendant le glisser-déposer.
-    public sealed record TransferResult(string Error, List<string> Conflicts);
+    public sealed record TransferResult(string Error, List<string> Conflicts, List<(string src, string dst)> Done = null);
 
     public static TransferResult Transfer(IEnumerable<string> sources, string dir, bool move, string onConflict = null)
     {
@@ -164,6 +173,7 @@ static class Fs
         }
         var conflicts = items.Where(i => !i.sameDir && Path.Exists(Path.Combine(dir, i.name))).Select(i => i.name).ToList();
         if (conflicts.Count > 0 && onConflict == null) return new(null, conflicts);
+        var done = new List<(string src, string dst)>();   // ce qui a vraiment été fait : de quoi défaire (Annuler)
         foreach (var (src, isDir, name, sameDir) in items)
         {
             string dst = Path.Combine(dir, name); bool exists = !sameDir && Path.Exists(dst), overwrite = false;
@@ -180,8 +190,27 @@ static class Fs
             }
             else if (move) { if (isDir) FileSystem.MoveDirectory(src, dst, UIOption.AllDialogs); else FileSystem.MoveFile(src, dst, UIOption.AllDialogs); }
             else { if (isDir) FileSystem.CopyDirectory(src, dst, UIOption.AllDialogs); else FileSystem.CopyFile(src, dst, UIOption.AllDialogs); }
+            done.Add((src, dst));
         }
-        return new(null, null);
+        return new(null, null, done);
+    }
+
+    // Inscrit dans la pile « Annuler » de la fenêtre ce qu'un transfert a fait (déplacement ou copie), et dit à la page ce qu'on peut annuler.
+    static void RecordTransfer(IntPtr owner, Action<object> send, TransferResult r, bool move)
+    {
+        if (r?.Done is not { Count: > 0 } d) return;
+        Undo.For(owner).Push(move ? Undo.Moved(d.Count == 1 ? "Déplacer" : "Déplacer " + d.Count + " éléments", d) : Undo.Created(d.Count == 1 ? "Copier" : "Copier " + d.Count + " éléments", d.Select(x => x.dst)));
+        send(Undo.State(owner));
+    }
+
+    // Le contenu du presse-papiers de Windows : les fichiers copiés ou coupés, et si c'est un « couper ».
+    static (List<string> files, bool cut) ClipboardFiles()
+    {
+        var data = Clipboard.GetDataObject();
+        if (data == null || !Clipboard.ContainsFileDropList()) return (new(), false);
+        bool cut = false;
+        if (data.GetData("Preferred DropEffect") is MemoryStream ms) { var bb = new byte[4]; ms.Position = 0; ms.Read(bb, 0, 4); cut = (BitConverter.ToInt32(bb, 0) & 2) != 0; }
+        return (Clipboard.GetFileDropList().Cast<string>().ToList(), cut);
     }
 
     // Tous les éléments sont-ils sur le disque (ou le partage) de la destination ?
@@ -198,37 +227,13 @@ static class Fs
 
     // Des fichiers glissés depuis une autre application (l'Explorateur de Windows, le Bureau) ou une autre fenêtre de l'Explorateur : leurs chemins viennent de WebView2 (HostForm.DroppedPaths).
     // Comme dans Windows : Maj déplace, Ctrl copie ; sans touche, on déplace sur le même disque et on copie d'un disque à l'autre.
-    public static void DropFiles(Action<object> send, IEnumerable<string> paths, string dir, bool shift, bool ctrl, string tab)
+    public static void DropFiles(IntPtr owner, Action<object> send, IEnumerable<string> paths, string dir, bool shift, bool ctrl, string tab)
     {
         var list = (paths ?? Array.Empty<string>()).ToList();
         bool move = shift || (!ctrl && SameVolume(list, dir));
-        try { send(Outcome(Transfer(list, dir, move), tab, list, dir, move)); }
+        try { var res = Transfer(list, dir, move); RecordTransfer(owner, send, res, move); send(Outcome(res, tab, list, dir, move)); }
         catch (OperationCanceledException) { send(new { type = "fs.done", tab }); }
         catch (Exception ex) { Host.Log("explorateur : dépôt de fichiers a échoué : " + ex.Message); send(new { type = "fs.done", tab, error = ex.Message }); }
-    }
-
-    static void Paste(string dir)
-    {
-        var data = Clipboard.GetDataObject();
-        if (data == null || !Clipboard.ContainsFileDropList()) return;
-        bool cut = false;
-        if (data.GetData("Preferred DropEffect") is MemoryStream ms) { var b = new byte[4]; ms.Position = 0; ms.Read(b, 0, 4); cut = (BitConverter.ToInt32(b, 0) & 2) != 0; }
-        foreach (string src in Clipboard.GetFileDropList())
-        {
-            string name = Path.GetFileName(src.TrimEnd('\\'));
-            bool isDir = Directory.Exists(src);
-            string dst = Path.Combine(dir, name);
-            if (string.Equals(Path.GetDirectoryName(src.TrimEnd('\\')), dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) dst = UniquePath(dir, name);   // coller dans le dossier d'origine : « nom (2) »
-            if (cut)
-            {
-                if (isDir) FileSystem.MoveDirectory(src, dst, UIOption.AllDialogs); else FileSystem.MoveFile(src, dst, UIOption.AllDialogs);
-            }
-            else
-            {
-                if (isDir) FileSystem.CopyDirectory(src, dst, UIOption.AllDialogs); else FileSystem.CopyFile(src, dst, UIOption.AllDialogs);
-            }
-        }
-        if (cut) Clipboard.Clear();
     }
 
     // owner : fenêtre parente des boîtes de Windows ; send : où renvoyer les réponses (la page, ou l'auto-test).
@@ -236,6 +241,7 @@ static class Fs
     {
         string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         string[] Paths() => r.TryGetProperty("paths", out var v) ? v.EnumerateArray().Select(x => x.GetString()).ToArray() : Array.Empty<string>();
+        string[] Ids() => r.TryGetProperty("ids", out var v) && v.ValueKind == JsonValueKind.Array ? v.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()).ToArray() : Array.Empty<string>();
         string tab = Str("tab");
         try
         {
@@ -252,7 +258,7 @@ static class Fs
                 case "fs.sendto":
                     {
                         var (sdir, sexe) = ShellData.SendToTarget(Str("item")); var ps = Paths();
-                        if (sdir != null) send(Outcome(Transfer(ps, sdir, false), tab, ps, sdir, false));   // une copie, avec la boîte « Éléments existants » si un nom est pris
+                        if (sdir != null) { var res = Transfer(ps, sdir, false); RecordTransfer(owner, send, res, false); send(Outcome(res, tab, ps, sdir, false)); }   // une copie, avec la boîte « Éléments existants » si un nom est pris
                         else if (sexe != null) ShellData.RunProgramOn(sexe, ps);
                         else send(new { type = "fs.done", tab, error = "Destination introuvable." });
                         break;
@@ -260,12 +266,14 @@ static class Fs
                 case "fs.new":
                     {
                         string np = ShellData.CreateNew(Str("dir"), Str("ext"));
+                        if (np != null) { Undo.For(owner).Push(Undo.Created("Nouveau fichier", new[] { np })); send(Undo.State(owner)); }
                         send(np != null ? new { type = "fs.done", tab, select = np, error = (string)null } : new { type = "fs.done", tab, select = (string)null, error = "Impossible de créer ce fichier." });
                         break;
                     }
                 case "fs.newshortcut":
                     {
                         string sp = ShellData.CreateShortcut(Str("dir"), Str("name"), Str("target"));
+                        if (sp != null) { Undo.For(owner).Push(Undo.Created("Nouveau raccourci", new[] { sp })); send(Undo.State(owner)); }
                         send(sp != null ? new { type = "fs.done", tab, select = sp, error = (string)null } : new { type = "fs.done", tab, select = (string)null, error = "Impossible de créer le raccourci (cible vide ?)." });
                         break;
                     }
@@ -274,6 +282,7 @@ static class Fs
                     {
                         string p = UniquePath(Str("dir"), "Nouveau dossier");
                         Directory.CreateDirectory(p);
+                        Undo.For(owner).Push(Undo.Created("Nouveau dossier", new[] { p })); send(Undo.State(owner));
                         send(new { type = "fs.done", tab, select = p });
                         break;
                     }
@@ -285,26 +294,61 @@ static class Fs
                         if (!string.Equals(src, dst, StringComparison.Ordinal))
                         {
                             if (Directory.Exists(src)) Directory.Move(src, dst); else File.Move(src, dst);
+                            Undo.For(owner).Push(Undo.Moved("Renommer", new List<(string, string)> { (src, dst) })); send(Undo.State(owner));
                         }
                         send(new { type = "fs.done", tab, select = dst });
                         break;
                     }
-                case "fs.delete":
-                    foreach (string p in Paths())
+                case "fs.delete":   // vers la corbeille : on garde l'entrée de chacun pour pouvoir le restaurer (Annuler)
                     {
-                        if (Directory.Exists(p)) FileSystem.DeleteDirectory(p, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
-                        else FileSystem.DeleteFile(p, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+                        var gone = new List<BinEntry>(); int noBin = 0;
+                        foreach (string p in Paths())
+                        {
+                            if (string.IsNullOrEmpty(p) || !Path.IsPathRooted(p) || Path.GetFileName(p.TrimEnd('\\')).Length == 0 || !Path.Exists(p)) continue;
+                            var e = Recycle.DeleteToBin(p); if (e != null) gone.Add(e); else noBin++;
+                        }
+                        if (gone.Count > 0) { Undo.For(owner).Push(Undo.Deleted(gone.Count == 1 ? "Supprimer" : "Supprimer " + gone.Count + " éléments", gone)); send(Undo.State(owner)); }
+                        send(new { type = "fs.done", tab, error = noBin > 0 ? noBin + " élément" + (noBin > 1 ? "s ont" : " a") + " été supprimé" + (noBin > 1 ? "s" : "") + " définitivement (ce disque n'a pas de corbeille)." : null });
+                        break;
                     }
-                    send(new { type = "fs.done", tab });
+                case "fs.deleteperm":   // Maj+Suppr, après confirmation dans la page : pas de corbeille, pas d'annulation
+                    send(new { type = "fs.done", tab, error = Recycle.DeletePermanently(Paths()) });
                     break;
+                case "fs.restore":   // depuis la corbeille : chaque élément retrouve sa place (jamais d'écrasement)
+                    {
+                        var back = new List<string>(); var errs = new List<string>();
+                        foreach (var id in Ids()) { var (err, dest) = Recycle.Restore(id); if (err == null) back.Add(dest); else errs.Add(err); }
+                        if (back.Count > 0) { Undo.For(owner).Push(Undo.Created(back.Count == 1 ? "Restaurer" : "Restaurer " + back.Count + " éléments", back)); send(Undo.State(owner)); }
+                        send(new { type = "fs.done", tab, error = errs.Count == 0 ? null : errs[0] + (errs.Count > 1 ? " (et " + (errs.Count - 1) + " autre" + (errs.Count > 2 ? "s" : "") + ")" : "") });
+                        break;
+                    }
+                case "fs.purge": send(new { type = "fs.done", tab, error = Recycle.Purge(Ids().Where(Recycle.IsEntryId)) }); break;   // effacer pour de bon des éléments de la corbeille (après confirmation)
+                case "fs.emptybin": send(new { type = "fs.done", tab, error = Recycle.EmptyAll() ? null : "La corbeille n'a pas pu être vidée." }); break;
+                case "fs.undo":
+                case "fs.redo":
+                    {
+                        var log = Undo.For(owner); var (label, uerr) = cmd == "fs.undo" ? log.DoUndo() : log.DoRedo();
+                        send(new { type = "fs.undone", redo = cmd == "fs.redo", label, error = uerr });
+                        send(Undo.State(owner)); send(new { type = "fs.done", tab });
+                        break;
+                    }
                 case "fs.preview": send(Preview(Str("path"), tab)); break;
                 case "fs.copy": SetClipboard(Paths(), r.TryGetProperty("cut", out var c) && c.GetBoolean()); break;
-                case "fs.paste": Paste(Str("dir")); send(new { type = "fs.done", tab }); break;
+                case "fs.paste":
+                    {
+                        var (files, cut) = ClipboardFiles(); string pdir = Str("dir");
+                        if (files.Count == 0) { send(new { type = "fs.done", tab }); break; }
+                        var res = Transfer(files, pdir, cut); RecordTransfer(owner, send, res, cut);
+                        if (cut && res.Conflicts == null && res.Error == null) Clipboard.Clear();
+                        send(Outcome(res, tab, files, pdir, cut));
+                        break;
+                    }
                 case "fs.drop":
                     {
                         bool mv = r.TryGetProperty("move", out var mvv) && mvv.ValueKind == JsonValueKind.True;
                         var ps = Paths(); string dir = Str("dir");
-                        send(Outcome(Transfer(ps, dir, mv, Str("conflict")), tab, ps, dir, mv));
+                        var res = Transfer(ps, dir, mv, Str("conflict")); RecordTransfer(owner, send, res, mv);
+                        send(Outcome(res, tab, ps, dir, mv));
                         break;
                     }
             }

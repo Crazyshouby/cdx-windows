@@ -22,7 +22,7 @@
   }
 
   function startSearch() {
-    const t = T(); if (!t || t.path == null) return;
+    const t = T(); if (!t || t.path == null || t.path === TRASH) return;
     if (t.search) { $('find').focus(); $('find').select(); return; }
     t.search = { root: t.path, q: '', kind: 'all', date: 'any', size: 'any', sid: 0, running: false, scanned: 0, truncated: false };
     t.filter = ''; t.items = []; t.ver++; t.sel = new Set(); t.cursor = -1; t.loading = false;

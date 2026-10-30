@@ -2,6 +2,7 @@
   fillPix();
   const $ = id => document.getElementById(id);
   const sep = '\\';
+  const TRASH = '::corbeille';   // le « dossier » de la corbeille (l'hôte le lit dans $Recycle.Bin)
   // Les réglages (éléments cachés, extensions, vue par dossier, épinglés...) vivent dans l'hôte (explorer.json) et sont partagés par toutes les fenêtres ; onSettings() est appelé à chaque changement.
   let settings = {};
   const setSetting = (key, value) => { settings[key] = value; post({ cmd: 'fs.settings.set', key, value: value === undefined ? null : value }); };
@@ -22,5 +23,14 @@
   const joinP = (d, n) => d ? (d.endsWith(sep) ? d + n : d + sep + n) : n;
   // Dossier parent : « C:\ » a pour parent la liste des disques (''), qui n'en a pas.
   const parentOf = p => { if (!p) return null; if (/^[A-Za-z]:\\?$/.test(p)) return ''; const t = p.replace(/\\$/, ''), i = t.lastIndexOf(sep); if (i < 0) return null; return i === 2 && t[1] === ':' ? t.slice(0, 3) : t.slice(0, i); };
-  const baseOf = p => !p ? 'Ce PC' : (p.replace(/\\$/, '').split(sep).pop() || p);
+  const baseOf = p => p === TRASH ? 'Corbeille' : !p ? 'Ce PC' : (p.replace(/\\$/, '').split(sep).pop() || p);
 
+
+  const inTrash = () => { const t = tabs[cur]; return !!t && t.path === TRASH; };
+  // Ce qu'on peut annuler et rétablir dans cette fenêtre (étiquettes envoyées par le programme, fs.undostate).
+  let undoState = { undo: null, redo: null };
+  handlers['fs.undostate'] = m => { undoState = { undo: m.undo || null, redo: m.redo || null }; };
+  // Un message de la barre d'état qui survit quelques secondes aux relectures de la liste (qui réécrivent sinon « n sélectionnés »).
+  let flash = null;
+  const say = text => { flash = { text, until: Date.now() + 6000 }; $('st2').textContent = text; };
+  handlers['fs.undone'] = m => { say(m.error ? 'Impossible ' + (m.redo ? 'de rétablir' : "d'annuler") + ' : ' + m.error : (m.redo ? 'Rétabli' : 'Annulé') + ' : ' + m.label); $('orb').className = m.error ? 'orb red' : 'orb green'; };

@@ -8,7 +8,7 @@
     for (const n of t.sel) { const it = bn.get(n); if (it && (!f || it.n.toLowerCase().includes(f))) out.push(it); }
     return out;
   };
-  function open(it) { if (it.d) { go(pathOf(it), 'push'); $('find').value = ''; T().filter = ''; } else post({ cmd: 'fs.open', path: pathOf(it) }); }
+  function open(it) { if (inTrash()) { $('st2').textContent = "Restaure l'élément (clic droit > Restaurer) pour l'ouvrir."; return; } if (it.d) { go(pathOf(it), 'push'); $('find').value = ''; T().filter = ''; } else post({ cmd: 'fs.open', path: pathOf(it) }); }
   $('files').onmousedown = e => {
     if (e.target.closest('input')) return;
     const r = e.target.closest('[data-i]'), t = T();

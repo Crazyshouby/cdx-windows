@@ -85,7 +85,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             env ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview-explorer"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
             var f = new ExplorerForm(this);
             windows.Add(f);
-            f.FormClosed += (s, e) => { CancelLists(f); windows.Remove(f); if (windows.Count == 0) ExitThread(); };
+            var hnd = f.Handle; f.FormClosed += (s, e) => { Undo.Forget(hnd); CancelLists(f); windows.Remove(f); if (windows.Count == 0) ExitThread(); };
             double scale = f.DeviceDpi / 96.0;
             int off = (count++ % 6) * 28;
             f.Bounds = new Rectangle(160 + off, 70 + off, (int)(1180 * scale), (int)(720 * scale));
@@ -172,7 +172,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             {
                 string dir = r.TryGetProperty("dir", out var dv) && dv.ValueKind == JsonValueKind.String ? dv.GetString() : null, tab = r.TryGetProperty("tab", out var tv) && tv.ValueKind == JsonValueKind.String ? tv.GetString() : null;
                 bool Flag(string k) => r.TryGetProperty(k, out var fv) && fv.ValueKind == JsonValueKind.True;
-                Fs.DropFiles(from.Send, from.DroppedPaths, dir, Flag("shift"), Flag("ctrl"), tab);
+                Fs.DropFiles(from.Handle, from.Send, from.DroppedPaths, dir, Flag("shift"), Flag("ctrl"), tab);
                 return;
             }
             if (cmd == "fs.dragout") { DragOut(from, r); return; }

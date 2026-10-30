@@ -92,11 +92,11 @@ static class SelfTest
             // --- fichiers venus d'une autre application ou d'une autre fenêtre : même disque = déplacer, Ctrl = copier ---
             Check("même disque détecté ; disque différent ou liste vide : non", Fs.SameVolume(new[] { Path.Combine(dir, "x.txt") }, cible) && !Fs.SameVolume(new[] { @"Z:\nulle-part\a.txt" }, cible) && !Fs.SameVolume(Array.Empty<string>(), cible));
             File.WriteAllText(Path.Combine(dir, "ext1.txt"), "e1"); File.WriteAllText(Path.Combine(dir, "ext2.txt"), "e2"); File.WriteAllText(Path.Combine(dir, "ext3.txt"), "e3");
-            replies.Clear(); Fs.DropFiles(Send, new[] { Path.Combine(dir, "ext1.txt") }, cible, false, false, "t");
+            replies.Clear(); Fs.DropFiles(IntPtr.Zero, Send, new[] { Path.Combine(dir, "ext1.txt") }, cible, false, false, "t");
             Check("déposé sans touche, même disque : déplacé", File.Exists(Path.Combine(cible, "ext1.txt")) && !File.Exists(Path.Combine(dir, "ext1.txt")));
-            replies.Clear(); Fs.DropFiles(Send, new[] { Path.Combine(dir, "ext2.txt") }, cible, false, true, "t");
+            replies.Clear(); Fs.DropFiles(IntPtr.Zero, Send, new[] { Path.Combine(dir, "ext2.txt") }, cible, false, true, "t");
             Check("déposé avec Ctrl : copié (l'original reste)", File.Exists(Path.Combine(cible, "ext2.txt")) && File.Exists(Path.Combine(dir, "ext2.txt")));
-            replies.Clear(); File.WriteAllText(Path.Combine(cible, "ext3.txt"), "autre"); Fs.DropFiles(Send, new[] { Path.Combine(dir, "ext3.txt") }, cible, true, false, "t");
+            replies.Clear(); File.WriteAllText(Path.Combine(cible, "ext3.txt"), "autre"); Fs.DropFiles(IntPtr.Zero, Send, new[] { Path.Combine(dir, "ext3.txt") }, cible, true, false, "t");
             Check("déposé avec Maj sur un nom pris : message fs.conflict (avec le choix « déplacer » mémorisé), rien n'est touché", replies.Count == 1 && replies[0].GetProperty("type").GetString() == "fs.conflict" && replies[0].GetProperty("move").GetBoolean() && File.ReadAllText(Path.Combine(cible, "ext3.txt")) == "autre");
 
             Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(cible, "b.txt"))}],\"dir\":{J(Path.Combine(dir, "n-existe-pas"))},\"move\":true,\"tab\":\"t\"}}");
@@ -214,6 +214,74 @@ static class SelfTest
             Check("menu natif : pour un dossier aussi, et pour deux fichiers", natDir.Count >= 5 && ShellMenu.Probe(new[] { smf, smg }).Count >= 3);
             Check("menu natif : un chemin refusé ne plante pas et ne rend aucun menu (liste vide)", ShellMenu.Probe(new[] { Path.Combine(sm, "nulle.txt") }).Count == 0 && ShellMenu.Probe(new string[0]).Count == 0);
             Check("menu natif : rien d'actif en dehors d'un affichage (Forward ne détourne aucun message)", !ShellMenu.Active);
+
+            // --- corbeille : lecture des « $I », mise à la corbeille, restauration, effacement (sur des éléments créés ici seulement) ---
+            byte[] Info(long ver, long size, string path)
+            {
+                var ms2 = new MemoryStream(); var w2 = new BinaryWriter(ms2);
+                w2.Write(ver); w2.Write(size); w2.Write(new DateTime(2026, 10, 30, 12, 0, 0, DateTimeKind.Utc).ToFileTimeUtc());
+                if (ver == 2) { w2.Write(path.Length + 1); w2.Write(System.Text.Encoding.Unicode.GetBytes(path + "\0")); }
+                else { var pb = new byte[520]; System.Text.Encoding.Unicode.GetBytes(path + "\0").CopyTo(pb, 0); w2.Write(pb); }
+                return ms2.ToArray();
+            }
+            var pi2 = Recycle.ParseInfo(Info(2, 1234, @"C:\Users\Essai\Documents\mon fichier é.txt")); var pi1 = Recycle.ParseInfo(Info(1, 55, @"D:\vieux\fichier.doc"));
+            Check("corbeille : un « $I » de version 2 (Windows 10 et 11) est lu : chemin, taille, date", pi2 != null && pi2.Value.original == @"C:\Users\Essai\Documents\mon fichier é.txt" && pi2.Value.size == 1234 && pi2.Value.deleted.ToUniversalTime().Year == 2026);
+            Check("corbeille : un « $I » de version 1 (Windows 7 et 8) aussi", pi1 != null && pi1.Value.original == @"D:\vieux\fichier.doc" && pi1.Value.size == 55);
+            byte[] badInfo = Info(2, 1, @"C:\x.txt"); BitConverter.GetBytes(99999).CopyTo(badInfo, 24);
+            Check("corbeille : un « $I » invalide (court, version inconnue, longueur absurde, chemin relatif) donne null", Recycle.ParseInfo(new byte[10]) == null && Recycle.ParseInfo(Info(3, 1, @"C:\x")) == null && Recycle.ParseInfo(badInfo) == null && Recycle.ParseInfo(Info(2, 1, "relatif.txt")) == null && Recycle.ParseInfo(null) == null);
+            string bin1 = Path.Combine(dir, "pour-corbeille.txt"); File.WriteAllText(bin1, "contenu à garder");
+            var be = Recycle.DeleteToBin(bin1);
+            Check("corbeille : DeleteToBin met le fichier à la corbeille et rend son entrée (origine, taille, date récente)", be != null && !File.Exists(bin1) && be.Original == bin1 && be.Size == new FileInfo(be.DataPath).Length && be.DataPath != null && File.Exists(be.DataPath) && (DateTime.Now - be.Deleted).TotalMinutes < 2 && !be.IsDir);
+            Check("corbeille : l'entrée est dans la liste et son identifiant est reconnu ; un chemin ordinaire ne l'est pas", Recycle.List().Any(x => x.Id == be.Id) && Recycle.IsEntryId(be.Id) && !Recycle.IsEntryId(bin1) && !Recycle.IsEntryId(@"C:\Windows\notepad.exe") && !Recycle.IsEntryId(null));
+            var (rerr, rdest) = Recycle.Restore(be.Id);
+            Check("corbeille : Restore remet le fichier à sa place avec son contenu, et l'entrée disparaît", rerr == null && rdest == bin1 && File.ReadAllText(bin1) == "contenu à garder" && !Recycle.List().Any(x => x.Id == be.Id));
+            var be2 = Recycle.DeleteToBin(bin1); File.WriteAllText(bin1, "un autre fichier au même nom");
+            var (cerr, _) = Recycle.Restore(be2.Id);
+            Check("corbeille : restaurer sur un nom pris ne l'écrase jamais (message, l'entrée reste)", cerr != null && cerr.Contains("existe déjà") && File.ReadAllText(bin1) == "un autre fichier au même nom" && Recycle.List().Any(x => x.Id == be2.Id));
+            Check("corbeille : Purge efface l'entrée pour de bon (« $R » et « $I »)", Recycle.Purge(new[] { be2.Id }) == null && !Recycle.List().Any(x => x.Id == be2.Id) && !File.Exists(be2.DataPath) && !File.Exists(be2.Id));
+            Check("corbeille : Purge refuse tout ce qui n'est pas une entrée (aucun fichier ordinaire n'est touché)", Recycle.Purge(new[] { bin1, @"C:\Windows\notepad.exe", "relatif", null }) == null && File.Exists(bin1) && File.Exists(@"C:\Windows\notepad.exe"));
+            string bd = Path.Combine(dir, "dossier-corbeille"); Directory.CreateDirectory(Path.Combine(bd, "sous")); File.WriteAllText(Path.Combine(bd, "sous", "f.txt"), "dans le dossier");
+            var bde = Recycle.DeleteToBin(bd);
+            Check("corbeille : un dossier part avec son contenu (IsDir), et revient avec lui", bde != null && bde.IsDir && !Directory.Exists(bd) && Recycle.Restore(bde.Id).error == null && File.ReadAllText(Path.Combine(bd, "sous", "f.txt")) == "dans le dossier");
+            Check("corbeille : DeletePermanently efface sans corbeille, et refuse une racine de disque, un chemin relatif ou vide", Recycle.DeletePermanently(new[] { bin1, bd, @"C:\", "relatif", "", null }) == null && !File.Exists(bin1) && !Directory.Exists(bd) && Directory.Exists(@"C:\") && !Recycle.List().Any(x => x.Original == bin1));
+
+            // --- annuler / rétablir ---
+            var ul = new UndoLog();
+            string ua = Path.Combine(dir, "ua"); Directory.CreateDirectory(ua); string uf = Path.Combine(ua, "u1.txt"), ug = Path.Combine(ua, "sous", "u1.txt"); File.WriteAllText(uf, "u");
+            Directory.CreateDirectory(Path.GetDirectoryName(ug)); File.Move(uf, ug);
+            ul.Push(Undo.Moved("Déplacer", new List<(string, string)> { (uf, ug) }));
+            Check("annuler : l'étiquette du dernier geste est dite (« Déplacer »), rien à rétablir", ul.UndoLabel == "Déplacer" && ul.RedoLabel == null && ul.UndoCount == 1);
+            var u1 = ul.DoUndo();
+            Check("annuler un déplacement : le fichier revient à son dossier d'origine", u1 == ("Déplacer", null) && File.Exists(uf) && !File.Exists(ug) && ul.RedoLabel == "Déplacer" && ul.UndoLabel == null);
+            var u2 = ul.DoRedo();
+            Check("rétablir : le déplacement est refait", u2 == ("Déplacer", null) && File.Exists(ug) && !File.Exists(uf) && ul.UndoLabel == "Déplacer");
+            File.WriteAllText(uf, "occupé"); var u3 = ul.DoUndo();
+            Check("annuler quand l'origine est occupée : refusé avec un message, rien n'est écrasé, le geste est retiré de la pile", u3.error != null && u3.error.Contains("existe déjà") && File.ReadAllText(uf) == "occupé" && File.Exists(ug) && ul.UndoCount == 0);
+            File.Delete(uf); File.Delete(ug);
+            string cf = Path.Combine(ua, "cree.txt"); File.WriteAllText(cf, "créé");
+            ul.Push(Undo.Created("Nouveau fichier", new[] { cf }));
+            var c1 = ul.DoUndo();
+            Check("annuler une création : l'élément va à la corbeille", c1 == ("Nouveau fichier", null) && !File.Exists(cf));
+            var c2 = ul.DoRedo();
+            Check("rétablir une création : il revient de la corbeille, avec son contenu", c2 == ("Nouveau fichier", null) && File.ReadAllText(cf) == "créé");
+            string df = Path.Combine(ua, "supprime.txt"); File.WriteAllText(df, "supprimé"); var de = Recycle.DeleteToBin(df);
+            ul.Push(Undo.Deleted("Supprimer", new List<BinEntry> { de }));
+            var d1 = ul.DoUndo();
+            Check("annuler une suppression : le fichier est restauré", d1 == ("Supprimer", null) && File.ReadAllText(df) == "supprimé");
+            var d2 = ul.DoRedo();
+            Check("rétablir une suppression : il retourne à la corbeille ; l'annuler de nouveau le restaure encore", d2 == ("Supprimer", null) && !File.Exists(df) && ul.DoUndo() == ("Supprimer", null) && File.Exists(df));
+            for (int k = 0; k < 60; k++) ul.Push(Undo.Moved("n" + k, new List<(string, string)>()));
+            int count50 = ul.UndoCount; var last = ul.DoUndo(); int redoAfter = ul.RedoCount;
+            ul.Push(Undo.Moved("x", new List<(string, string)>()));
+            Check("annuler : la pile garde 50 gestes au plus, annule le dernier (n59), et un nouveau geste efface « rétablir »", count50 == 50 && last.label == "n59" && redoAfter == 1 && ul.RedoCount == 0);
+            Check("annuler : sur une pile vide, rien ne se passe", new UndoLog().DoUndo() == (null, null) && new UndoLog().DoRedo() == (null, null));
+            var win = new IntPtr(424242); Undo.For(win).Push(Undo.Moved("Renommer", new List<(string, string)>()));
+            bool oneWin = Undo.For(win).UndoLabel == "Renommer" && Undo.For(new IntPtr(424243)).UndoLabel == null && ((dynamic)Undo.State(win)).undo == "Renommer";
+            Undo.Forget(win);
+            Check("annuler : une pile par fenêtre (l'état dit « Renommer » pour l'une, rien pour l autre) ; elle s oublie à la fermeture", oneWin && Undo.For(win).UndoLabel == null);
+            // ne rien laisser dans la vraie corbeille de Valentin : tout ce qui vient du dossier de l'essai est effacé
+            Recycle.Purge(Recycle.List().Where(x => x.Original.StartsWith(dir, StringComparison.OrdinalIgnoreCase)).Select(x => x.Id));
+            Check("corbeille : plus rien de l'essai dans la corbeille", !Recycle.List().Any(x => x.Original.StartsWith(dir, StringComparison.OrdinalIgnoreCase)));
 
             // --- lecture annulable d'un dossier ---
             string big2 = Path.Combine(dir, "gros"); Directory.CreateDirectory(big2);

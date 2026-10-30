@@ -50,8 +50,13 @@
   const moreOptions = paths => post({ cmd: 'fs.shellmenu', paths, shift: lastShift });
   let lastShift = false; document.addEventListener('contextmenu', e => { lastShift = e.shiftKey; }, true);   // Maj + clic droit : le menu étendu de Windows
 
+  // Dans la corbeille : restaurer ou effacer pour de bon (rien d'autre n'a de sens sur ces éléments).
+  function trashItemMenu(s) { return [['Restaurer', restoreSel, { icon: 'maj', key: 'Entrée' }], null, ['Supprimer définitivement', purgeSel, { icon: 'supprimer', key: 'Suppr' }]]; }
+  const trashBackgroundMenu = () => [['Vider la corbeille', emptyTrash, { icon: 'supprimer', disabled: !(T().items || []).length }], null, ['Actualiser', reload, { icon: 'maj', key: 'F5' }]];
+
   // Le menu d'un ou plusieurs éléments sélectionnés.
   function itemMenu(s, t) {
+    if (inTrash()) return trashItemMenu(s);
     const one = s.length === 1, it = s[0], paths = s.map(pathOf), ext = one && !it.d && !it.drive ? '.' + extOf(it.b ?? it.n) : null;
     const out = [['Ouvrir', () => open(it), { icon: 'dossier', key: 'Entrée', disabled: !one }]];
     if (t.search && one) out.push(["Ouvrir l'emplacement du dossier", () => showInFolder(it)]);
@@ -61,15 +66,18 @@
     out.push(null,
       ['Couper', () => copy(true), { key: 'Ctrl+X' }], ['Copier', () => copy(false), { key: 'Ctrl+C' }], ['Copier le chemin', copyPath, { key: 'Ctrl+Maj+C' }], null,
       ['Envoyer vers', null, { sub: () => sendToItems(paths) }], null,
-      ['Renommer', () => rename(), { icon: 'editer', key: 'F2', disabled: !one || !!t.search }], ['Supprimer', del, { icon: 'supprimer', key: 'Suppr' }], null,
+      ['Renommer', () => rename(), { icon: 'editer', key: 'F2', disabled: !one || !!t.search }], ['Supprimer', del, { icon: 'supprimer', key: 'Suppr' }], ['Supprimer définitivement', delPerm, { key: 'Maj+Suppr' }], null,
       ['Propriétés', showProps, { key: 'Alt+Entrée' }],
       ["Plus d'options…", () => moreOptions(paths), { key: 'Maj+F10' }]);
     return out;
   }
   // Le menu du fond de la liste (aucun élément visé).
   function backgroundMenu(t) {
+    if (inTrash()) return trashBackgroundMenu();
     const no = !t.path || !!t.search;   // pendant une recherche la liste montre des résultats, pas un dossier : rien à y créer ni coller
     return [
+      ['Annuler' + (undoState.undo ? ' ' + undoState.undo : ''), undo, { key: 'Ctrl+Z', disabled: !undoState.undo }],
+      ['Rétablir' + (undoState.redo ? ' ' + undoState.redo : ''), redo, { key: 'Ctrl+Y', disabled: !undoState.redo }], null,
       ['Nouveau', null, { sub: newItems, disabled: no }],
       ['Coller', paste, { key: 'Ctrl+V', disabled: no }], null,
       ['Trier par', null, { sub: sortItems }],
