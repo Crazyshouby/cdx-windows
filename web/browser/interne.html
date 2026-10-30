@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>Navigateur KDX</title>
+<link rel="stylesheet" href="/kdx/fonts.css">
+<link rel="stylesheet" href="/kdx/kdx-ui.css">
+<link rel="stylesheet" href="/kdx/themes.css">
+<style>
+  /* Les pages internes du navigateur (kdx://) : nouvel onglet, favoris, historique, téléchargements. Pleine page, charte KDX. */
+  html, body { margin: 0; width: 100%; height: 100%; overflow: auto; user-select: text; }
+  body { background: var(--frame); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px 40px; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-weight: 400; margin: 0 0 4px; letter-spacing: 3px; }
+  .blk { display: block !important; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .tile { display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 84px; padding: 0 8px; cursor: default; overflow: hidden; }
+  .tile span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .list { flex: none; max-height: none; overflow: visible; }
+  .ri { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border-left: 6px solid transparent; border-bottom: 1px solid var(--line); cursor: default; }
+  .ri:hover { background: var(--row-hover); }
+  .ri .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .ri .u { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ri .d { color: var(--faint); white-space: nowrap; }
+  .ri .acts { display: flex; gap: 6px; }
+  .search { flex: none; height: 34px; padding: 0 12px; }
+  .gauge { height: 14px; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); margin-top: 4px; }
+  .gauge > i { display: block; height: 100%; background: var(--bar); }
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .5); }
+  .veil .win { position: relative; inset: auto; width: 420px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+</style>
+<script src="/kdx/icons.js"></script>
+<script src="/kdx/host.js"></script>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+  const $ = id => document.getElementById(id);
+  const page = new URLSearchParams(location.search).get('p') || 'newtab';
+  let data = { bookmarks: [], history: [], downloads: [] };
+  const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+  const two = n => String(n).padStart(2, '0');
+  const when = ms => { const d = new Date(ms); return `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
+  const size = b => { if (b == null || b < 0) return ''; const u = ['o', 'Ko', 'Mo', 'Go']; let i = 0, v = b; while (v >= 1024 && i < 3) { v /= 1024; i++; } return (i === 0 || v >= 10 ? Math.round(v) : v.toFixed(1).replace('.', ',')) + ' ' + u[i]; };
+  const go = url => post({ cmd: 'in.navigate', url });
+
+  function confirmBox(title, text, onYes) {
+    const v = document.createElement('div'); v.className = 'veil';
+    v.innerHTML = `<div class="win active"><div class="tb"><span class="tb-title">${esc(title)}</span></div><div class="cb"><div class="row" style="padding:10px 4px">${pix('supprimer', 32)}<div>${esc(text)}</div></div><div class="btns"><button class="primary" id="y">Oui</button><button class="btn" id="n">Non</button></div></div></div>`;
+    document.body.appendChild(v); v.querySelector('#y').focus();
+    v.querySelector('#y').onclick = () => { v.remove(); onYes(); }; v.querySelector('#n').onclick = () => v.remove();
+    v.onkeydown = e => { if (e.key === 'Escape') v.remove(); };
+  }
+
+  const views = {
+    newtab() {
+      const favs = data.bookmarks.slice(0, 12), rec = data.history.slice(0, 8);
+      $('app').innerHTML = `<h1>Navigateur KDX</h1>
+        <input id="q" class="text-input search" type="text" placeholder="Rechercher sur le Web ou saisir une adresse" spellcheck="false" autocomplete="off" autofocus>
+        <fieldset class="grp blk"><legend>Favoris</legend>${favs.length ? `<div class="tiles">${favs.map((b, i) => `<button class="btn tile" data-u="${esc(b.url)}" title="${esc(b.url)}">${pix('serveur', 32)}<span>${esc(b.title)}</span></button>`).join('')}</div>` : '<div class="empty">Aucun favori : Ctrl+D ajoute la page ouverte.</div>'}</fieldset>
+        <fieldset class="grp blk"><legend>Récents</legend>${rec.length ? `<div class="list">${rec.map(h => `<div class="ri" data-u="${esc(h.url)}"><div class="t">${esc(h.title)}</div><div class="d">${esc(host(h.url))}</div></div>`).join('')}</div>` : '<div class="empty">Rien pour l’instant.</div>'}</fieldset>`;
+      $('q').focus(); $('q').onkeydown = e => { if (e.key === 'Enter' && $('q').value.trim()) go($('q').value); };
+    },
+    favoris() {
+      $('app').innerHTML = `<h1>Favoris</h1>` + (data.bookmarks.length ? `<div class="list">${data.bookmarks.map(b => `<div class="ri" data-u="${esc(b.url)}"><div><div class="t">${esc(b.title)}</div><div class="u">${esc(b.url)}</div></div><div class="acts"><button class="btn" data-rm="${esc(b.url)}">Retirer</button></div></div>`).join('')}</div>` : '<div class="empty">Aucun favori : Ctrl+D ajoute la page ouverte.</div>');
+    },
+    historique() {
+      const f = ($('hq') ? $('hq').value : '').toLowerCase();
+      const rows = data.history.filter(h => !f || h.title.toLowerCase().includes(f) || h.url.toLowerCase().includes(f)).slice(0, 400);
+      if (!$('hq')) $('app').innerHTML = `<h1>Historique</h1><div class="row"><input id="hq" class="text-input" placeholder="Rechercher dans l’historique…" spellcheck="false" style="flex:1"><button class="btn" id="hc">Effacer l’historique</button></div><div id="hl"></div>`;
+      $('hl').innerHTML = rows.length ? `<div class="list">${rows.map(h => `<div class="ri" data-u="${esc(h.url)}"><div><div class="t">${esc(h.title)}</div><div class="u">${esc(h.url)}</div></div><div class="d">${when(h.time)}</div></div>`).join('')}</div>` : '<div class="empty">Aucun résultat.</div>';
+      $('hq').oninput = () => views.historique();
+      $('hc').onclick = () => confirmBox('Effacer l’historique', 'Effacer tout l’historique de navigation ?', () => post({ cmd: 'in.history.clear' }));
+    },
+    telechargements() {
+      const d = data.downloads;
+      $('app').innerHTML = `<h1>Téléchargements</h1>` + (d.length ? `<div class="row"><span style="flex:1"></span><button class="btn" id="dc">Effacer la liste</button></div><div class="list">${d.map(x => {
+        const pct = x.total > 0 ? Math.min(100, Math.round(100 * x.received / x.total)) : 0;
+        return `<div class="ri" data-noopen><div><div class="t">${esc(x.name)}</div>${x.state === 'progress' ? `<div class="gauge"><i style="width:${pct}%"></i></div><div class="u">${size(x.received)}${x.total > 0 ? ' sur ' + size(x.total) + ' (' + pct + ' %)' : ''}</div>` : `<div class="u">${x.state === 'done' ? 'Terminé · ' + size(x.total > 0 ? x.total : x.received) : 'Interrompu'} · ${esc(x.path)}</div>`}</div>
+          <div class="acts">${x.state === 'done' ? `<button class="btn" data-open="${x.id}">Ouvrir</button><button class="btn" data-rev="${x.id}">Dossier</button>` : x.state === 'progress' ? `<button class="btn" data-cancel="${x.id}">Annuler</button>` : ''}</div></div>`; }).join('')}</div>` : '<div class="empty">Aucun téléchargement.</div>');
+      if ($('dc')) $('dc').onclick = () => post({ cmd: 'in.dl.clear' });
+    },
+  };
+  const render = () => (views[page] || views.newtab)();
+
+  document.addEventListener('click', e => {
+    const rm = e.target.closest('[data-rm]'); if (rm) { post({ cmd: 'in.bookmark.remove', url: rm.dataset.rm }); return; }
+    const o = e.target.closest('[data-open]'); if (o) { post({ cmd: 'in.dl.open', id: +o.dataset.open }); return; }
+    const r = e.target.closest('[data-rev]'); if (r) { post({ cmd: 'in.dl.reveal', id: +r.dataset.rev }); return; }
+    const c = e.target.closest('[data-cancel]'); if (c) { post({ cmd: 'in.dl.cancel', id: +c.dataset.cancel }); return; }
+    const u = e.target.closest('[data-u]'); if (u && !e.target.closest('button[data-rm]')) go(u.dataset.u);
+  });
+  handlers.data = m => { data = m; render(); };
+  handlers.downloads = m => { if (m.items) { data.downloads = m.items; if (page === 'telechargements') render(); } };
+
+  if (!hasHost) { data = { bookmarks: [{ title: 'Documentation WebView2', url: 'https://learn.microsoft.com/fr-fr/microsoft-edge/webview2/', added: 1 }, { title: 'KIRC', url: 'https://example.org', added: 2 }], history: [{ title: 'Exemple', url: 'https://example.org/a', time: Date.now() }], downloads: [{ id: 1, name: 'archive.zip', path: 'C:\\Users\\x\\Downloads\\archive.zip', state: 'progress', received: 4e6, total: 1e7 }, { id: 2, name: 'doc.pdf', path: 'C:\\Users\\x\\Downloads\\doc.pdf', state: 'done', received: 2e5, total: 2e5 }] }; render(); }
+  else post({ cmd: 'in.data' });
+</script>
+</body>
+</html>

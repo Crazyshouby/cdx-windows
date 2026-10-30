@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>KDX — sélecteur de fenêtres</title>
+<link rel="stylesheet" href="/kdx/fonts.css">
+<link rel="stylesheet" href="/kdx/kdx-ui.css">
+<link rel="stylesheet" href="/kdx/themes.css">
+<style>
+  /* Le sélecteur Alt+Tab de windows-ui.html : une grille de petites fenêtres, celle qui est choisie est la fenêtre active (cadre à l'accent). */
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--a-mid); }
+  .win { position: absolute; inset: 0; }
+  .grid { flex: 1; min-height: 0; display: grid; gap: 16px; justify-content: center; align-content: start; padding: 11px 0; overflow: hidden; }
+  .card { position: relative; width: 250px; height: 190px; cursor: default; }
+  .card .win { position: absolute; inset: 0; }
+  /* une fenêtre inactive posée dans une fenêtre active reprend ses gris (les jetons de titre sont hérités) */
+  .card .win:not(.active) { --tb-edge: #555555; --tb-low: #222222; --tb-grad: linear-gradient(#0c0c0c, #222222 47%, #8f8f8f); --tbb-fill: #444444; --tbb-hi: #8a8a8a; --tbb-lo: #222222; }
+  .card .cb { padding: 5px; }
+  .cardbody { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  .cardbody img { width: 64px; height: 64px; image-rendering: pixelated; }
+  .cardbody .min { color: var(--faint); }
+  .cardbody span { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
+  .status span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .status .hint { margin-left: auto; color: var(--faint); white-space: nowrap; padding-left: 14px; }
+</style>
+<script src="/kdx/icons.js"></script>
+<script src="/kdx/host.js"></script>
+<script src="/shell/shell.js"></script>
+</head>
+<body>
+<div class="win active">
+  <div class="tb"><span class="tb-title">Changer de fenêtre</span></div>
+  <div class="cb">
+    <div class="grid" id="grid"></div>
+    <div class="status"><span class="orb green"></span><span class="t" id="cur"></span><span class="hint">Tab : suivant · Maj+Tab : précédent · Échap : annuler</span></div>
+  </div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  let items = [], sel = 0;
+  const nameOf = p => { const f = (p || '').split('\\').pop().replace(/\.exe$/i, ''); return f ? f.charAt(0).toUpperCase() + f.slice(1) : ''; };
+
+  function draw(m) {
+    items = m.items; sel = m.sel;
+    $('grid').style.gridTemplateColumns = `repeat(${m.cols}, 250px)`;
+    $('grid').innerHTML = items.map((t, i) => `<div class="card" data-i="${i}"><div class="win ${i === sel ? 'active' : ''}"><div class="tb"><span class="tb-title">${esc(t.title)}</span></div><div class="cb"><div class="cardbody"><img data-p="${esc(t.exe)}" alt=""><span class="${t.min ? 'min' : ''}">${esc(nameOf(t.exe))}${t.min ? ' (réduite)' : ''}</span></div></div></div></div>`).join('');
+    $('grid').querySelectorAll('img').forEach(img => wantIcon(img.dataset.p, img, 32));
+    mark();
+  }
+  function mark() {
+    $('grid').querySelectorAll('.card').forEach((c, i) => c.querySelector('.win').classList.toggle('active', i === sel));
+    $('cur').textContent = items[sel] ? items[sel].title : '';
+  }
+  handlers.items = draw;
+  handlers.sel = m => { sel = m.index; mark(); };
+  $('grid').onclick = e => { const c = e.target.closest('[data-i]'); if (c) post({ cmd: 'alttab.pick', h: items[+c.dataset.i].h }); };
+
+  if (!hasHost) draw({ cols: 4, sel: 1, items: [['Documents — Explorateur', 'C:\\kdx-shell.exe', false], ['Paramètres', 'C:\\x\\systemsettings.exe', false], ['Terminal', 'C:\\x\\windowsterminal.exe', false], ['notes-kdx.txt — Bloc-notes', 'C:\\x\\notepad.exe', true]].map((a, i) => ({ h: String(i), title: a[0], exe: a[1], min: a[2] })) });
+  post({ cmd: 'ready', page: 'alttab' });
+</script>
+</body>
+</html>

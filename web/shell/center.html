@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>KDX — centre rapide</title>
+<link rel="stylesheet" href="/kdx/fonts.css">
+<link rel="stylesheet" href="/kdx/kdx-ui.css">
+<link rel="stylesheet" href="/kdx/themes.css">
+<style>
+  /* Le centre rapide de windows-ui.html (écran 6) : le son, le réseau, le calendrier. */
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--a-mid); }
+  .win { position: absolute; inset: 0; }
+  .blk { display: block !important; }
+  .row2 { display: flex; align-items: center; gap: 10px; }
+  .row2 .btn { flex: none; display: flex; align-items: center; gap: 8px; }
+  .btn.on { background: #2a2a2a; box-shadow: var(--bevel-down); }
+  .val { width: 44px; flex: none; text-align: right; color: var(--field-ink); }
+  .sub { color: var(--faint); margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .caltop { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .caltop b { flex: 1; text-align: center; font-weight: 400; }
+  .calg { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 8px; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  .calg .h { text-align: center; color: var(--faint); }
+  .cd { height: 26px; display: grid; place-items: center; color: var(--field-ink); }
+  .cd.f { color: var(--faint); }
+  .cd.today { color: #fff; background: var(--btn); box-shadow: var(--bevel), 0 0 0 1px #000, 0 0 0 2px var(--a-mid), 0 0 0 3px var(--a-edge), 0 0 0 4px #000; margin: 0 4px; }
+  .status { margin-top: 0; }
+  .push { margin-right: auto; }
+  .notifs { max-height: 132px; overflow-y: auto; }
+  .nt { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--line); min-width: 0; }
+  .nt .orb { flex: none; }
+  .nt .body { flex: 1; min-width: 0; }
+  .nt .ti { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nt .tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--faint); }
+  .nt .meta { flex: none; color: var(--faint); }
+  .nt.warn .ti { color: var(--warn); } .nt.error .ti { color: var(--red); }
+  .nt.err .orb, .nt.error .orb { }
+  .lgd { display: flex; align-items: center; justify-content: space-between; }
+</style>
+<script src="/kdx/icons.js"></script>
+<script src="/kdx/host.js"></script>
+<script src="/shell/shell.js"></script>
+</head>
+<body>
+<div class="win active">
+  <div class="tb"><span class="tb-title">Centre rapide</span></div>
+  <div class="cb">
+    <fieldset class="grp blk"><legend>Son</legend>
+      <div class="row2"><button class="btn" id="mute"><span class="pix" data-ic="volume"></span><span id="muteLbl">Son</span></button><input id="vol" type="range" min="0" max="100" value="0"><span class="val" id="volv">–</span></div>
+      <div class="sub" id="dev"></div>
+    </fieldset>
+    <fieldset class="grp blk"><legend>Réseau</legend>
+      <div class="status"><span class="orb" id="orb"></span><span id="net">…</span></div>
+    </fieldset>
+    <fieldset class="grp blk"><legend>Notifications</legend>
+      <div class="list dark notifs" id="notifs"></div>
+      <div class="btns" style="margin-top:6px"><button class="btn" id="nclear">Effacer</button></div>
+    </fieldset>
+    <fieldset class="grp blk" style="flex:1"><legend>Calendrier</legend>
+      <div class="caltop"><button class="btn" id="prev">←</button><b id="month"></b><button class="btn" id="next">→</button></div>
+      <div class="calg" id="cal"></div>
+    </fieldset>
+    <div class="btns"><button class="btn row2 push" id="quit" title="Quitter le shell KDX et rendre la barre de Windows"><span class="pix" data-ic="quitter"></span>Quitter KDX</button></div>
+  </div>
+</div>
+<script>
+  fillPix();
+  const $ = id => document.getElementById(id);
+  let st = { muted: false }, view = new Date(), poll = null;
+
+  const paintVol = v => { $('vol').style.backgroundSize = v + '% 100%'; $('volv').textContent = v + ' %'; };
+  handlers.center = m => {
+    st = m;
+    if (m.volume >= 0) { if (document.activeElement !== $('vol')) $('vol').value = m.volume; paintVol(+$('vol').value); }
+    $('vol').disabled = m.volume < 0;
+    $('mute').classList.toggle('on', !!m.muted); $('muteLbl').textContent = m.muted ? 'Son coupé' : 'Son actif';
+    $('dev').textContent = m.device || '';
+    const n = m.net || {};
+    $('orb').className = 'orb ' + (n.up ? 'green' : 'red');
+    $('net').textContent = n.up ? `${n.type} · ${n.speed} Mb/s · ${n.ip}` : 'Aucune connexion';
+  };
+  $('vol').oninput = () => { paintVol(+$('vol').value); post({ cmd: 'vol.set', v: +$('vol').value }); };
+  $('mute').onclick = () => post({ cmd: 'vol.mute', on: !st.muted });
+  $('quit').onclick = () => post({ cmd: 'quit' });
+
+  // ---- notifications : envoyées par les autres applications de la suite (kdx.shell, message « notify ») ----
+  handlers.notify = m => {
+    const box = $('notifs'); box.textContent = '';
+    const items = (m.items || []).slice().reverse();
+    $('nclear').disabled = !items.length;
+    if (!items.length) { const e = document.createElement('div'); e.className = 'nt'; e.innerHTML = '<span class="tx">Aucune notification</span>'; box.appendChild(e); return; }
+    for (const n of items) {
+      const row = document.createElement('div'); row.className = 'nt ' + n.level;
+      const orb = document.createElement('span'); orb.className = 'orb ' + (n.level === 'error' ? 'red' : n.level === 'warn' ? 'amber' : 'green');
+      const body = document.createElement('div'); body.className = 'body';
+      const ti = document.createElement('div'); ti.className = 'ti'; ti.textContent = n.title;
+      const tx = document.createElement('div'); tx.className = 'tx'; tx.textContent = n.text || '';
+      body.append(ti, tx);
+      const meta = document.createElement('span'); meta.className = 'meta';
+      meta.textContent = n.from + ' · ' + new Date(n.at * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      row.append(orb, body, meta); box.appendChild(row);
+    }
+  };
+  $('nclear').onclick = () => post({ cmd: 'notify.clear' });
+
+  // ---- calendrier (semaine du lundi) ----
+  function drawCal() {
+    const y = view.getFullYear(), m = view.getMonth(), today = new Date();
+    $('month').textContent = view.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    const first = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate(), prevDays = new Date(y, m, 0).getDate();
+    let html = ['lu', 'ma', 'me', 'je', 've', 'sa', 'di'].map(d => `<div class="h">${d}</div>`).join('');
+    for (let i = 0; i < 42; i++) {
+      const d = i - first + 1, out = d < 1 || d > days, n = d < 1 ? prevDays + d : d > days ? d - days : d;
+      const isToday = !out && d === today.getDate() && m === today.getMonth() && y === today.getFullYear();
+      html += `<div class="cd ${out ? 'f' : ''} ${isToday ? 'today' : ''}">${n}</div>`;
+    }
+    $('cal').innerHTML = html;
+  }
+  $('prev').onclick = () => { view = new Date(view.getFullYear(), view.getMonth() - 1, 1); drawCal(); };
+  $('next').onclick = () => { view = new Date(view.getFullYear(), view.getMonth() + 1, 1); drawCal(); };
+  $('month').onclick = () => { view = new Date(); drawCal(); };   // un clic sur le mois revient à aujourd'hui
+
+  handlers.show = () => { view = new Date(); drawCal(); post({ cmd: 'center.get' }); clearInterval(poll); poll = setInterval(() => post({ cmd: 'center.get' }), 1500); };
+  handlers.hide = () => { clearInterval(poll); poll = null; };
+  document.onkeydown = e => { if (e.key === 'Escape') post({ cmd: 'hideCenter' }); };
+
+  drawCal();
+  handlers.notify({ items: [] });
+  if (!hasHost) { handlers.notify({ items: [{ title: 'Téléchargement terminé', text: 'photo-vacances.zip', level: 'info', from: 'browser', at: Date.now() / 1000 - 60 }, { title: 'Sortie audio perdue', text: 'Casque (Arctis 7)', level: 'warn', from: 'audiolinker', at: Date.now() / 1000 - 600 }, { title: 'Mention dans #kdx', text: '<alice> kirc: tu es là ?', level: 'info', from: 'kirc', at: Date.now() / 1000 - 3000 }] }); }
+  if (!hasHost) handlers.center({ volume: 64, muted: false, device: 'Haut-parleurs (Realtek)', net: { up: true, type: 'Ethernet', speed: 1000, ip: '192.168.1.158' } });
+  post({ cmd: 'ready', page: 'center' });
+</script>
+</body>
+</html>

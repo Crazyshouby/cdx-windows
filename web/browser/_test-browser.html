@@ -1,0 +1,21 @@
+<!doctype html><meta charset="utf-8"><title>test navigateur</title>
+<!-- Chargée par « kdx-shell.exe --selftest-browser » dans un WebView2 caché : mesure ce que le moteur offre à un navigateur construit dessus
+     (extension non empaquetée active, DRM, codecs). Envoie le résultat au programme. -->
+<script>
+(async () => {
+  const out = { extension: document.documentElement.getAttribute('data-kdx-ext') || 'NON appliquée', userAgent: navigator.userAgent, drm: {}, codecs: {} };
+  const cfg = (robust) => [{ initDataTypes: ['cenc'], videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"', robustness: robust }], audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }] }];
+  const tests = [
+    ['Widevine (logiciel)', 'com.widevine.alpha', 'SW_SECURE_CRYPTO'], ['Widevine (matériel, niveau L1)', 'com.widevine.alpha', 'HW_SECURE_ALL'],
+    ['PlayReady', 'com.microsoft.playready', ''], ['PlayReady (recommandé)', 'com.microsoft.playready.recommendation', ''],
+    ['PlayReady matériel (SL3000)', 'com.microsoft.playready.recommendation.3000', ''], ['ClearKey', 'org.w3.clearkey', ''],
+  ];
+  for (const [label, sys, robust] of tests) {
+    try { const a = await navigator.requestMediaKeySystemAccess(sys, cfg(robust)); out.drm[label] = 'disponible'; } catch (e) { out.drm[label] = 'non (' + e.name + ')'; }
+  }
+  const v = document.createElement('video');
+  for (const [n, t] of [['H.264', 'video/mp4; codecs="avc1.42E01E"'], ['H.265 / HEVC', 'video/mp4; codecs="hvc1.1.6.L93.B0"'], ['VP9', 'video/webm; codecs="vp9"'], ['AV1', 'video/mp4; codecs="av01.0.05M.08"'], ['AAC', 'audio/mp4; codecs="mp4a.40.2"'], ['Opus', 'audio/webm; codecs="opus"']])
+    out.codecs[n] = v.canPlayType(t) || 'non';
+  window.chrome.webview.postMessage(out);
+})();
+</script>

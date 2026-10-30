@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>KDX — menu Démarrer</title>
+<link rel="stylesheet" href="/kdx/fonts.css">
+<link rel="stylesheet" href="/kdx/kdx-ui.css">
+<link rel="stylesheet" href="/kdx/themes.css">
+<style>
+  /* Le menu Démarrer de windows-ui.html : une fenêtre KDX active, remplie par la page. */
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--a-mid); }
+  .win { position: absolute; inset: 0; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .tile { display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 84px; cursor: default; }
+  .blk { display: block !important; }
+  .apps { flex: 1; min-height: 0; }
+  .apps .row-item { cursor: default; }
+  .apps img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; }
+  .ph { color: var(--faint) !important; }
+  #q { flex: none; height: 28px; }
+  .grp.fill { flex: 1; min-height: 0; display: flex !important; flex-direction: column; align-items: stretch; padding-bottom: 8px; }
+  .btn.row { display: flex; align-items: center; gap: 8px; }
+  .btns { gap: 6px; }
+  .btns .btn { padding: 0 10px; }
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .5); }
+  .veil .win { position: relative; inset: auto; width: 420px; }
+</style>
+<script src="/kdx/icons.js"></script>
+<script src="/kdx/host.js"></script>
+<script src="/shell/shell.js"></script>
+</head>
+<body>
+<div class="win active">
+  <div class="tb"><button class="tb-btn tb-l" id="x"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><span class="tb-title">Démarrer</span></div>
+  <div class="cb">
+    <input id="q" class="text-input" type="text" placeholder="Tapez pour chercher une application…" autocomplete="off" spellcheck="false">
+    <fieldset class="grp blk"><legend>Épinglées</legend><div class="tiles" id="tiles"></div></fieldset>
+    <fieldset class="grp fill"><legend id="appsTitle">Toutes les applications</legend><div class="list apps" id="apps"></div></fieldset>
+    <div class="btns">
+      <div class="row push"><span class="pix" data-ic="utilisateur" data-size="32"></span><span id="user">Valentin</span></div>
+      <button class="btn row" id="lock"><span class="pix" data-ic="cadenas"></span>Verrouiller</button>
+      <button class="btn row" id="sleep"><span class="pix" data-ic="absent"></span>Veille</button>
+      <button class="btn row" id="restart"><span class="pix" data-ic="maj"></span>Redémarrer</button>
+      <button class="btn row" id="shutdown"><span class="pix" data-ic="quitter"></span>Éteindre</button>
+    </div>
+  </div>
+</div>
+<script>
+  fillPix();
+  const $ = id => document.getElementById(id);
+  let apps = [], shown = [];
+
+  $('tiles').innerHTML = PINS.map((p, i) => `<button class="btn tile" data-i="${i}">${pix(p.ic, 32)}<span>${esc(p.name)}</span></button>`).join('');
+  $('tiles').onclick = e => { const b = e.target.closest('[data-i]'); if (b) launch(PINS[+b.dataset.i].target); };
+  const launch = t => { post({ cmd: 'launch', target: t }); post({ cmd: 'hideStart' }); };
+
+  // Liste des applications : filtrée à chaque frappe ; l'icône d'une ligne n'est demandée que lorsqu'elle devient visible.
+  const io = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) { io.unobserve(en.target); wantIcon(en.target.dataset.p, en.target); } }), { root: $('apps') });
+  function render() {
+    const q = $('q').value.trim().toLowerCase();
+    shown = apps.filter(a => !q || a.name.toLowerCase().includes(q)).slice(0, 300);
+    $('appsTitle').textContent = q ? `Résultats (${shown.length})` : 'Toutes les applications';
+    $('apps').innerHTML = shown.length ? shown.map((a, i) => `<div class="row-item ${q && i === 0 ? 'sel' : ''}" data-i="${i}"><img data-p="${esc(a.path)}" alt=""><span class="grow">${esc(a.name)}</span></div>`).join('') : '<div class="empty">Aucune application</div>';
+    $('apps').querySelectorAll('img').forEach(img => io.observe(img));
+  }
+  $('apps').onclick = e => { const r = e.target.closest('[data-i]'); if (r) launch(shown[+r.dataset.i].path); };
+  $('q').oninput = render;
+  $('q').onkeydown = e => { if (e.key === 'Enter' && shown.length) launch(shown[0].path); };
+  document.onkeydown = e => { if (e.key === 'Escape') post({ cmd: 'hideStart' }); };
+  $('x').onclick = () => post({ cmd: 'hideStart' });
+  $('lock').onclick = () => { post({ cmd: 'hideStart' }); post({ cmd: 'lock' }); };
+  // Veille, redémarrage et arrêt demandent une confirmation (une KDX-boîte de dialogue, Oui est le bouton par défaut).
+  function confirmPower(action, title, text, icon) {
+    const layer = document.createElement('div'); layer.className = 'veil';
+    layer.innerHTML = `<div class="win active"><div class="tb"><span class="tb-title">${title}</span></div><div class="cb"><div class="row" style="gap:14px;padding:10px 4px">${pix(icon, 32)}<div style="line-height:1.5">${text}</div></div><div class="btns"><button class="primary" id="py">Oui</button><button class="btn" id="pn">Non</button></div></div></div>`;
+    document.body.appendChild(layer);
+    const close = () => layer.remove();
+    layer.querySelector('#py').onclick = () => { close(); post({ cmd: 'power', action }); };
+    layer.querySelector('#pn').onclick = close;
+    layer.querySelector('#py').focus();
+    layer.onkeydown = e => { if (e.key === 'Escape') close(); };
+  }
+  $('sleep').onclick = () => confirmPower('sleep', 'Veille', 'Mettre l’ordinateur en veille ?', 'absent');
+  $('restart').onclick = () => confirmPower('restart', 'Redémarrer', 'Redémarrer l’ordinateur ? Les applications ouvertes seront fermées.', 'maj');
+  $('shutdown').onclick = () => confirmPower('shutdown', 'Éteindre', 'Éteindre l’ordinateur ? Les applications ouvertes seront fermées.', 'quitter');
+
+  handlers.apps = m => { apps = m.items; render(); log('applications reçues : ' + apps.length); };
+  handlers.user = m => { $('user').textContent = m.name; };
+  handlers.show = () => { $('q').value = ''; render(); $('apps').scrollTop = 0; $('q').focus(); };
+  post({ cmd: 'ready', page: 'start' });
+</script>
+</body>
+</html>

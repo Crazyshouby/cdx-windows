@@ -1,0 +1,5 @@
+bin/
+obj/
+*.user
+couche1/kdx-frame.exe
+couche1/sauvegarde.json

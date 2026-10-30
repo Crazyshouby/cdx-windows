@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>KDX — barre des tâches</title>
+<link rel="stylesheet" href="/kdx/fonts.css">
+<link rel="stylesheet" href="/kdx/kdx-ui.css">
+<link rel="stylesheet" href="/kdx/themes.css">
+<style>
+  /* La barre des tâches de windows-ui.html, en vrai : mêmes règles (CHARTE-WINDOWS.md, extension « barre des tâches »). */
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--panel); }
+  .taskbar { position: absolute; inset: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px;
+             background: var(--panel); border-top: 1px solid #000; box-shadow: inset 0 1px 0 #666, inset 0 2px 0 #444; }
+  .tk { position: relative; flex: 0 1 190px; display: flex; align-items: center; gap: 8px; height: 26px; min-width: 34px; padding: 0 10px 0 8px;
+        font: inherit; color: var(--text); white-space: nowrap; overflow: hidden; cursor: default; background: var(--btn); border: 1px solid #000; box-shadow: var(--bevel); }
+  .tk:hover { background: #3b3b3b; }
+  .tk > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+  .tk.on { background: #2a2a2a; box-shadow: var(--bevel-down); padding-left: 14px; }
+  .tk.on::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--bar); border-right: 1px solid #000; }
+  .tk.min { color: var(--faint); }
+  .tk.start { flex: none; padding: 0 14px 0 8px; }
+  .tk.start.on { padding-left: 14px; }
+  .tk.pin { flex: none; min-width: 0; width: 30px; padding: 0; justify-content: center; }
+  .tk img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; }
+  .tsep { flex: none; width: 2px; height: 22px; border-left: 1px solid #111; border-right: 1px solid #555; }
+  .tsearch { flex: none; width: 210px; height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 8px; cursor: default; }
+  .ph { color: var(--faint) !important; }
+  .pins { display: flex; gap: 6px; flex: none; }
+  .tasks { display: flex; gap: 6px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
+  .tray { flex: none; display: flex; align-items: center; gap: 14px; height: 26px; padding: 0 10px; background: var(--ink); color: var(--field-ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  .tray .faint { color: var(--faint); }
+  .tray .hot { color: var(--warn); }
+  .tray.click { cursor: default; }
+  .tray.click:hover { background: #0b0b0b; }
+  .tray.on { border-color: #000 #444 #444 #000; background: #101010; }
+  /* Les boutons du son d'AudioLinker : visibles seulement tant qu'il tourne sur cette machine (le programme tient le tube « kdx.audiolinker »). */
+  .alk { flex: none; display: flex; align-items: center; gap: 6px; height: 26px; }
+  .alk[hidden] { display: none; }
+  .alk input[type="range"] { flex: none; width: 90px; }
+  .alk .alval { flex: none; width: 28px; text-align: right; color: var(--field-ink); font-variant-numeric: tabular-nums; }
+  .alk .alset { flex: none; width: 150px; justify-content: space-between; }
+  .alk #alMute.muted .pix { opacity: 0.4; }
+  .alk #alMute.muted::after { content: ""; position: absolute; left: 6px; right: 6px; top: 50%; height: 2px; background: var(--red); transform: rotate(-45deg); }
+  .alk .orb.pulse { animation: alpulse 1s ease-in-out infinite; }
+  @keyframes alpulse { 50% { opacity: 0.4; } }
+</style>
+<script src="/kdx/icons.js"></script>
+<script src="/kdx/host.js"></script>
+<script src="/shell/shell.js"></script>
+</head>
+<body>
+<div class="taskbar">
+  <button class="tk start" id="start"><span class="pix" data-ic="demarrer"></span><span>Démarrer</span></button>
+  <div class="text-input ph tsearch" id="search"><span class="pix" data-ic="recherche"></span><span>Rechercher…</span></div>
+  <i class="tsep"></i>
+  <div class="pins" id="pins"></div>
+  <i class="tsep"></i>
+  <div class="tasks" id="tasks"></div>
+  <span style="flex:1"></span>
+  <div class="alk" id="alk" hidden>
+    <button class="tk pin" id="alRun" title="AudioLinker : démarrer le groupe"><span class="orb" id="alOrb"></span></button>
+    <button class="tk pin" id="alMute" title="AudioLinker : couper le groupe"><span class="pix" data-ic="volume"></span></button>
+    <input type="range" id="alVol" min="0" max="100" value="100" title="Volume du groupe d'AudioLinker (molette)">
+    <span class="alval" id="alVal">100</span>
+    <button class="tk alset" id="alSet" title="Setup d'AudioLinker à jouer"><span id="alSetLbl">Setup…</span><span>▲</span></button>
+  </div>
+  <div class="tray click" id="tray" title="Centre rapide : son, réseau, notifications, calendrier"><span id="nt" class="hot" style="visibility:hidden;display:inline-flex;align-items:center;gap:4px;width:34px"><span class="pix" data-ic="cloche"></span><span id="ntn">0</span></span><span id="cpu">CPU –</span><span id="ram">RAM –</span><span id="clock"></span><span id="date"></span></div>
+  <button class="tk pin" id="systray" title="Zone de notification de Windows (8 secondes)">▲</button>
+</div>
+<script>
+  fillPix();
+  const $ = id => document.getElementById(id);
+  $('start').onclick = () => post({ cmd: 'toggleStart' });
+  $('search').onclick = () => post({ cmd: 'toggleStart' });
+  $('systray').onclick = () => post({ cmd: 'nativeTray' });
+
+  $('pins').innerHTML = PINS.slice(0, 5).map((p, i) => `<button class="tk pin" data-i="${i}" title="${esc(p.name)}">${pix(p.ic, 16)}</button>`).join('');
+  $('pins').onclick = e => { const b = e.target.closest('[data-i]'); if (b) post({ cmd: 'launch', target: PINS[+b.dataset.i].target }); };
+
+  // La liste des fenêtres ouvertes : poussée par le programme tous les 500 ms, redessinée seulement si elle a changé.
+  let last = '';
+  handlers.tasks = m => {
+    const key = JSON.stringify(m.items);
+    if (key === last) return; last = key;
+    $('tasks').innerHTML = m.items.map(t => `<button class="tk ${t.active ? 'on' : ''} ${t.min ? 'min' : ''}" data-h="${t.h}" title="${esc(t.title)}"><img data-p="${esc(t.exe)}" alt=""><span>${esc(t.title)}</span></button>`).join('');
+    $('tasks').querySelectorAll('img').forEach(img => wantIcon(img.dataset.p, img));
+    log('tâches affichées : ' + m.items.length);
+  };
+  $('tasks').onclick = e => { const b = e.target.closest('[data-h]'); if (b) post({ cmd: 'activate', h: b.dataset.h }); };
+  $('tasks').onauxclick = e => { if (e.button === 1) { const b = e.target.closest('[data-h]'); if (b) post({ cmd: 'close', h: b.dataset.h }); } };
+
+  $('tray').onclick = () => post({ cmd: 'toggleCenter' });
+  // Notifications non vues (envoyées par les autres applications) : la cloche et leur nombre, à place fixe (la barre ne bouge pas).
+  handlers.notifs = m => { $('nt').style.visibility = m.unread ? 'visible' : 'hidden'; $('ntn').textContent = m.unread > 99 ? '99+' : m.unread; };
+  handlers.centerOpen = m => $('tray').classList.toggle('on', m.open);
+  handlers.start = m => $('start').classList.toggle('on', m.open);
+  handlers.stats = m => { $('cpu').textContent = 'CPU ' + m.cpu + ' %'; $('cpu').className = m.cpu >= 90 ? 'hot' : ''; $('ram').textContent = 'RAM ' + m.ram + ' Go'; };
+
+  const tick = () => {
+    const d = new Date();
+    $('clock').textContent = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    $('date').textContent = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+  };
+  tick(); setInterval(tick, 10000);
+
+  // Le bloc de droite garde une largeur fixe : chaque case prend la largeur de son texte le plus long (CPU 100 %, RAM 99,9 Go, 88:88, le jour et le mois les plus larges),
+  // sinon la barre se déforme quand « 9 » devient « 10 » ou « 100 ».
+  const lock = (el, samples) => {
+    const m = document.createElement('span'); m.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap'; document.body.appendChild(m);
+    let w = 0; for (const s of samples) { m.textContent = s; w = Math.max(w, m.getBoundingClientRect().width); }
+    m.remove(); el.style.display = 'inline-block'; el.style.width = Math.ceil(w) + 'px';
+  };
+  const lockTray = () => {
+    lock($('cpu'), ['CPU 100 %', 'CPU 88 %']); lock($('ram'), ['RAM 99,9 Go', 'RAM 88,8 Go']);
+    lock($('clock'), ['00:00', '08:08', '11:11', '88:88']);
+    const wd = [], mo = [];
+    for (let i = 0; i < 7; i++) wd.push(new Date(2026, 9, 25 + i).toLocaleDateString('fr-FR', { weekday: 'short' }));
+    for (let i = 0; i < 12; i++) mo.push(new Date(2026, i, 28).toLocaleDateString('fr-FR', { month: 'short' }));
+    const samples = []; for (const w of wd) for (const m of mo) samples.push(w + ' 28 ' + m);
+    lock($('date'), samples);
+  };
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(lockTray);
+
+  // AudioLinker : le programme pousse son état (running, starting, volume, muted, playing, setups) tant que le tube répond, {on:false} sinon.
+  let alState = null, alHold = 0, alSent = 0;
+  const alFill = v => { const el = $('alVol'); el.value = v; el.style.background = 'var(--bar) 0 0 / ' + v + '% 100% no-repeat, #222222'; $('alVal').textContent = v; };
+  handlers.audio = m => {
+    $('alk').hidden = !m.on;
+    if (!m.on) { alState = null; return; }
+    alState = m;
+    $('alOrb').className = 'orb' + (m.starting ? ' amber pulse' : m.running ? ' green' : '');
+    $('alRun').title = m.starting ? 'AudioLinker : le groupe démarre…' : m.running ? 'AudioLinker : arrêter le groupe' : 'AudioLinker : démarrer le groupe';
+    $('alMute').classList.toggle('muted', m.muted);
+    $('alMute').title = m.muted ? 'AudioLinker : rétablir le son du groupe' : 'AudioLinker : couper le groupe';
+    if (Date.now() > alHold) alFill(m.volume);   // pendant qu'on tire le curseur, l'état renvoyé ne le déplace pas
+    $('alSetLbl').textContent = m.playing || (m.setups.length ? 'Setup…' : 'Aucun setup');
+  };
+  $('alRun').onclick = () => post({ cmd: 'audio.toggle' });
+  $('alMute').onclick = () => post({ cmd: 'audio.mute', on: !(alState && alState.muted) });
+  $('alVol').oninput = e => {
+    const v = +e.target.value; alHold = Date.now() + 1500; alFill(v);
+    if (Date.now() - alSent > 40) { alSent = Date.now(); post({ cmd: 'audio.volume', v, commit: false }); }
+  };
+  $('alVol').onchange = e => post({ cmd: 'audio.volume', v: +e.target.value, commit: true });
+  $('alk').onwheel = e => {   // la molette sur le groupe règle le volume par pas de 5
+    e.preventDefault(); const v = Math.max(0, Math.min(100, +$('alVol').value + (e.deltaY < 0 ? 5 : -5)));
+    alHold = Date.now() + 1500; alFill(v); post({ cmd: 'audio.volume', v, commit: true });
+  };
+  // La liste des setups s'ouvre dans une petite fenêtre au-dessus de la barre (un menu déroulant natif sortirait de l'écran vers le bas).
+  $('alSet').onclick = () => post({ cmd: 'audio.menu', x: Math.round($('alSet').getBoundingClientRect().left) });
+  if (!hasHost && location.search.includes('audio')) handlers.audio({ on: true, running: true, starting: false, muted: false, volume: 70, playing: 'Casque', setups: [{ name: 'Casque', count: 1 }, { name: 'Groupe Ecrans', count: 3 }] });   // aperçu hors du shell
+  post({ cmd: 'ready', page: 'bar' });
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>Fond d'écran KDX</title>
+<link rel="stylesheet" href="../../kdx-ui.css">
+<link rel="stylesheet" href="../../themes.css">
+<style>
+  /* Le fond d'écran de windows-ui.html (.wall), seul : rendu par appliquer.ps1 à la taille de l'écran (?theme=bleu pour un autre accent). */
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+  body { background:
+      repeating-linear-gradient(0deg, rgba(0, 0, 0, .2) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(135deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 5px),
+      radial-gradient(ellipse 90% 75% at 50% 118%, color-mix(in srgb, var(--a-mid) 85%, #000) 0, transparent 72%),
+      linear-gradient(color-mix(in srgb, var(--a-dark) 45%, #000), color-mix(in srgb, var(--a-dark) 80%, #000)); }
+</style>
+<script>
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.dataset.theme = t;
+</script>
+</head>
+<body></body>
+</html>

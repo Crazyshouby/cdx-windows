@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>KDX — Explorateur</title>
+<link rel="stylesheet" href="/kdx/fonts.css">
+<link rel="stylesheet" href="/kdx/kdx-ui.css">
+<link rel="stylesheet" href="/kdx/themes.css">
+<style>
+  /* L'Explorateur de windows-ui.html, en vrai. La fenêtre remplit la page ; les poignées de bord (.rz) remplacent le cadre de Windows. */
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--a-mid); }
+  .win { position: absolute; inset: 0; }
+  .tabs { cursor: default; }
+  .tab { max-width: 200px; }
+  .mbar { display: flex; flex: none; }
+  .mb { height: 22px; padding: 0 12px; margin-right: -1px; font: inherit; color: var(--text); cursor: default; background: var(--btn); border: 1px solid #000; box-shadow: var(--bevel); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .mb:hover { background: #3b3b3b; }
+  .mb:active { background: #2a2a2a; box-shadow: var(--bevel-down); }
+  .mb.off { color: var(--faint); }
+  .mb.on { background: #2a2a2a; box-shadow: var(--bevel-down); }
+  .nav { display: flex; gap: 5px; flex: none; align-items: center; }
+  .nav .btn { padding: 0 10px; }
+  .split { flex: 1; min-height: 0; display: flex; gap: 5px; }
+  .col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
+  .side .row-item { cursor: default; }
+  .side .head { margin-top: 10px; padding: 5px 8px 5px 6px; color: var(--faint); }
+  .fr { display: grid; grid-template-columns: 1fr 170px 170px 90px; gap: 0; align-items: center; height: 26px; border-left: 6px solid transparent; border-bottom: 1px solid var(--line); cursor: default; }
+  .fr:hover { background: var(--row-hover); }
+  .fr.sel { background: var(--row-sel); box-shadow: inset 0 0 0 1px var(--row-sel-ring); }
+  .fr > * { padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fr .nm { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .fr .nm span:last-child { overflow: hidden; text-overflow: ellipsis; }
+  .fr .r { text-align: right; }
+  .fr .f { color: var(--faint); }
+  .fr.cut { opacity: .5; }
+  .lhead.o6 { padding-left: 6px; grid-template-columns: 1fr 170px 170px 90px; }
+  .fr input { width: 100%; height: 20px; padding: 0 4px; }
+  .lh.rev::after { border-top: 0; border-bottom: 5px solid #fff; }
+  #files { outline: none; }
+  .empty { padding: 30px; text-align: center; color: var(--faint); }
+  /* poignées de bord : remplacent le cadre redimensionnable de Windows */
+  /* volet d'aperçu */
+  .pv { flex: none; width: 340px; }
+  .pvbox { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); overflow: hidden; }
+  .pvmid { flex: 1; min-height: 0; display: grid; place-items: center; padding: 10px; overflow: hidden; }
+  .pvmid img, .pvmid video { max-width: 100%; max-height: 100%; }
+  .pvbox iframe { flex: 1; border: 0; width: 100%; background: #fff; }
+  .pvbox .log { flex: 1; border: 0; box-shadow: none; padding: 6px 8px; white-space: pre-wrap; }
+  .pvinfo { flex: none; padding: 6px 4px 2px; line-height: 1.5; min-height: 52px; }
+  .pvn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rz { position: fixed; z-index: 60; }
+  .rz.l { left: 0; top: 8px; bottom: 8px; width: 4px; cursor: ew-resize; } .rz.r { right: 0; top: 8px; bottom: 8px; width: 4px; cursor: ew-resize; }
+  .rz.t { top: 0; left: 8px; right: 8px; height: 3px; cursor: ns-resize; } .rz.b { bottom: 0; left: 8px; right: 8px; height: 4px; cursor: ns-resize; }
+  .rz.tl { left: 0; top: 0; width: 8px; height: 8px; cursor: nwse-resize; } .rz.br { right: 0; bottom: 0; width: 10px; height: 10px; cursor: nwse-resize; }
+  .rz.tr { right: 0; top: 0; width: 8px; height: 8px; cursor: nesw-resize; } .rz.bl { left: 0; bottom: 0; width: 8px; height: 8px; cursor: nesw-resize; }
+  .menu { position: fixed; z-index: 80; }
+  .menu-item .k { margin-left: auto; padding-left: 28px; color: var(--faint); }
+  .menu-item.off { color: var(--faint); }
+  .menu-item.off:hover { background: none; box-shadow: none; }
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .45); }
+  .veil .win { position: relative; inset: auto; width: 460px; }
+</style>
+<script src="/kdx/icons.js"></script>
+<script src="/kdx/host.js"></script>
+</head>
+<body>
+<div class="win active" id="win">
+  <div class="tb" id="tb"><button class="tb-btn tb-l" id="bx"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m"></button><span class="tb-title" id="ttl">Explorateur</span><button class="tb-btn tb-r2" id="bmax"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="cb">
+    <div class="nav">
+      <button class="btn" id="back" title="Précédent (Alt+←)">←</button><button class="btn" id="fwd" title="Suivant (Alt+→)">→</button><button class="btn" id="up" title="Dossier parent (Alt+↑)">↑</button>
+      <input id="addr" class="text-input" type="text" spellcheck="false" autocomplete="off">
+      <input id="find" class="text-input" type="text" placeholder="Rechercher ici…" spellcheck="false" autocomplete="off" style="flex:none;width:240px">
+    </div>
+    <div class="mbar">
+      <button class="mb" id="cNew"><span class="pix" data-ic="dossier"></span>Nouveau dossier</button><button class="mb" id="cCut">Couper</button><button class="mb" id="cCopy">Copier</button><button class="mb" id="cPaste">Coller</button>
+      <button class="mb" id="cRen"><span class="pix" data-ic="editer"></span>Renommer</button><button class="mb" id="cDel"><span class="pix" data-ic="supprimer"></span>Supprimer</button><button class="mb" id="cRef"><span class="pix" data-ic="maj"></span>Actualiser</button><button class="mb" id="cPv" title="Aperçu (Alt+P)"><span class="pix" data-ic="image"></span>Aperçu</button>
+    </div>
+    <div class="split">
+      <div class="list side" id="side" style="flex:none;width:250px;background:var(--panel)"></div>
+      <div class="col" style="flex:1">
+        <div class="lhead o6" id="lhead"><button class="lh" data-k="n">Nom</button><button class="lh" data-k="m">Modifié le</button><button class="lh" data-k="t">Type</button><button class="lh" data-k="s">Taille</button></div>
+        <div class="list" id="files" tabindex="0"></div>
+      </div>
+      <div class="col pv" id="pv" hidden>
+        <div class="lhead" style="padding-right:0"><button class="lh">Aperçu</button></div>
+        <div class="pvbox" id="pvbox"></div>
+        <div class="pvinfo" id="pvinfo"></div>
+      </div>
+    </div>
+    <div class="status"><span class="orb green" id="orb"></span><span id="st1"></span><span class="faint" id="st2"></span><span style="margin-left:auto" id="st3"></span></div>
+  </div>
+</div>
+<i class="rz l" data-e="10"></i><i class="rz r" data-e="11"></i><i class="rz t" data-e="12"></i><i class="rz tl" data-e="13"></i><i class="rz tr" data-e="14"></i><i class="rz b" data-e="15"></i><i class="rz bl" data-e="16"></i><i class="rz br" data-e="17"></i>
+<div id="layer"></div>
+<script>
+  fillPix();
+  const $ = id => document.getElementById(id);
+  const sep = '\\';
+  const IC = { image: 'png jpg jpeg gif bmp webp svg ico', musique: 'mp3 wav flac ogg m4a aac', video: 'mp4 mkv avi mov webm wmv', journal: 'txt md log json xml csv ini cfg yml yaml toml', apps: 'exe msi bat cmd lnk' };
+  const TYPES = { png: 'Image PNG', jpg: 'Image JPEG', jpeg: 'Image JPEG', gif: 'Image GIF', svg: 'Image SVG', webp: 'Image WebP', bmp: 'Image BMP', ico: 'Icône', pdf: 'Document PDF', txt: 'Document texte', md: 'Document Markdown', json: 'Fichier JSON', xml: 'Fichier XML', csv: 'Fichier CSV',
+    mp3: 'Fichier MP3', wav: 'Fichier WAV', flac: 'Fichier FLAC', mp4: 'Vidéo MP4', mkv: 'Vidéo MKV', avi: 'Vidéo AVI', zip: 'Dossier compressé', exe: 'Application', msi: 'Installeur', lnk: 'Raccourci', docx: 'Document Word', xlsx: 'Feuille de calcul', pptx: 'Présentation', css: 'Feuille de style', js: 'Fichier JavaScript', html: 'Page HTML', rs: 'Source Rust', cs: 'Source C#', py: 'Script Python' };
+  const extOf = n => { const i = n.lastIndexOf('.'); return i > 0 ? n.slice(i + 1).toLowerCase() : ''; };
+  const iconOf = it => { if (it.drive) return 'disque'; if (it.d) return 'dossier'; const e = extOf(it.n); for (const k in IC) if (IC[k].split(' ').includes(e)) return k; return 'fichier'; };
+  const typeOf = it => it.drive ? 'Disque local' : it.d ? 'Dossier de fichiers' : (TYPES[extOf(it.n)] || (extOf(it.n) ? extOf(it.n).toUpperCase() + ' fichier' : 'Fichier'));
+  const pad = n => String(n).padStart(2, '0');
+  const dateOf = ms => { if (!ms) return ''; const d = new Date(ms); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const sizeOf = b => { if (b == null || b < 0) return ''; const u = ['o', 'Ko', 'Mo', 'Go', 'To']; let i = 0, v = b; while (v >= 1024 && i < 4) { v /= 1024; i++; } return (i === 0 || v >= 10 ? Math.round(v) : v.toFixed(1).replace('.', ',')) + ' ' + u[i]; };
+  const joinP = (d, n) => d ? (d.endsWith(sep) ? d + n : d + sep + n) : n;
+  // Dossier parent : « C:\ » a pour parent la liste des disques (''), qui n'en a pas.
+  const parentOf = p => { if (!p) return null; if (/^[A-Za-z]:\\?$/.test(p)) return ''; const t = p.replace(/\\$/, ''), i = t.lastIndexOf(sep); if (i < 0) return null; return i === 2 && t[1] === ':' ? t.slice(0, 3) : t.slice(0, i); };
+  const baseOf = p => !p ? 'Ce PC' : (p.replace(/\\$/, '').split(sep).pop() || p);
+
+  // ---------------- onglets ----------------
+  let tabs = [], cur = 0, nextId = 1, places = null, clip = { paths: [], cut: false };
+  const T = () => tabs[cur];
+  function addTab(path) { tabs.push({ id: String(nextId++), path: null, hist: [], idx: -1, items: [], sel: new Set(), sortK: 'n', rev: false, filter: '', mode: 'push', anchor: -1, free: -1, drives: false }); cur = tabs.length - 1; go(path, 'push'); drawTabs(); }
+  function go(path, mode) { const t = T(); t.mode = mode || 'push'; t.want = path; post({ cmd: 'fs.list', path, tab: t.id }); }
+  function drawTabs() {
+    $('tabs').innerHTML = tabs.map((t, i) => `<button class="tab ${i === cur ? 'on' : ''}" data-i="${i}">${esc(baseOf(t.path ?? t.want ?? ''))}</button>`).join('') + '<button class="tab" data-i="+">+</button>';
+  }
+  $('tabs').onclick = e => { const b = e.target.closest('[data-i]'); if (!b) return; if (b.dataset.i === '+') addTab(T().path ?? ''); else { cur = +b.dataset.i; drawTabs(); show(); } };
+  $('tabs').onauxclick = e => { const b = e.target.closest('[data-i]'); if (b && e.button === 1 && b.dataset.i !== '+' && tabs.length > 1) { tabs.splice(+b.dataset.i, 1); cur = Math.min(cur, tabs.length - 1); drawTabs(); show(); } };
+
+  // ---------------- liste ----------------
+  const cmp = t => { const k = t.sortK, s = t.rev ? -1 : 1;
+    const key = { n: it => it.n, m: it => it.m || 0, t: it => typeOf(it), s: it => it.s ?? -1 }[k];
+    return (a, b) => { if (!!a.d !== !!b.d) return a.d ? -1 : 1; const x = key(a), y = key(b);
+      return s * (typeof x === 'string' ? x.localeCompare(y, 'fr', { numeric: true, sensitivity: 'base' }) : (x - y)) || a.n.localeCompare(b.n, 'fr', { numeric: true, sensitivity: 'base' }); }; };
+  const visible = t => { const f = t.filter.toLowerCase(); return t.items.filter(i => !f || i.n.toLowerCase().includes(f)).sort(cmp(t)); };
+
+  function show(keepScroll) {
+    const t = T(); if (!t || t.path == null) return;
+    const rows = visible(t); t.rows = rows;
+    const top = $('files').scrollTop;
+    $('files').innerHTML = rows.length ? rows.map((it, i) => `<div class="fr ${t.sel.has(it.n) ? 'sel' : ''} ${clip.cut && clip.paths.includes(joinP(t.path, it.n)) ? 'cut' : ''}" data-i="${i}"><span class="nm">${pix(iconOf(it), 16)}<span>${esc(it.n)}</span></span><span class="f">${dateOf(it.m)}</span><span class="f">${typeOf(it)}</span><span class="f r">${it.drive ? sizeOf(it.free) + ' libres' : sizeOf(it.s)}</span></div>`).join('')
+      : `<div class="empty">${t.filter ? 'Aucun résultat' : 'Ce dossier est vide'}</div>`;
+    if (keepScroll) $('files').scrollTop = top;
+    document.querySelectorAll('#lhead .lh').forEach(b => { b.classList.toggle('on', b.dataset.k === t.sortK); b.classList.toggle('rev', b.dataset.k === t.sortK && t.rev); });
+    $('addr').value = t.path; $('back').disabled = t.idx <= 0; $('fwd').disabled = t.idx >= t.hist.length - 1; $('up').disabled = parentOf(t.path) == null;
+    $('ttl').textContent = baseOf(t.path) + ' — Explorateur'; post({ cmd: 'win.title', t: baseOf(t.path) + ' — Explorateur' });
+    const selItems = rows.filter(i => t.sel.has(i.n)), bytes = selItems.reduce((a, i) => a + (i.s > 0 ? i.s : 0), 0);
+    $('st1').textContent = `${rows.length} élément${rows.length > 1 ? 's' : ''}`;
+    $('st2').textContent = selItems.length ? `${selItems.length} sélectionné${selItems.length > 1 ? 's' : ''}${bytes ? ' (' + sizeOf(bytes) + ')' : ''}` : '';
+    $('st3').textContent = t.free >= 0 ? `Espace libre : ${sizeOf(t.free)}` : '';
+    $('orb').className = 'orb green';
+    drawSide();
+    if (window.updatePreview) updatePreview();
+  }
+  function drawSide() {
+    if (!places) return; const t = T();
+    const row = p => `<div class="row-item ${p.path === t.path ? 'sel' : ''}" data-p="${esc(p.path)}">${pix(p.ic, 16)}<span class="grow">${esc(p.name)}</span></div>`;
+    $('side').innerHTML = places.places.map(row).join('') + `<div class="head">Ce PC</div>` + places.drives.map(row).join('') + `<div class="row-item ${t.path === '' ? 'sel' : ''}" data-p="">${pix('pc', 16)}<span class="grow">Tous les disques</span></div>`;
+  }
+  $('side').onclick = e => { const r = e.target.closest('[data-p]'); if (r) go(r.dataset.p, 'push'); };
+
+  handlers.places = m => { places = m; if (!tabs.length) { const q = new URLSearchParams(location.search); addTab(q.get('path') || m.home); if (q.get('select')) T().pendingSel = q.get('select'); } else drawSide(); };
+  handlers['fs.list'] = m => {
+    const t = tabs.find(x => x.id === m.tab); if (!t) return;
+    if (m.error) { $('orb').className = 'orb red'; $('st1').textContent = m.error; $('st2').textContent = ''; $('st3').textContent = ''; t.want = t.path; return; }
+    const keep = t.mode === 'reload' && t.path === m.path ? new Set([...t.sel].filter(n => m.items.some(i => i.n === n))) : new Set();
+    if (t.mode === 'push' && t.path !== m.path) { t.hist.splice(t.idx + 1); t.hist.push(m.path); t.idx = t.hist.length - 1; }
+    if (t.mode === 'back') t.idx = Math.max(0, t.idx - 1); if (t.mode === 'fwd') t.idx = Math.min(t.hist.length - 1, t.idx + 1);
+    Object.assign(t, { path: m.path, items: m.items, free: m.free, sel: t.pendingSel ? new Set([t.pendingSel]) : keep, anchor: -1 }); t.pendingSel = null;
+    drawTabs(); if (t === T()) { show(t.mode === 'reload'); if (t.renameAfter) { const n = t.renameAfter; t.renameAfter = null; rename(n); } }
+    log('liste affichée : ' + m.path + ' (' + m.items.length + ')');
+  };
+  handlers['fs.done'] = m => {
+    const t = tabs.find(x => x.id === m.tab) || T();
+    if (m.error) { $('orb').className = 'orb red'; $('st1').textContent = m.error; }
+    if (m.select) t.pendingSel = m.select.split(sep).pop();
+    reload();
+  };
+  const reload = () => go(T().path, 'reload');
+
+  // ---------------- navigation ----------------
+  $('back').onclick = () => { const t = T(); if (t.idx > 0) { t.mode = 'back'; go(t.hist[t.idx - 1], 'back'); } };
+  $('fwd').onclick = () => { const t = T(); if (t.idx < t.hist.length - 1) go(t.hist[t.idx + 1], 'fwd'); };
+  $('up').onclick = () => { const p = parentOf(T().path); if (p != null) go(p, 'push'); };
+  $('addr').onkeydown = e => { if (e.key === 'Enter') { go($('addr').value.trim().replace(/\//g, sep), 'push'); $('files').focus(); } else if (e.key === 'Escape') { $('addr').value = T().path; $('files').focus(); } };
+  $('addr').onfocus = () => $('addr').select();
+  $('find').oninput = () => { T().filter = $('find').value; show(true); };
+  $('lhead').onclick = e => { const b = e.target.closest('[data-k]'); if (!b) return; const t = T(); t.rev = t.sortK === b.dataset.k ? !t.rev : false; t.sortK = b.dataset.k; show(true); };
+
+  // ---------------- sélection et ouverture ----------------
+  const pathOf = it => it.p || joinP(T().path, it.n);
+  const selected = () => { const t = T(); return (t.rows || []).filter(i => t.sel.has(i.n)); };
+  function open(it) { if (it.d) { go(pathOf(it), 'push'); $('find').value = ''; T().filter = ''; } else post({ cmd: 'fs.open', path: pathOf(it) }); }
+  $('files').onmousedown = e => {
+    if (e.target.closest('input')) return;
+    const r = e.target.closest('[data-i]'), t = T();
+    if (!r) { if (e.button === 0) { t.sel.clear(); show(true); } return; }
+    const i = +r.dataset.i, it = t.rows[i];
+    // Le double-clic se lit ici et non dans « dblclick » : chaque clic redessine la liste, le deuxième tombe donc sur un élément neuf
+    // et le navigateur ne produit plus d'événement dblclick.
+    if (e.button === 0 && e.detail >= 2 && !e.ctrlKey && !e.shiftKey) { open(it); return; }
+    if (e.button === 2 && t.sel.has(it.n)) return;
+    if (e.shiftKey && t.anchor >= 0) { t.sel.clear(); for (let k = Math.min(i, t.anchor); k <= Math.max(i, t.anchor); k++) t.sel.add(t.rows[k].n); }
+    else if (e.ctrlKey) { t.sel.has(it.n) ? t.sel.delete(it.n) : t.sel.add(it.n); t.anchor = i; }
+    else { t.sel = new Set([it.n]); t.anchor = i; }
+    show(true);
+  };
+
+  // ---------------- commandes ----------------
+  function copy(cut) { const s = selected(); if (!s.length) return; clip = { paths: s.map(pathOf), cut }; post({ cmd: 'fs.copy', paths: clip.paths, cut }); show(true); }
+  function paste() { if (T().path) post({ cmd: 'fs.paste', dir: T().path, tab: T().id }); }
+  function newFolder() { if (T().path) { T().renameAfter = 'Nouveau dossier'; post({ cmd: 'fs.newfolder', dir: T().path, tab: T().id }); } }
+  function rename(name) {
+    const t = T(); const idx = t.rows.findIndex(i => i.n === (name ?? [...t.sel][0])); if (idx < 0) return;
+    const it = t.rows[idx], row = $('files').children[idx]; if (!row || it.drive) return;
+    row.scrollIntoView({ block: 'nearest' });
+    const cell = row.querySelector('.nm'); cell.innerHTML = pix(iconOf(it), 16) + `<input class="text-input" value="${esc(it.n)}" spellcheck="false">`;
+    const inp = cell.querySelector('input'); inp.focus(); const dot = it.d ? it.n.length : it.n.lastIndexOf('.'); inp.setSelectionRange(0, dot > 0 ? dot : it.n.length);
+    let done = false; const end = ok => { if (done) return; done = true; if (ok && inp.value && inp.value !== it.n) post({ cmd: 'fs.rename', path: pathOf(it), name: inp.value, tab: t.id }); else show(true); };
+    inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') end(true); else if (e.key === 'Escape') end(false); };
+    inp.onblur = () => end(true);
+  }
+  function del() {
+    const s = selected(); if (!s.length) return;
+    dialog({ title: 'Supprimer', icon: 'supprimer', text: s.length === 1 ? `Placer « ${s[0].n} » dans la corbeille ?` : `Placer ces ${s.length} éléments dans la corbeille ?`, yes: 'Oui', no: 'Non' },
+      () => post({ cmd: 'fs.delete', paths: s.map(pathOf), tab: T().id }));
+  }
+  function dialog(o, onYes) {
+    $('layer').innerHTML = `<div class="veil"><div class="win active"><div class="tb"><span class="tb-title">${esc(o.title)}</span></div><div class="cb"><div class="row" style="gap:14px;padding:10px 4px">${pix(o.icon, 32)}<div style="line-height:1.5">${esc(o.text)}</div></div><div class="btns"><button class="primary" id="dy">${o.yes}</button><button class="btn" id="dn">${o.no}</button></div></div></div></div>`;
+    const close = () => { $('layer').innerHTML = ''; $('files').focus(); };
+    $('dy').onclick = () => { close(); onYes(); }; $('dn').onclick = close; $('dy').focus();
+    $('layer').onkeydown = e => { if (e.key === 'Escape') close(); };
+  }
+  $('cNew').onclick = newFolder; $('cCut').onclick = () => copy(true); $('cCopy').onclick = () => copy(false); $('cPaste').onclick = paste; $('cRen').onclick = () => rename(); $('cDel').onclick = del; $('cRef').onclick = reload;
+
+  // ---------------- menu contextuel ----------------
+  document.addEventListener('mousedown', e => { if (!e.target.closest('.menu')) $('layer').querySelector('.menu')?.remove(); });
+  $('files').oncontextmenu = e => {
+    e.preventDefault(); const t = T(), r = e.target.closest('[data-i]'), s = selected();
+    const on = r && s.length, one = s.length === 1;
+    const items = on ? [[one && s[0].d ? 'Ouvrir' : 'Ouvrir', 'dossier', 'Entrée', () => open(s[0]), !one], ['Couper', '', 'Ctrl+X', () => copy(true)], ['Copier', '', 'Ctrl+C', () => copy(false)], ['Renommer', 'editer', 'F2', () => rename(), !one], null, ['Supprimer', 'supprimer', 'Suppr', del], ['Propriétés', '', '', () => post({ cmd: 'fs.props', path: pathOf(s[0]) }), !one]]
+      : [['Nouveau dossier', 'dossier', '', newFolder, !t.path], ['Coller', '', 'Ctrl+V', paste, !t.path], null, ['Actualiser', 'maj', 'F5', reload], ['Propriétés', '', '', () => post({ cmd: 'fs.props', path: t.path }), !t.path]];
+    const title = on ? (one ? s[0].n : `${s.length} éléments`) : baseOf(t.path);
+    const m = document.createElement('div'); m.className = 'menu'; m.style.cssText = `left:${Math.min(e.clientX, innerWidth - 270)}px;top:${Math.min(e.clientY, innerHeight - 250)}px;min-width:250px`;
+    m.innerHTML = `<div class="menu-title">${esc(title)}</div>` + items.map((x, i) => x ? `<div class="menu-item ${x[4] ? 'off' : ''}" data-m="${i}">${x[1] ? pix(x[1], 16) : '<span style="width:16px"></span>'}<span>${x[0]}</span><span class="k">${x[2]}</span></div>` : '<div class="menu-sep"></div>').join('');
+    m.onclick = ev => { const it = ev.target.closest('[data-m]'); if (!it) return; const x = items[+it.dataset.m]; if (x[4]) return; m.remove(); x[3](); };
+    $('layer').appendChild(m);
+  };
+
+  // ---------------- clavier ----------------
+  document.addEventListener('keydown', e => {
+    if (e.target.matches('input')) return;
+    const t = T(); if (!t || !t.rows) return; const k = e.key;
+    const move = d => { const i = t.rows.findIndex(r => t.sel.has(r.n)); const n = Math.max(0, Math.min(t.rows.length - 1, (i < 0 ? (d > 0 ? -1 : t.rows.length) : i) + d)); if (t.rows[n]) { t.sel = new Set([t.rows[n].n]); t.anchor = n; show(true); $('files').children[n]?.scrollIntoView({ block: 'nearest' }); } };
+    if (e.altKey && k === 'ArrowLeft') { e.preventDefault(); $('back').click(); }
+    else if (e.altKey && k === 'ArrowRight') { e.preventDefault(); $('fwd').click(); }
+    else if ((e.altKey && k === 'ArrowUp') || k === 'Backspace') { e.preventDefault(); $('up').click(); }
+    else if (k === 'ArrowDown') { e.preventDefault(); move(1); } else if (k === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if (k === 'Enter') { const s = selected(); if (s.length === 1) open(s[0]); }
+    else if (k === 'F2') rename(); else if (k === 'F5') reload(); else if (k === 'Delete') del();
+    else if (k === 'F4' || (e.ctrlKey && k.toLowerCase() === 'l')) { e.preventDefault(); $('addr').focus(); }
+    else if (e.ctrlKey && k.toLowerCase() === 'f') { e.preventDefault(); $('find').focus(); }
+    else if (e.ctrlKey && k.toLowerCase() === 'a') { e.preventDefault(); t.sel = new Set(t.rows.map(r => r.n)); show(true); }
+    else if (e.ctrlKey && k.toLowerCase() === 'c') copy(false); else if (e.ctrlKey && k.toLowerCase() === 'x') copy(true); else if (e.ctrlKey && k.toLowerCase() === 'v') paste();
+    else if (e.ctrlKey && e.shiftKey && k.toLowerCase() === 'n') newFolder();
+    else if (e.ctrlKey && k.toLowerCase() === 't') addTab(t.path);
+    else if (e.ctrlKey && k.toLowerCase() === 'w' && tabs.length > 1) { tabs.splice(cur, 1); cur = Math.min(cur, tabs.length - 1); drawTabs(); show(); }
+    else if (k === 'Escape') { t.sel.clear(); show(true); }
+  });
+
+  // ---------------- cadre de la fenêtre ----------------
+  $('tb').onmousedown = e => { if (e.button === 0 && !e.target.closest('.tb-btn')) post({ cmd: 'win.drag' }); };
+  $('tb').ondblclick = e => { if (!e.target.closest('.tb-btn')) post({ cmd: 'win.max' }); };
+  $('bx').onclick = () => post({ cmd: 'win.close' }); $('bmax').onclick = () => post({ cmd: 'win.max' }); $('bmin').onclick = () => post({ cmd: 'win.min' });
+  document.querySelectorAll('.rz').forEach(h => h.onmousedown = e => { if (e.button === 0) post({ cmd: 'win.resize', edge: +h.dataset.e }); });
+
+  // ---------------- démarrage ----------------
+  if (hasHost) post({ cmd: 'fs.places' });
+  else { // hors du shell : données d'exemple pour voir la mise en page
+    handlers.places({ places: [{ name: 'Accueil', path: 'C:\\Users\\Valentin', ic: 'utilisateur' }, { name: 'Bureau', path: 'C:\\Users\\Valentin\\Desktop', ic: 'pc' }, { name: 'Documents', path: 'C:\\Users\\Valentin\\Documents', ic: 'dossier' }, { name: 'Images', path: 'C:\\Users\\Valentin\\Pictures', ic: 'image' }, { name: 'Musique', path: 'x', ic: 'musique' }, { name: 'Vidéos', path: 'y', ic: 'video' }, { name: 'Téléchargements', path: 'z', ic: 'telecharger' }], drives: [{ name: 'Windows (C:)', path: 'C:\\', ic: 'disque' }, { name: 'Données (D:)', path: 'D:\\', ic: 'disque' }], home: 'C:\\Users\\Valentin\\Documents' });
+    const now = Date.now(); const d = (n, dd = true, s = -1, ago = 0) => ({ n, d: dd, s, m: now - ago * 3600e3 });
+    handlers['fs.list']({ tab: '1', path: 'C:\\Users\\Valentin\\Documents', free: 412e9, items: [d('KIRC', true, -1, 4), d('Charte graphique', true, -1, 20), d('Factures 2026', true, -1, 600), d('capture-kdx.png', false, 2.3e6, 30), d('CV-2026.pdf', false, 214e3, 400), d('notes-kdx.txt', false, 4e3, 70), d('demo-kirc.mp4', false, 48e6, 120), d('ambiance.mp3', false, 6.1e6, 900), d('budget.xlsx', false, 38e3, 300)] });
+    T().sel = new Set(['capture-kdx.png']); show();
+  }
+</script>
+<script src="/explorer/preview.js"></script>
+</body>
+</html>

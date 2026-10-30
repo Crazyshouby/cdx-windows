@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>test aperçu</title>
+<!-- Chargée par « kdx-shell.exe --selftest-web » dans un WebView2 caché : vérifie qu'une page peut afficher une image et un son venant d'un
+     disque (hôte virtuel x.drive.kdx.shell) mais ne peut pas les lire par fetch. Envoie ses résultats au programme. -->
+<script>
+const q = new URLSearchParams(location.search), post = t => window.chrome.webview.postMessage({ t });
+let pending = 3;
+const end = () => { if (--pending === 0) post('done'); };
+
+const img = new Image();
+img.onload = () => { post(`img ok ${img.naturalWidth}x${img.naturalHeight}`); end(); };
+img.onerror = () => { post('img ÉCHEC'); end(); };
+img.src = q.get('img');
+
+const aud = new Audio();
+aud.onloadedmetadata = () => { post(`audio ok ${aud.duration.toFixed(2)}s`); end(); };
+aud.onerror = () => { post('audio ÉCHEC'); end(); };
+aud.src = q.get('aud');
+
+fetch(q.get('txt')).then(r => r.text()).then(t => { post('fetch lisible (inattendu) : ' + t); end(); }).catch(() => { post('fetch bloqué'); end(); });
+
+setTimeout(() => post('done'), 12000);
+</script>

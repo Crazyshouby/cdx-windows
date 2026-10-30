@@ -1,0 +1,30 @@
+# Contrôles de kdx-windows (jamais exécuté à ce jour : à essayer au premier push).
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+
+      # La charte (web/kdx) vient du dépôt kdx-ui (node tools/charte-sync.mjs --write kdx-windows là-bas) : une copie retouchée à la main échoue ici.
+      - name: Charter copies are untouched
+        run: node tools/kdx-verify.mjs web/kdx/kdx-sync.json
+
+      - name: Build
+        run: dotnet build Kdx.sln -c Release -o bin
+
+      # Les auto-tests qui n'ouvrent pas de fenêtre visible ni ne touchent au son. Ce sont des programmes Windows (sans console) :
+      # Start-Process -Wait est nécessaire pour attendre leur fin et lire leur code de sortie.
+      - name: Self-tests (bus, AudioLinker link, files)
+        shell: pwsh
+        run: |
+          foreach ($t in @(@('kdx-shell', '--selftest-bus'), @('kdx-shell', '--selftest-audio'), @('kdx-explorer', '--selftest-fs'))) {
+            $p = Start-Process "bin\$($t[0]).exe" -ArgumentList $t[1] -Wait -PassThru
+            "$($t[0]) $($t[1]) : code $($p.ExitCode)"
+            if ($p.ExitCode -ne 0) { Get-Content "$env:LOCALAPPDATA\KdxShell\selftest*.txt"; throw "$($t[1]) en échec" }
+          }

@@ -1,0 +1,107 @@
+using System.Drawing;
+using System.Text.Json;
+using Microsoft.Web.WebView2.Core;
+
+namespace Kdx;
+
+// Le programme : une ou plusieurs fenêtres de l'Explorateur, qui s'arrête avec la dernière.
+sealed class ExplorerApp : ApplicationContext, IHostApp
+{
+    string theme; readonly string root;
+    readonly IDisposable watch;
+    readonly List<HostForm> windows = new();
+    readonly SideButtons side;
+    CoreWebView2Environment env;
+    int count;
+    public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
+
+    public ExplorerApp(string theme)
+    {
+        this.theme = theme ?? Suite.ReadAccent(); root = Host.FindWebRoot();
+        _ = Anchor.Handle;
+        if (theme == null) watch = Suite.Watch(this.theme, a => { this.theme = a; foreach (var w in windows.ToArray()) w.Send(new { type = "theme", value = a }); });
+        side = new SideButtons(() => windows.ToArray());
+    }
+
+    public bool Closing { get; private set; }
+
+    protected override void ExitThreadCore() { Closing = true; watch?.Dispose(); side.Dispose(); base.ExitThreadCore(); }
+
+    public async void Open(string path, string select = null)
+    {
+        try
+        {
+            path ??= Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            env ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview-explorer"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
+            var f = new ExplorerForm(this);
+            windows.Add(f);
+            f.FormClosed += (s, e) => { windows.Remove(f); if (windows.Count == 0) ExitThread(); };
+            double scale = f.DeviceDpi / 96.0;
+            int off = (count++ % 6) * 28;
+            f.Bounds = new Rectangle(160 + off, 70 + off, (int)(1180 * scale), (int)(720 * scale));
+            f.Show(); Host.ForceForeground(f.Handle);
+            await f.InitWebAsync(env, root, "explorer/explorer.html?theme=" + theme + "&path=" + Uri.EscapeDataString(path) + (select != null ? "&select=" + Uri.EscapeDataString(select) : ""), scale);
+            Host.Log("explorateur ouvert : " + path);
+        }
+        catch (Exception ex) { Host.Log("explorateur : " + ex); }
+    }
+
+    // Les messages du bus (SUITE.md §3.2) : open-path { path? } et select { path }. Chaque champ est validé ; un chemin qui n'existe pas est refusé.
+    public bool OnBus(string type, string from, JsonElement data)
+    {
+        static bool Rooted(JsonElement d, out string p)
+        {
+            p = d.TryGetProperty("path", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            return p != null && p.Length > 0 && p.Length <= 520 && Path.IsPathRooted(p) && p.IndexOf((char)0) < 0;
+        }
+        switch (type)
+        {
+            case "open-path":
+                if (!data.TryGetProperty("path", out _)) { Open(null); return true; }
+                if (!Rooted(data, out var dir)) return false;
+                if (Directory.Exists(dir)) { Open(dir); return true; }
+                if (File.Exists(dir)) { Open(Path.GetDirectoryName(dir), Path.GetFileName(dir)); return true; }
+                return false;
+            case "select":
+                if (!Rooted(data, out var it)) return false;
+                if (!File.Exists(it) && !Directory.Exists(it)) return false;
+                Open(Path.GetDirectoryName(it) ?? it, Path.GetFileName(it)); return true;
+        }
+        return false;
+    }
+
+    // Canal de test (debug.txt) : state (nombre de fenêtres) · open <dossier> · eval <js> (dans la première fenêtre).
+    public async Task<string> HandleControl(string line)
+    {
+        int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
+        switch (c)
+        {
+            case "state": return windows.Count + " fenêtre(s)";
+            case "open": Open(a); return "ok";
+            case "eval": return windows.Count == 0 ? "pas de fenêtre" : await windows[0].Web.CoreWebView2.ExecuteScriptAsync(a);
+            default: return "commande inconnue";
+        }
+    }
+
+    public void OnMessage(HostForm from, string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var r = doc.RootElement;
+            string cmd = r.GetProperty("cmd").GetString();
+            if (cmd == "fs.open" && r.TryGetProperty("path", out var pp) && pp.ValueKind == JsonValueKind.String && Bus.IsBrowsableFile(pp.GetString()))
+            {
+                // une page web, un PDF, une image... s'ouvre dans le navigateur KDX (lancé au besoin) ; s'il est introuvable, l'ouvreur de Windows reprend la main
+                string file = pp.GetString(); var owner = from.Handle; var send = (Action<object>)from.Send; var rr = r.Clone();
+                _ = Task.Run(() => { if (!Bus.Send("browser", "open-file", new { path = file }, "explorer", launch: true)) Anchor.BeginInvoke(new Action(() => Fs.Handle(owner, send, cmd, rr))); });
+                return;
+            }
+            if (cmd.StartsWith("fs.")) { Fs.Handle(from.Handle, from.Send, cmd, r); return; }
+            if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
+            if (Host.CommonMessage(from, cmd, r)) return;
+            if (cmd == "ready") { from.Send(new { type = "user", name = Environment.UserName }); return; }
+        }
+        catch (Exception ex) { Host.Log("message mal formé ou échec : " + ex.Message + " :: " + json); }
+    }
+}
