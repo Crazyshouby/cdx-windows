@@ -88,7 +88,7 @@ static class Suite
     // Le chemin enregistré d'une application de la suite (liste blanche : seuls ces noms sont acceptés), ou null.
     public static string AppPath(string name)
     {
-        if (name is not ("shell" or "explorer" or "browser" or "audiolinker" or "kirc")) return null;
+        if (name is not ("shell" or "explorer" or "browser" or "repos" or "audiolinker" or "kirc")) return null;
         try
         {
             using var d = JsonDocument.Parse(System.IO.File.ReadAllText(AppsFile));

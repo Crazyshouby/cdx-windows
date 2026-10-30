@@ -9,7 +9,7 @@ static class Bus
 {
     public const int MaxLine = 65536;
     public const int MaxInstances = 8;
-    public static readonly string[] Apps = { "shell", "explorer", "browser", "audiolinker", "kirc" };
+    public static readonly string[] Apps = { "shell", "explorer", "browser", "repos", "audiolinker", "kirc" };
 
     // KDX_PIPE_PREFIX remplace « kdx. » (réservé aux essais : on ne touche pas au vrai bus).
     internal static string Prefix => Environment.GetEnvironmentVariable("KDX_PIPE_PREFIX") is { Length: > 0 } p ? p : "kdx.";

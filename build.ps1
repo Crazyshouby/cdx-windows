@@ -1,4 +1,4 @@
-# Compile les trois programmes de la suite (kdx-shell, kdx-explorer, kdx-browser) dans bin\.
+# Compile les programmes de la suite (kdx-shell, kdx-explorer, kdx-browser, kdx-repos) dans bin\.
 #   pwsh -File build.ps1
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot

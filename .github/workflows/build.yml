@@ -24,10 +24,10 @@ jobs:
 
       # Les auto-tests qui n'ouvrent pas de fenêtre visible ni ne touchent au son. Ce sont des programmes Windows (sans console) :
       # Start-Process -Wait est nécessaire pour attendre leur fin et lire leur code de sortie.
-      - name: Self-tests (bus, AudioLinker link, files)
+      - name: Self-tests (bus, AudioLinker link, files, git)
         shell: pwsh
         run: |
-          foreach ($t in @(@('kdx-shell', '--selftest-bus'), @('kdx-shell', '--selftest-audio'), @('kdx-explorer', '--selftest-fs'))) {
+          foreach ($t in @(@('kdx-shell', '--selftest-bus'), @('kdx-shell', '--selftest-audio'), @('kdx-explorer', '--selftest-fs'), @('kdx-repos', '--selftest-git'))) {
             $p = Start-Process "bin\$($t[0]).exe" -ArgumentList $t[1] -Wait -PassThru
             "$($t[0]) $($t[1]) : code $($p.ExitCode)"
             if ($p.ExitCode -ne 0) { Get-Content "$env:LOCALAPPDATA\KdxShell\selftest*.txt"; throw "$($t[1]) en échec" }

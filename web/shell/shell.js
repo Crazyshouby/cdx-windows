@@ -6,6 +6,7 @@ const PINS = [
   { name: 'Terminal', ic: 'console', target: 'wt.exe' },
   { name: 'Chrome', ic: 'serveur', target: 'chrome.exe' },
   { name: 'Navigateur KDX', ic: 'kirc', target: 'kdx:navigateur' },
+  { name: 'Dépôts', ic: 'liste', target: 'kdx:repos' },
   { name: 'Calculatrice', ic: 'apps', target: 'calc.exe' },
   { name: 'Bloc-notes', ic: 'journal', target: 'notepad.exe' },
   { name: 'Images', ic: 'image', target: 'shell:My Pictures' },

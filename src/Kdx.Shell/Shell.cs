@@ -70,7 +70,7 @@ class Shell : IHostApp
         Bus.Listen("shell", OnBus);
         Suite.RegisterApp("shell", Environment.ProcessPath);
         // Les deux autres programmes sont posés à côté du shell : leur chemin est enregistré même s'ils n'ont pas encore tourné (ou si apps.json garde un ancien dossier).
-        foreach (var other in new[] { "explorer", "browser" }) { var exe = Path.Combine(AppContext.BaseDirectory, "kdx-" + other + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other, exe); }
+        foreach (var other in new[] { "explorer", "browser", "repos" }) { var exe = Path.Combine(AppContext.BaseDirectory, "kdx-" + other + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other, exe); }
         if (!pinnedTheme) suiteWatch = Suite.Watch(theme, a => { theme = a; foreach (var f in new HostForm[] { Bar, Start, Center, Switch, AudioMenu }) f.Send(new { type = "theme", value = a }); Host.Log("accent de la suite : " + a); });
         Host.Log($"shell prêt : thème {theme}, échelle {scale}, racine {root}");
     }
@@ -375,7 +375,7 @@ class Shell : IHostApp
 
     public void OnStartDeactivated() { if (startOpen) HideStart(); }
 
-    // L'Explorateur et le navigateur sont des programmes à part (kdx-explorer.exe, kdx-browser.exe, posés à côté de celui-ci) : un plantage de l'un
+    // L'Explorateur, le navigateur et Dépôts sont des programmes à part (kdx-explorer.exe, kdx-browser.exe, kdx-repos.exe, posés à côté de celui-ci) : un plantage de l'un
     // n'emporte ni la barre ni l'autre. Déjà lancés, ils reçoivent l'argument et ouvrent une fenêtre ou un onglet.
     void StartApp(string exe, string arg)
     {
@@ -393,6 +393,7 @@ class Shell : IHostApp
     void Launch(string target)
     {
         if (target.StartsWith("kdx:navigateur")) { StartApp("kdx-browser.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
+        if (target.StartsWith("kdx:repos")) { StartApp("kdx-repos.exe", null); return; }
         if (target.StartsWith("kdx:explorer")) { StartApp("kdx-explorer.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
         try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); Host.Log("lancé : " + target); }
         catch (Exception ex) { Host.Log($"lancement de {target} échoué : {ex.Message}"); }

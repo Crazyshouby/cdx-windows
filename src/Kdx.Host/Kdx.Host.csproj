@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Ce que partagent les trois programmes de la suite (kdx-shell, kdx-explorer, kdx-browser) : fenêtre hôte d'une page WebView2, appels Windows,
-       journal, instance unique, canal de test, boutons latéraux de la souris. Les types restent internes : seuls les trois programmes les voient. -->
+  <!-- Ce que partagent les programmes de la suite (kdx-shell, kdx-explorer, kdx-browser, kdx-repos) : fenêtre hôte d'une page WebView2, appels Windows,
+       journal, instance unique, canal de test, boutons latéraux de la souris. Les types restent internes : seuls les programmes de la suite les voient. -->
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
@@ -17,6 +17,7 @@
     <InternalsVisibleTo Include="kdx-shell" />
     <InternalsVisibleTo Include="kdx-explorer" />
     <InternalsVisibleTo Include="kdx-browser" />
+    <InternalsVisibleTo Include="kdx-repos" />
   </ItemGroup>
 
 </Project>

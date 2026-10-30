@@ -14,8 +14,9 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 | `bin\kdx-shell.exe` | la barre, le menu Démarrer, le centre rapide, Alt+Tab, la touche Windows, la liaison avec AudioLinker | une | `journal.log` |
 | `bin\kdx-explorer.exe [--theme t] [dossier]` | l'Explorateur : une fenêtre par dossier ouvert, s'arrête avec la dernière | une (un second lancement ouvre une fenêtre dans la première) | `journal-explorer.log` |
 | `bin\kdx-browser.exe [--theme t] [adresse]` | le navigateur à onglets | une (un second lancement ouvre un onglet) | `journal-browser.log`, profil `navigateur\` |
+| `bin\kdx-repos.exe [--theme t]` | **Dépôts** : tous les projets git du PC (ce qui reste à enregistrer ou à envoyer sur GitHub), en lecture seule | une (un second lancement passe devant) | `journal-repos.log`, `repos.json` (dossiers explorés, projets masqués) |
 
-Le shell lance les deux autres (`kdx:explorer`, `kdx:navigateur`, Win+E) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
+Le shell lance les autres (`kdx:explorer`, `kdx:navigateur`, `kdx:repos`, Win+E) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
 Toutes les données sont dans `%LOCALAPPDATA%\KdxShell\`.
 
 ## Organisation
@@ -26,25 +27,26 @@ src\Kdx.Host\       la bibliothèque commune : fenêtre hôte WebView2, appels W
 src\Kdx.Shell\      kdx-shell : Program.cs (barre, Démarrer, centre, Alt+Tab, crochet clavier), AudioLink.cs, Sys.cs
 src\Kdx.Explorer\   kdx-explorer : Fs.cs (fichiers), ExplorerForm.cs
 src\Kdx.Browser\    kdx-browser : Browser.cs (onglets, favoris, historique, téléchargements)
+src\Kdx.Repos\      kdx-repos : Git.cs (recherche et lecture de git, jamais d'écriture), ReposApp.cs
 web\kdx\            la charte (copie exacte de kdx-ui/dist : node tools/charte-sync.mjs --write kdx-windows) et host.js, le pont des pages
-web\shell\ web\explorer\ web\browser\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
+web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
 couche1\            le cadre des fenêtres de Windows aux couleurs de la charte (DWM), réversible
-tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé)
+tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables)
 ```
 
 ## Essais (aucune entrée simulée)
 
-- Auto-tests, sans fenêtre visible : `kdx-explorer --selftest-fs`, `--selftest-web` ; `kdx-shell --selftest-sys`, `--selftest-audio` ; `kdx-browser --selftest-browser`.
+- Auto-tests, sans fenêtre visible : `kdx-explorer --selftest-fs`, `--selftest-web` ; `kdx-shell --selftest-sys`, `--selftest-audio` ; `kdx-browser --selftest-browser` ; `kdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables).
   Résultats dans `%LOCALAPPDATA%\KdxShell\selftest*.txt`.
 - Canal de contrôle : si `%LOCALAPPDATA%\KdxShell\debug.txt` existe au lancement, chaque programme ouvre un tube réservé à l'utilisateur courant
-  (`kdx.shell.ctl`, `kdx.explorer.ctl`, `kdx.browser.ctl`) pour lire son état et exécuter du JavaScript dans ses pages. `tests\navigateur.ps1` et
+  (`kdx.shell.ctl`, `kdx.explorer.ctl`, `kdx.browser.ctl`, `kdx.repos.ctl`) pour lire son état et exécuter du JavaScript dans ses pages. `tests\navigateur.ps1` et
   `tests\suite.ps1` s'en servent ; supprimer `debug.txt` et relancer ensuite.
 
 ## Réglages communs et bus (phase 2)
 - **Accent de la suite** : `%APPDATA%\KDX\suite.json` (`{"version":1,"accent":"bleu"}`). Chaque programme le relit à chaud (250 ms) et recolore ses pages ; `kdx-shell.exe --accent bleu` l'écrit.
   Sans argument, les programmes le suivent ; `--theme <nom>` (ou `lancer.ps1 <nom>`) fixe un thème pour ce lancement seulement.
 - **Bus** : un tube `\\.\pipe\kdx.<nom>` par programme (`Bus.cs`), messages `{type, from, data}` validés par liste blanche : `notify` (shell), `open-path` et `select` (Explorateur),
-  `open-url` (navigateur, http et https seulement). Lancer `kdx-browser.exe <adresse>` alors qu'il tourne déjà passe par ce bus. Spécification : `kdx-ui/docs/SUITE.md`.
+  `open-url` (navigateur, http et https seulement), `show` (Dépôts). Lancer `kdx-browser.exe <adresse>` alors qu'il tourne déjà passe par ce bus. Spécification : `kdx-ui/docs/SUITE.md`.
 - Essais : `kdx-shell --selftest-bus` (19 vérifications), `tests\bus.ps1` (essai de bout en bout isolé : ni le vrai bus, ni le vrai `suite.json`, ni le vrai profil du navigateur).
 
 ## Synergies (phase 4)
