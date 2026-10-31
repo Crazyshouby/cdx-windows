@@ -255,7 +255,7 @@ try {
   Js "T().sortK = 'n'; T().rev = false; show(true)" | Out-Null
   Js "const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
   MenuClick 'Afficher' | Out-Null
-  Check "« Afficher » : Éléments cachés et Extensions des fichiers, avec leur état coché" (Until { (Menu) -match ' // Éléments cachés\|Extensions des fichiers' } 4000)
+  Check "« Afficher » : Vue, Grouper par, Colonnes, Éléments cachés et Extensions des fichiers" (Until { (Menu) -match ' // Vue\|Grouper par\|Colonnes\|Éléments cachés\|Extensions des fichiers' } 4000)
   Js "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))" | Out-Null
   # Nouveau
   Js "const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
@@ -447,6 +447,50 @@ try {
   Check "le dossier affiché est supprimé : l'Explorateur remonte au dossier parent" (Until { (Js "T().path") -eq $work } 12000)
   Js "go('$($work.Replace('\', '\\'))\\petit', 'push')" | Out-Null
   Until { (Js "T().path") -eq "$work\petit" } 8000 | Out-Null
+
+  # --- réseau et amovibles (lot 5) ---
+  Check "chemins réseau : un partage a pour parent le serveur, le serveur a pour parent « Ce PC »" ((Js "[parentOf('\\\\srv\\part\\a'), parentOf('\\\\srv\\part'), parentOf('\\\\srv')].join('|')") -eq '\\srv\part|\\srv|')
+  Check "chaque disque de la barre latérale a un type (fixe, amovible, reseau, cdrom)" ((Js "places.drives.length > 0 && places.drives.every(d => ['fixe', 'amovible', 'reseau', 'cdrom'].includes(d.kind))") -eq $true)
+  Js "post({ cmd: 'fs.eject', drive: 'C:\\', tab: T().id })" | Out-Null
+  Check "éjecter un disque fixe est refusé avec une raison dans la barre d'état" (Until { (Js "document.getElementById('st2').textContent") -like '*amovible*' } 6000)
+  Js "setSetting('net.servers', ['\\\\srv-essai'])" | Out-Null
+  Check "un serveur retenu apparaît sous « Réseau » dans la barre latérale" (Until { (Js "[...document.querySelectorAll('#side .head')].map(h => h.textContent).join('|')") -like '*Réseau*' -and (Js "document.querySelector('#side [data-server]')?.dataset.p") -eq '\\srv-essai' } 6000)
+  Js "forgetServer('\\\\srv-essai')" | Out-Null
+  Check "« Oublier ce serveur » le retire" (Until { (Js "!!document.querySelector('#side [data-server]')") -eq $false } 6000)
+  Js "go('\\\\srv-inexistant-cdx', 'push')" | Out-Null
+  Check "lister les partages d'un serveur qui n'existe pas : un message clair, et le serveur n'est pas retenu" ((Until { (Js "document.getElementById('st1').textContent") -like 'Serveur introuvable*' } 40000) -and ((Js "JSON.stringify(settings['net.servers'] || [])") -eq '[]'))
+  Js "go('$($work.Replace('\', '\\'))\\petit', 'push')" | Out-Null
+  Until { (Js "T().path") -eq "$work\petit" } 10000 | Out-Null
+
+  # --- vues, regroupement, colonnes (lot 6) ---
+  [IO.File]::WriteAllBytes("$work\petit\pixel.png", [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='))
+  Until { (Js "T().items.some(i => i.n === 'pixel.png')") -eq $true } 8000 | Out-Null
+  Js "setView('icons-m')" | Out-Null
+  Check "vue « Icônes moyennes » : des cases à la place des lignes, l'en-tête des colonnes disparaît, plusieurs cases par rangée" ((Until { (Js "document.querySelectorAll('#files .fr.fc').length") -eq (Js "T().rows.length") } 4000) -and ((Js "document.getElementById('lhead').hidden") -eq $true) -and ([int](Js "T().lay.cols")) -ge 2 -and ((Js "document.getElementById('files').dataset.view") -eq 'icons-m'))
+  Check "une image a sa vignette, servie par le programme (x.drive.cdx.shell)" ((Js "document.querySelector('#files .fr.fc[title=`"pixel.png`"] img')?.getAttribute('src') || ''") -like 'https://*.drive.cdx.shell/*pixel.png')
+  Check "la vue est gardée pour ce dossier et devient la vue par défaut (réglages)" ((Until { (Js "(settings.views || {})['$($work.Replace('\', '\\').ToLower())\\petit']?.view") -eq 'icons-m' } 4000) -and ((Js "settings['view.default']") -eq 'icons-m'))
+  Check "au clavier, ↓ descend d'une rangée entière en icônes" ((Js "lineStep()") -eq (Js "T().lay.cols"))
+  Check "le rectangle de sélection couvre toutes les cases quand il englobe la liste" ((Js "rowsInRect(T(), 0, 1e9, 0, 1e9).length") -eq (Js "T().rows.length"))
+  Js "setView('details')" | Out-Null
+  Check "retour à « Détails » : des lignes, l'en-tête revient" ((Until { (Js "document.querySelectorAll('#files .fr:not(.fc)').length") -eq (Js "T().rows.length") } 4000) -and ((Js "document.getElementById('lhead').hidden") -eq $false))
+  Js "setGroup('type')" | Out-Null
+  Check "grouper par type : un en-tête par type (texte, image), le groupe des images d'un seul élément" ((Until { (Js "[...document.querySelectorAll('#files .grp')].map(g => g.textContent).join('|')") -eq 'Document texte|Image PNG' } 4000) -and ((Js "T().rows[T().rows.length - 1].n") -eq 'pixel.png'))
+  Js "setGroup('date')" | Out-Null
+  Check "grouper par date : tout est d'aujourd'hui" (Until { (Js "[...document.querySelectorAll('#files .grp')].map(g => g.textContent).join('|')") -eq "Aujourd’hui" } 4000)
+  Js "setGroup('')" | Out-Null
+  Check "sans regroupement : plus d'en-tête" (Until { (Js "document.querySelectorAll('#files .grp').length") -eq '0' } 4000)
+  Js "toggleCol('t')" | Out-Null
+  Check "masquer la colonne « Type » : trois en-têtes, trois cellules par ligne, réglage cols.hidden" ((Until { (Js "document.querySelectorAll('#lhead .lh').length") -eq '3' } 4000) -and ((Js "document.querySelector('#files .fr').children.length") -eq '3') -and ((Js "JSON.stringify(settings['cols.hidden'])") -eq '["t"]'))
+  Js "toggleCol('t')" | Out-Null
+  Check "la remontrer : quatre en-têtes" (Until { (Js "document.querySelectorAll('#lhead .lh').length") -eq '4' } 4000)
+  New-Item -ItemType Directory "$work\autre" -Force | Out-Null; Set-Content "$work\autre\z.txt" 'z'
+  Js "setView('icons-s'); go('$($work.Replace('\', '\\'))\\autre', 'push')" | Out-Null
+  $okDef = Until { (Js "T().path") -eq "$work\autre" -and (Js "T().view") -eq 'icons-s' } 20000
+  Check "un autre dossier prend la vue par défaut (petites icônes, la dernière choisie)" $okDef
+  if (-not $okDef) { "    path=" + (Js "T().path") + " view=" + (Js "T().view") + " default=" + (Js "settings['view.default']") + " st1=" + (Js "document.getElementById('st1').textContent"); Get-Content "$data\journal-explorer.log" | Where-Object { $_ -match 'erreur|exception' } | Select-Object -Last 3 | ForEach-Object { "    | $_" } }
+  Js "setView('details'); go('$($work.Replace('\', '\\'))\\petit', 'push')" | Out-Null
+  Check "retour dans le premier dossier : sa vue à lui (petites icônes) est retrouvée" (Until { (Js "T().path") -eq "$work\petit" -and (Js "T().view") -eq 'icons-s' } 10000)
+  Js "setView('details')" | Out-Null
 
   # --- réglages : aller-retour page → hôte → page, fichier, redémarrage ---
   Js "setSetting('essai.cle', { a: 1, b: [1, 2] })" | Out-Null

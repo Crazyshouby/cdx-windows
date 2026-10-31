@@ -22,7 +22,14 @@
   const sizeOf = b => { if (b == null || b < 0) return ''; const u = ['o', 'Ko', 'Mo', 'Go', 'To']; let i = 0, v = b; while (v >= 1024 && i < 4) { v /= 1024; i++; } return (i === 0 || v >= 10 ? Math.round(v) : v.toFixed(1).replace('.', ',')) + ' ' + u[i]; };
   const joinP = (d, n) => d ? (d.endsWith(sep) ? d + n : d + sep + n) : n;
   // Dossier parent : « C:\ » a pour parent la liste des disques (''), qui n'en a pas.
-  const parentOf = p => { if (!p) return null; if (/^[A-Za-z]:\\?$/.test(p)) return ''; const t = p.replace(/\\$/, ''), i = t.lastIndexOf(sep); if (i < 0) return null; return i === 2 && t[1] === ':' ? t.slice(0, 3) : t.slice(0, i); };
+  // Un chemin réseau « \\serveur\partage\… » : le partage a pour parent le serveur (la liste de ses partages), le serveur a pour parent « Ce PC ».
+  const isUnc = p => /^\\\\[^\\]/.test(p || '');
+  const parentOf = p => {
+    if (!p) return null; if (/^[A-Za-z]:\\?$/.test(p)) return '';
+    const t = p.replace(/\\$/, '');
+    if (isUnc(t)) { const parts = t.slice(2).split(sep); if (parts.length <= 1) return ''; if (parts.length === 2) return '\\\\' + parts[0]; return t.slice(0, t.lastIndexOf(sep)); }
+    const i = t.lastIndexOf(sep); if (i < 0) return null; return i === 2 && t[1] === ':' ? t.slice(0, 3) : t.slice(0, i);
+  };
   const baseOf = p => p === TRASH ? 'Corbeille' : !p ? 'Ce PC' : (p.replace(/\\$/, '').split(sep).pop() || p);
 
 

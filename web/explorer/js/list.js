@@ -4,11 +4,13 @@
   const collator = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });   // bien plus rapide que localeCompare sur des dizaines de milliers de noms
   const cmp = t => { const k = t.sortK, s = t.rev ? -1 : 1;
     const key = { n: it => it.b ?? it.n, m: it => it.m || 0, t: it => it._t ??= typeOf(it), s: it => it.s ?? -1 }[k];
-    return (a, b) => { if (!!a.d !== !!b.d) return a.d ? -1 : 1; const x = key(a), y = key(b);
+    return (a, b) => { if (!!a.d !== !!b.d) return a.d ? -1 : 1;
+      if (t.group) { const ga = groupKeyOf(t, a).r, gb = groupKeyOf(t, b).r; if (ga !== gb) return typeof ga === 'string' ? collator.compare(ga, gb) : ga - gb; }   // les groupes d'abord, dans leur ordre
+      const x = key(a), y = key(b);
       return s * (typeof x === 'string' ? collator.compare(x, y) : (x - y)) || collator.compare(a.n, b.n); }; };
   // Les éléments à montrer, triés et filtrés ; le résultat est gardé tant que ni les éléments (t.ver), ni le tri, ni le filtre ne changent : un clic ne retrie jamais.
   function visible(t) {
-    const key = t.ver + '|' + t.sortK + '|' + t.rev + '|' + t.filter;
+    const key = t.ver + '|' + t.sortK + '|' + t.rev + '|' + t.filter + '|' + (t.group || '');
     if (t.vkey === key && t.vrows) return t.vrows;
     const f = t.filter.toLowerCase();
     const list = f ? t.items.filter(i => i.n.toLowerCase().includes(f)) : t.items.slice();
@@ -17,28 +19,32 @@
   // Les éléments par nom (pour retrouver la sélection sans parcourir toute la liste).
   function byName(t) { if (t.bnVer !== t.ver || !t.bn) { t.bn = new Map(t.items.map(i => [i.n, i])); t.bnVer = t.ver; } return t.bn; }
 
-  const rowHtml = (it, i, t) => `<div class="fr ${t.sel.has(it.n) ? 'sel' : ''} ${it.h ? 'hid' : ''} ${clip.cut && clip.paths.includes(pathOf(it)) ? 'cut' : ''}" data-i="${i}"><span class="nm">${pix(iconOf(it), 16)}<span>${esc(dispName(it))}${it.r !== undefined ? `<i class="rd">${esc(it.r || '.')}</i>` : ''}</span></span><span class="f">${dateOf(it.m)}</span><span class="f">${typeOf(it)}</span><span class="f r">${it.drive ? sizeOf(it.free) + ' libres' : sizeOf(it.s)}</span></div>`;
+  // Une ligne (ou une case, dans les vues en icônes) : views.js, qui connaît la vue, les colonnes masquées et la position de chaque élément.
+  const rowHtml = (it, i, t, lay) => cellHtml(it, i, t, lay || ensureLayout(t));
 
   // Dessine les lignes qui touchent la zone visible (plus quelques-unes de marge), entre deux espaceurs qui gardent la hauteur et la barre de défilement de la liste entière.
   function paintRows(force) {
     const t = T(), box = $('files'); if (!t || !t.rows) return;
     const rows = t.rows;
     if (!rows.length) { const s = t.search; box.innerHTML = `<div class="empty">${t.path === TRASH && !t.loading ? 'La corbeille est vide' : s ? (s.running ? 'Recherche en cours…' : searchIdle(s) ? 'Tape un nom (ex. facture *.pdf) ou choisis un critère.' : 'Aucun résultat') : t.loading ? 'Lecture du dossier…' : t.filter ? 'Aucun résultat' : 'Ce dossier est vide'}</div>`; t.win = null; return; }
-    const h = box.clientHeight || 400, st = box.scrollTop;
-    const first = Math.max(0, Math.floor(st / ROW_H) - OVER), last = Math.min(rows.length - 1, Math.ceil((st + h) / ROW_H) + OVER);
-    if (!force && t.win && t.win[0] === first && t.win[1] === last) return;
-    t.win = [first, last];
-    let html = first ? `<div style="height:${first * ROW_H}px"></div>` : '';
-    for (let i = first; i <= last; i++) html += rowHtml(rows[i], i, t);
-    if (last < rows.length - 1) html += `<div style="height:${(rows.length - 1 - last) * ROW_H}px"></div>`;
-    box.innerHTML = html;
+    const lay = ensureLayout(t), h = box.clientHeight || 400, st = box.scrollTop;
+    const top = st - OVER_PX, bot = st + h + OVER_PX;
+    let first = firstFrom(lay.ys, top - lay.rh), last = firstFrom(lay.ys, bot) - 1;
+    first = Math.max(0, first); last = Math.min(rows.length - 1, Math.max(first, last));
+    if (!force && t.win && t.win[0] === first && t.win[1] === last && t.winKey === t.layKey) return;
+    t.win = [first, last]; t.winKey = t.layKey;
+    let html = `<div class="lay" style="height:${lay.h}px">`;   // le conteneur garde la hauteur de la liste entière (barre de défilement juste) ; chaque élément est posé à sa place
+    for (const hd of lay.hdrs) if (hd.y + HDR_H >= top && hd.y <= bot) html += `<div class="grp" style="top:${hd.y}px">${esc(hd.l)}</div>`;
+    for (let i = first; i <= last; i++) html += rowHtml(rows[i], i, t, lay);
+    box.innerHTML = html + '</div>';
   }
   let paintQueued = false;
   $('files').addEventListener('scroll', () => { if (paintQueued) return; paintQueued = true; requestAnimationFrame(() => { paintQueued = false; paintRows(); }); });
   if (window.ResizeObserver) new ResizeObserver(() => paintRows()).observe($('files'));
   // Fait défiler la liste pour que la ligne d'indice i soit visible (le clavier, le renommage).
   function ensureVisible(i) {
-    const box = $('files'), top = i * ROW_H, bot = top + ROW_H, st = box.scrollTop, h = box.clientHeight;
+    const t = T(); if (!t || !t.rows || i < 0 || i >= t.rows.length) return;
+    const lay = ensureLayout(t), box = $('files'), top = lay.ys[i], bot = top + lay.rh, st = box.scrollTop, h = box.clientHeight;
     if (top < st) box.scrollTop = top; else if (bot > st + h) box.scrollTop = bot - h;
     paintRows();
   }
@@ -47,7 +53,7 @@
     const t = T(); if (!t || t.path == null) return;
     const rows = visible(t); t.rows = rows;
     if (!keepScroll) $('files').scrollTop = 0;
-    paintRows(true);
+    syncViewUi(t); paintRows(true);
     document.querySelectorAll('#lhead .lh').forEach(b => { b.classList.toggle('on', b.dataset.k === t.sortK); b.classList.toggle('rev', b.dataset.k === t.sortK && t.rev); });
     const dh = document.querySelector('#lhead .lh[data-k="m"]'); if (dh && dh.firstChild && dh.firstChild.nodeType === 3) dh.firstChild.nodeValue = t.path === TRASH ? 'Supprimé le' : 'Modifié le';   // dans la corbeille, la date est celle de la suppression
     $('addr').value = t.path === TRASH ? 'Corbeille' : t.path; $('back').disabled = t.idx <= 0; $('fwd').disabled = t.idx >= t.hist.length - 1; $('up').disabled = parentOf(t.path) == null;
@@ -65,10 +71,32 @@
   }
   function drawSide() {
     if (!places) return; const t = T();
-    const row = p => `<div class="row-item ${p.path === t.path ? 'sel' : ''}" data-p="${esc(p.path)}">${pix(p.ic, 16)}<span class="grow">${esc(p.name)}</span></div>`;
-    $('side').innerHTML = places.places.map(row).join('') + `<div class="head">Ce PC</div>` + places.drives.map(row).join('') + `<div class="row-item ${t.path === '' ? 'sel' : ''}" data-p="">${pix('pc', 16)}<span class="grow">Tous les disques</span></div>` + `<div class="row-item ${t.path === TRASH ? 'sel' : ''}" data-p="${TRASH}">${pix('supprimer', 16)}<span class="grow">Corbeille</span></div>`;
+    const row = (p, extra = '') => `<div class="row-item ${p.path === t.path ? 'sel' : ''}" data-p="${esc(p.path)}"${extra}>${pix(p.ic, 16)}<span class="grow">${esc(p.name)}</span></div>`;
+    const local = places.drives.filter(d => d.kind !== 'reseau'), net = places.drives.filter(d => d.kind === 'reseau');
+    const servers = (Array.isArray(settings['net.servers']) ? settings['net.servers'] : []).map(s => ({ name: s.replace(/^\\\\/, ''), path: s, ic: 'serveur' }));
+    $('side').innerHTML = places.places.map(p => row(p)).join('')
+      + `<div class="head">Ce PC</div>` + local.map(d => row(d, d.kind === 'amovible' || d.kind === 'cdrom' ? ' data-eject="1"' : '')).join('')
+      + `<div class="row-item ${t.path === '' ? 'sel' : ''}" data-p="">${pix('pc', 16)}<span class="grow">Tous les disques</span></div>`
+      + `<div class="row-item ${t.path === TRASH ? 'sel' : ''}" data-p="${TRASH}">${pix('supprimer', 16)}<span class="grow">Corbeille</span></div>`
+      + (net.length || servers.length ? `<div class="head">Réseau</div>` + net.map(d => row(d)).join('') + servers.map(s => row(s, ' data-server="1"')).join('') : '');
   }
   $('side').onclick = e => { const r = e.target.closest('[data-p]'); if (r) go(r.dataset.p, 'push'); };
+  // Un serveur dont on a lu un partage (ou la liste des partages) reste dans la barre latérale (réglage net.servers, commun à toutes les fenêtres) ; « Oublier ce serveur » le retire.
+  function rememberServer(path) {
+    const m = /^(\\\\[^\\]+)/.exec(path || ''); if (!m) return;
+    const list = Array.isArray(settings['net.servers']) ? settings['net.servers'] : [];
+    if (list.some(x => x.toLowerCase() === m[1].toLowerCase())) return;
+    setSetting('net.servers', [...list, m[1]].slice(-12));
+  }
+  function forgetServer(path) { const list = Array.isArray(settings['net.servers']) ? settings['net.servers'] : []; setSetting('net.servers', list.filter(x => x.toLowerCase() !== path.toLowerCase())); }
+  function ejectDrive(p) { post({ cmd: 'fs.eject', drive: p, tab: T().id }); say('Éjection de ' + p + '…'); }
+  $('side').oncontextmenu = e => {
+    const r = e.target.closest('[data-p]'); if (!r) return; e.preventDefault();
+    const items = [['Ouvrir', () => go(r.dataset.p, 'push')], ['Ouvrir dans un nouvel onglet', () => addTab(r.dataset.p)]];
+    if (r.dataset.eject) items.push(null, ['Éjecter', () => ejectDrive(r.dataset.p), { icon: 'disque' }]);
+    if (r.dataset.server) items.push(null, ['Oublier ce serveur', () => forgetServer(r.dataset.p)]);
+    CdxFrame.menu(items, e.clientX, e.clientY, r.textContent.trim());
+  };
 
   handlers.places = m => { places = m; if (!tabs.length) { const q = new URLSearchParams(location.search); addTab(q.get('path') || m.home); if (q.get('select')) T().pendingSel = q.get('select'); } else drawSide(); };
   // Le premier paquet d'un dossier (fs.list) remplace la liste ; les suivants (fs.list.more) s'y ajoutent. L'affichage est rafraîchi au plus toutes les 350 ms pendant la lecture, puis une dernière fois.
@@ -85,8 +113,10 @@
     if (t.mode === 'back') t.idx = Math.max(0, t.idx - 1); if (t.mode === 'fwd') t.idx = Math.min(t.hist.length - 1, t.idx + 1);
     Object.assign(t, { path: m.path, items: m.items, free: m.free, ver: (t.ver | 0) + 1, loading: !!m.more, sel: t.pendingSel ? new Set([t.pendingSel]) : keep, anchor: -1, cursor: -1 }); t.pendingSel = null;
     if (!m.more && t.mode === 'reload') pruneSel(t);
+    if (t.mode !== 'reload') applySavedView(t);   // la vue et le groupe gardés pour ce dossier
     if (t.watched !== m.path) { t.watched = m.path; post({ cmd: 'fs.watch', tab: t.id, path: m.path }); }   // le programme prévient quand le dossier change (fs.changed)
     drawTabs(); if (t === T()) { show(t.mode === 'reload'); lastShow = performance.now(); if (t.renameAfter) { const n = t.renameAfter; t.renameAfter = null; rename(n); } }
+    if (isUnc(m.path)) rememberServer(m.path);
     log('liste affichée : ' + m.path + ' (' + m.items.length + (m.more ? ', suite en cours' : '') + ')');
   };
   handlers['fs.list.more'] = m => {
@@ -102,7 +132,8 @@
   function pruneSel(t) { const bn = byName(t); for (const n of [...t.sel]) if (!bn.has(n)) t.sel.delete(n); }
   handlers['fs.done'] = m => {
     const t = tabs.find(x => x.id === m.tab) || T();
-    if (m.error) { $('orb').className = 'orb red'; $('st1').textContent = m.error; }
+    if (m.error) { $('orb').className = 'orb red'; $('st1').textContent = m.error; say(m.error); }   // (say : la relecture qui suit réécrit st1)
+    if (m.ejected) say('Disque éjecté : ' + m.ejected + ' (tu peux le retirer)');
     if (m.select) { t.pendingSel = m.select.split(sep).pop(); if (t.wantRename) t.renameAfter = t.pendingSel; }   // « Nouveau » : l'élément créé est sélectionné et son nom s'édite
     t.wantRename = false;
     reload();
@@ -113,7 +144,9 @@
   function onSettings() {
     const t = T(), hid = settings['show.hidden'] === true;
     if (hid !== shownHidden) { shownHidden = hid; for (const x of tabs) x.stale = true; if (t) { t.stale = false; reload(); } return; }
+    refreshViewSettings();   // vues par dossier, colonnes masquées
     if (t && t.rows) paintRows(true);
+    drawSide();   // serveurs du réseau, dossiers épinglés, récents : des réglages aussi
   }
   // Le dossier d'un onglet a changé hors de la fenêtre : on le relit (sélection et défilement gardés), sauf pendant un renommage ou un glisser (on attend la fin) ; un onglet caché se relit quand on y revient.
   const busy = () => !!(typeof drag !== 'undefined' && drag) || !!document.activeElement?.closest?.('#files input');

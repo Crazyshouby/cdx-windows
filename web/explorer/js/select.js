@@ -49,9 +49,9 @@
     const x0 = Math.min(rb.x, e.clientX), x1 = Math.max(rb.x, e.clientX);
     const top = Math.max(box.top, Math.min(rb.y - $('files').scrollTop + box.top, e.clientY)), bot = Math.min(box.bottom, Math.max(rb.y - $('files').scrollTop + box.top, e.clientY));
     Object.assign(rb.el.style, { left: Math.max(box.left, x0) + 'px', top: top + 'px', width: Math.max(0, Math.min(box.right, x1) - Math.max(box.left, x0)) + 'px', height: Math.max(0, bot - top) + 'px' });
-    const i0 = Math.max(0, Math.floor(a / ROW_H)), i1 = Math.min(t.rows.length - 1, Math.floor(z / ROW_H));
-    const sel = new Set(rb.base); for (let i = i0; i <= i1; i++) sel.add(t.rows[i].n);
-    t.sel = sel; t.anchor = i0; t.cursor = i1; show(true);
+    const hit = rowsInRect(t, x0 - box.left, x1 - box.left, a, z);   // les éléments que le rectangle touche (en icônes : case par case)
+    const sel = new Set(rb.base); for (const i of hit) sel.add(t.rows[i].n);
+    t.sel = sel; if (hit.length) { t.anchor = hit[0]; t.cursor = hit[hit.length - 1]; } show(true);
   });
   function endRubber() { if (rb && rb.el) { rb.el.remove(); try { $('files').releasePointerCapture(rb.id); } catch { /* idem */ } } rb = null; }
   document.addEventListener('pointerup', endRubber); document.addEventListener('pointercancel', endRubber);

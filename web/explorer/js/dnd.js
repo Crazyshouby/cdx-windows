@@ -3,7 +3,7 @@
   // Une ligne (ou la sélection) se dépose sur un dossier de la liste, un lieu de la barre latérale ou un onglet. Comme dans Windows : sur le même disque on déplace, d'un disque
   // à l'autre on copie ; Ctrl copie, Maj déplace ; Échap annule. Sortir de la fenêtre avec les éléments les confie à Windows (glisser vers une autre application). Des fichiers venus
   // d'une autre application ou d'une autre fenêtre se déposent par-dessus (comme dans Windows : déplacés sur le même disque, copiés sinon ; Ctrl copie, Maj déplace), sur un dossier ou sur la liste (le dossier courant).
-  const driveOf = p => (p || '').slice(0, 2).toUpperCase();
+  const driveOf = p => { p = p || ''; if (isUnc(p)) { const m = /^(\\\\[^\\]+\\[^\\]+)/.exec(p); return (m ? m[1] : p).toUpperCase(); } return p.slice(0, 2).toUpperCase(); };   // un partage réseau compte comme un disque
   const norm = p => (p || '').replace(/\\$/, '').toLowerCase();
   const within = (p, dir) => norm(dir) === norm(p) || norm(dir).startsWith(norm(p) + sep);   // dir est p ou se trouve dedans
   let dcand = null, drag = null, extOver = null;

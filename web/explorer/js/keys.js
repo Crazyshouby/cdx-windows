@@ -9,7 +9,7 @@
     else { t.sel = new Set([t.rows[to].n]); t.anchor = to; }
     t.cursor = to; show(true); ensureVisible(to);
   }
-  const pageRows = () => Math.max(1, Math.floor($('files').clientHeight / ROW_H) - 1);
+  const pageRows = () => rowsPerPage();   // (views.js : en icônes, une page = des rangées de plusieurs cases)
   const invertSelection = () => { const t = T(); if (!t || !t.rows) return; t.sel = new Set(t.rows.filter(r => !t.sel.has(r.n)).map(r => r.n)); show(true); };
   const selectAll = () => { const t = T(); if (!t || !t.rows) return; t.sel = new Set(t.rows.map(r => r.n)); show(true); };
   const selectNone = () => { const t = T(); if (!t) return; t.sel.clear(); show(true); };
@@ -34,10 +34,14 @@
     { g: 'Navigation', k: 'Ctrl+Tab', t: 'Onglet suivant', run: () => switchTab(1) },
     { g: 'Navigation', k: 'Ctrl+Shift+Tab', t: 'Onglet précédent', run: () => switchTab(-1) },
     { g: 'Navigation', k: 'Ctrl+N', t: 'Nouvelle fenêtre', run: () => post({ cmd: 'fs.newwindow', path: T().path || '' }) },
-    { g: 'Sélection', k: 'ArrowDown', t: 'Élément suivant', run: () => moveCursor(c => c + 1, false) },
-    { g: 'Sélection', k: 'ArrowUp', t: 'Élément précédent', run: () => moveCursor(c => c < 0 ? Infinity : c - 1, false) },
-    { g: 'Sélection', k: 'Shift+ArrowDown', t: 'Étendre la sélection vers le bas', run: () => moveCursor(c => c + 1, true) },
-    { g: 'Sélection', k: 'Shift+ArrowUp', t: 'Étendre la sélection vers le haut', run: () => moveCursor(c => c < 0 ? Infinity : c - 1, true) },
+    { g: 'Sélection', k: 'ArrowDown', t: 'Élément suivant (en icônes : la rangée du dessous)', run: () => moveCursor(c => c + lineStep(), false) },
+    { g: 'Sélection', k: 'ArrowUp', t: 'Élément précédent (en icônes : la rangée du dessus)', run: () => moveCursor(c => c < 0 ? Infinity : c - lineStep(), false) },
+    { g: 'Sélection', k: 'ArrowRight', t: 'Élément suivant', run: () => moveCursor(c => c + 1, false) },
+    { g: 'Sélection', k: 'ArrowLeft', t: 'Élément précédent', run: () => moveCursor(c => c < 0 ? Infinity : c - 1, false) },
+    { g: 'Sélection', k: 'Shift+ArrowDown', t: 'Étendre la sélection vers le bas', run: () => moveCursor(c => c + lineStep(), true) },
+    { g: 'Sélection', k: 'Shift+ArrowUp', t: 'Étendre la sélection vers le haut', run: () => moveCursor(c => c < 0 ? Infinity : c - lineStep(), true) },
+    { g: 'Sélection', k: 'Shift+ArrowRight', t: 'Étendre la sélection au suivant', run: () => moveCursor(c => c + 1, true) },
+    { g: 'Sélection', k: 'Shift+ArrowLeft', t: 'Étendre la sélection au précédent', run: () => moveCursor(c => c < 0 ? Infinity : c - 1, true) },
     { g: 'Sélection', k: 'Home', t: 'Premier élément', run: () => moveCursor(() => 0, false) },
     { g: 'Sélection', k: 'End', t: 'Dernier élément', run: () => moveCursor(() => Infinity, false) },
     { g: 'Sélection', k: 'Shift+Home', t: "Sélectionner jusqu'au premier", run: () => moveCursor(() => 0, true) },
@@ -62,6 +66,11 @@
     { g: 'Fichiers', k: 'Ctrl+Shift+C', t: 'Copier le chemin', run: copyPath },
     { g: 'Fichiers', k: 'Ctrl+Shift+N', t: 'Nouveau dossier', run: newFolder },
     { g: 'Fichiers', k: 'Shift+F10', t: "Menu complet de Windows (Plus d'options)", run: () => { const s = selected(), t = T(); const paths = s.length ? s.map(pathOf) : (t.path && !t.search ? [t.path] : []); if (paths.length) post({ cmd: 'fs.shellmenu', paths, shift: false }); } },
+    { g: 'Affichage', k: 'Ctrl+Shift+1', t: 'Grandes icônes', run: () => setView('icons-l') },
+    { g: 'Affichage', k: 'Ctrl+Shift+2', t: 'Icônes moyennes', run: () => setView('icons-m') },
+    { g: 'Affichage', k: 'Ctrl+Shift+3', t: 'Petites icônes', run: () => setView('icons-s') },
+    { g: 'Affichage', k: 'Ctrl+Shift+5', t: 'Liste', run: () => setView('list') },
+    { g: 'Affichage', k: 'Ctrl+Shift+6', t: 'Détails', run: () => setView('details') },
     { g: 'Affichage', k: 'Ctrl+H', t: 'Éléments cachés', run: toggleHidden },
     { g: 'Affichage', k: 'Ctrl+J', t: 'Fenêtre des transferts', run: () => post({ cmd: 'fs.showxfers' }) },
     { g: 'Affichage', k: 'Alt+P', t: "Volet d'aperçu", run: () => { if (typeof setPreview === 'function') setPreview(!pvOn); } },

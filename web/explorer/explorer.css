@@ -68,3 +68,15 @@
   .sbar select.text-input { flex: none; height: 24px; }
   #bSearch.on { background: #2a2a2a; box-shadow: var(--bevel-down); }
   .fr .rd { margin-left: 10px; color: var(--faint); font-style: normal; }
+  /* vues (lot 6) : chaque élément est posé à sa place dans un conteneur de la hauteur de la liste ; en-têtes de groupe ; cases des vues en icônes */
+  #files .lay { position: relative; }
+  #files .lay .fr { position: absolute; left: 0; right: 0; box-sizing: border-box; }
+  #files .grp { position: absolute; left: 0; right: 0; height: 24px; line-height: 22px; padding: 0 8px; color: var(--a-edge); border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fr.li { grid-template-columns: minmax(80px, 1fr); }
+  .fr.fc { right: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px 4px; border: 0; border-left: 0; text-align: center; }
+  .fr.fc .ic { position: relative; flex: none; display: grid; place-items: center; }
+  .fr.fc .ic img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; image-rendering: auto; }
+  .fr.fc .nm { display: block; width: 100%; padding: 0 2px; white-space: normal; overflow: hidden; text-overflow: ellipsis; line-height: 16px; max-height: 32px; overflow-wrap: anywhere; }
+  .fr.fc .nm span { display: inline; }
+  .fr.fc.sel { box-shadow: inset 0 0 0 1px var(--row-sel-ring); }
+  #files[data-view^="icons"] { padding: 3px; }

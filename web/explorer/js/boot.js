@@ -3,7 +3,7 @@
   CdxFrame.init();
   CdxSplit.init({ pane: $('side'), side: 'left', key: 'explorateur-dossiers', min: 140, max: 520 });    // la barre entre les dossiers et le contenu
   CdxSplit.init({ pane: $('pv'), side: 'right', key: 'explorateur-apercu', min: 200, max: 800 });       // la barre entre le contenu et l'aperçu
-  CdxColumns.init({ head: $('lhead'), cols: ['1fr', 170, 170, 90], key: 'explorateur' });   // colonnes redimensionnables (double-clic sur une poignée : largeurs d'origine)   // barre de titre, boutons et bords : cdx-frame.js (la barre se double-clique pour agrandir)
+  initColumns();   // l'en-tête des colonnes (views.js) : « Nom » et les colonnes non masquées, redimensionnables (cdx-columns.js)   // colonnes redimensionnables (double-clic sur une poignée : largeurs d'origine)   // barre de titre, boutons et bords : cdx-frame.js (la barre se double-clique pour agrandir)
 
   // ---------------- démarrage ----------------
   if (hasHost) { post({ cmd: 'fs.settings.get' }); post({ cmd: 'fs.places' }); post({ cmd: 'fs.menudata' }); }

@@ -10,6 +10,9 @@
   function prefetchOpenWith() { const t = T(); if (!t || t.sel.size !== 1) return; const it = byName(t).get([...t.sel][0]); if (it && !it.d && !it.drive) askOpenWith('.' + extOf(it.b ?? it.n)); }
 
   const viewItems = () => [
+    ['Vue', null, { sub: viewMenuItems }],
+    ['Grouper par', null, { sub: groupMenuItems }],
+    ['Colonnes', null, { sub: colMenuItems }], null,
     ['Éléments cachés', () => setSetting('show.hidden', settings['show.hidden'] !== true), { check: settings['show.hidden'] === true, key: 'Ctrl+H' }],
     ['Extensions des fichiers', () => setSetting('show.ext', !showExt()), { check: showExt() }], null,
     ['Fenêtre des transferts', () => post({ cmd: 'fs.showxfers' }), { key: 'Ctrl+J' }],
@@ -60,6 +63,7 @@
     if (inTrash()) return trashItemMenu(s);
     const one = s.length === 1, it = s[0], paths = s.map(pathOf), ext = one && !it.d && !it.drive ? '.' + extOf(it.b ?? it.n) : null;
     const out = [['Ouvrir', () => open(it), { icon: 'dossier', key: 'Entrée', disabled: !one }]];
+    if (one && it.drive && (it.kind === 'amovible' || it.kind === 'cdrom')) out.push(['Éjecter', () => ejectDrive(it.p), { icon: 'disque' }]);
     if (t.search && one) out.push(["Ouvrir l'emplacement du dossier", () => showInFolder(it)]);
     if (ext) out.push(['Ouvrir avec', null, { sub: () => openWithItems(it, ext) }]);
     if (one && it.d) out.push(['Ouvrir dans un nouvel onglet', () => addTab(pathOf(it))], ['Ouvrir dans une nouvelle fenêtre', () => post({ cmd: 'fs.newwindow', path: pathOf(it) })]);

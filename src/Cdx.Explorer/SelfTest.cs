@@ -165,6 +165,11 @@ static class SelfTest
             var st = ShellData.SendTo();
             Check("Envoyer vers : la liste se lit sans exception, chaque élément a un nom et un chemin qui existe", st.All(s => s.Name.Length > 0 && (File.Exists(s.Path) || Directory.Exists(s.Path))));
             Check("Envoyer vers : un chemin qui n'est pas dans la liste est refusé (jamais un chemin quelconque)", ShellData.SendToTarget(cible) == (null, null) && ShellData.SendToTarget(lnk) == (null, null) && ShellData.SendToTarget(null) == (null, null));
+            // --- réseau et amovibles (lot 5) ---
+            Check("racine d'un serveur reconnue (\\\\srv, \\\\srv\\), pas un partage ni un disque", Fs.IsServerRoot(@"\\srv") && Fs.IsServerRoot(@"\\srv\") && !Fs.IsServerRoot(@"\\srv\part") && !Fs.IsServerRoot(@"C:\") && !Fs.IsServerRoot(@"\\?\C:\") && !Fs.IsServerRoot(""));
+            Check("chaque disque a un type (fixe, amovible, reseau, cdrom) et un nom qui finit par sa lettre", DriveInfo.GetDrives().Where(d => { try { return d.IsReady; } catch { return false; } }).All(d => { var (k, n) = Fs.DriveKind(d); return k is "fixe" or "amovible" or "reseau" or "cdrom" && n.EndsWith("(" + d.Name.TrimEnd('\\') + ")"); }));
+            Check("éjecter : un disque fixe, un chemin ou rien sont refusés avec une raison, sans exception", Fs.Eject(@"C:\") == "Ce disque n'est pas amovible." && Fs.Eject(@"C:\Windows") == "Ce n'est pas un disque." && Fs.Eject(null) == "Ce n'est pas un disque.");
+            Check("partages de la machine : lisibles sans exception, aucun partage caché en $ dans la liste", Fs.ListShares(@"\\" + Environment.MachineName, "t") is { } shares && (shares.GetType().GetProperty("error") == null || shares.GetType().GetProperty("items") == null) && !(JsonSerializer.Serialize(shares).Contains("$\"")));
             var wt = ShellData.TerminalCommand(@"C:\Mes Dossiers\x", true); var cm = ShellData.TerminalCommand(@"C:\Mes Dossiers\x", false);
             Check("Terminal : Windows Terminal reçoit -d et le dossier ; sinon cmd /k cd /d", wt.exe == "wt.exe" && wt.args.SequenceEqual(new[] { "-d", @"C:\Mes Dossiers\x" }) && wt.shell && cm.exe == "cmd.exe" && cm.args[0] == "/k" && cm.args[1].Contains("cd /d \"C:\\Mes Dossiers\\x\"") && !cm.shell);
 
