@@ -16,15 +16,19 @@ sealed class PinStore
     readonly string file;
     public List<Pin> Items { get; private set; }
     readonly List<string> barOrder = new();   // cibles des épingles de la barre, de gauche à droite
+    // Les épingles par défaut déjà proposées : une nouvelle application de la suite (Notes…) est ajoutée une fois aux tuiles, puis plus jamais (on peut la retirer).
+    readonly HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+    static readonly string[] Legacy = { "kdx:explorer", "ms-settings:", "wt.exe", "chrome.exe", "kdx:navigateur", "kdx:repos", "calc.exe", "notepad.exe", "shell:My Pictures" };   // les neuf d'origine
 
     public static readonly Pin[] Defaults =
     {
         new("Explorateur", "kdx:explorer", "dossier", true, true), new("Paramètres", "ms-settings:", "reglages", true, true), new("Terminal", "wt.exe", "console", true, true),
         new("Chrome", "chrome.exe", "serveur", true, true), new("Navigateur KDX", "kdx:navigateur", "kirc", true, true), new("Dépôts", "kdx:repos", "liste", false, true),
         new("Calculatrice", "calc.exe", "apps", false, true), new("Bloc-notes", "notepad.exe", "journal", false, true), new("Images", "shell:My Pictures", "image", false, true),
+        new("Notes", "kdx:notes", "carnet", false, true), new("Terminal KDX", "kdx:terminal", "console", false, true),
     };
 
-    public PinStore(string file) { this.file = file; SetItems(Defaults.ToList()); Load(); }
+    public PinStore(string file) { this.file = file; SetItems(Defaults.ToList()); foreach (var d in Defaults) seen.Add(d.Target); Load(); }
 
     static readonly Regex BareExe = new(@"^[A-Za-z0-9_.\-]+\.(exe|msc|cpl)$", RegexOptions.IgnoreCase);
 
@@ -80,8 +84,16 @@ sealed class PinStore
                 if (list.Count >= Max) break;
             }
             SetItems(list, idx);
+            // une application ajoutée à la suite depuis la dernière écriture du fichier : sa tuile est proposée une fois
+            bool hasSeen = root.TryGetProperty("seen", out var sv) && sv.ValueKind == JsonValueKind.Array;
+            seen.Clear();
+            if (hasSeen) { foreach (var x in sv.EnumerateArray()) if (x.ValueKind == JsonValueKind.String) seen.Add(x.GetString()); }
+            else foreach (var t in Legacy) seen.Add(t);
+            bool added = false;
+            foreach (var dflt in Defaults) if (!seen.Contains(dflt.Target)) { seen.Add(dflt.Target); if (Find(dflt.Target) == null && Items.Count < Max) { Items.Add(dflt with { Bar = false }); added = true; } }
+            if (added || !hasSeen) Save();
         }
-        catch (Exception ex) { Host.Log("épingles illisibles, valeurs par défaut : " + ex.Message); SetItems(Defaults.ToList()); }
+        catch (Exception ex) { Host.Log("épingles illisibles, valeurs par défaut : " + ex.Message); SetItems(Defaults.ToList()); seen.Clear(); foreach (var d in Defaults) seen.Add(d.Target); }
     }
 
     void Save()
@@ -90,7 +102,7 @@ sealed class PinStore
         {
             var tmp = file + ".tmp";
             var pins = Items.Select(p => new { name = p.Name, target = p.Target, ic = p.Ic, bar = p.Bar, tile = p.Tile, barIndex = p.Bar ? barOrder.FindIndex(t => Same(t, p.Target)) : -1 });
-            File.WriteAllText(tmp, JsonSerializer.Serialize(new { version = 1, pins }, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+            File.WriteAllText(tmp, JsonSerializer.Serialize(new { version = 1, seen = seen.ToArray(), pins }, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
             File.Move(tmp, file, true);
         }
         catch (Exception ex) { Host.Log("épingles : écriture échouée : " + ex.Message); }
@@ -151,3 +163,5 @@ sealed class PinStore
         Save(); return true;
     }
 }
+
+

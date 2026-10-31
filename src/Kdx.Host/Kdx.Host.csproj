@@ -19,6 +19,9 @@
     <InternalsVisibleTo Include="kdx-browser" />
     <InternalsVisibleTo Include="kdx-repos" />
     <InternalsVisibleTo Include="kdx-transfers" />
+    <InternalsVisibleTo Include="kdx-notes" />
+    <InternalsVisibleTo Include="kdx-terminal" />
   </ItemGroup>
 
 </Project>
+

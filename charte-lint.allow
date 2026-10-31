@@ -1,0 +1,5 @@
+# Exceptions justifiées de charte-lint : règle<TAB>fragment du fichier<TAB>fragment de la ligne<TAB>raison. Aucune exception sans raison.
+# Un « # » en début de ligne commente. « * » vaut pour toute règle.
+*	terminal/vendor/		xterm.js 6.0.0, addon-fit 0.11.0 et addon-webgl 0.19.0 (licence MIT, copiés tels quels, LICENSE-xterm.txt) : code tiers qui dessine la grille du terminal. Ses écarts de charte sont corrigés par terminal.css et terminal.js : ombres de la barre de défilement masquées, barre à la charte, aucun gras (fontWeightBold normal)
+size	terminal/terminal.js	fontSize: 14	La taille est bien 14 px ; la ligne est signalée à cause de lineHeight: 1 (interligne égal à la hauteur de la case de 14 px), nécessaire pour que les caractères de cadre ┌─┐│└┘ se touchent d'une ligne à l'autre
+weight	terminal/terminal.css	@font-face	Déclaration « font-weight: 100 900 » de la police pixel, comme celle de fonts.css : une police bitmap n'a qu'une graisse, la plage empêche le navigateur de fabriquer un faux gras (CHARTE.md §3)

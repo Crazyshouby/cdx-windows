@@ -254,9 +254,27 @@ static class ShellData
         return File.Exists(Path.Combine(local, "Microsoft", "WindowsApps", "wt.exe"));
     }
 
+    // Le terminal KDX d'abord : un onglet dans ce dossier s'il tourne déjà (message « open-path » du bus), sinon on le lance sur ce dossier. Absent, Windows Terminal puis cmd.
+    static bool OpenKdxTerminal(string dir)
+    {
+        try
+        {
+            if (Bus.Send("terminal", "open-path", new { path = dir }, "explorer")) return true;
+            string exe = Path.Combine(AppContext.BaseDirectory, "kdx-terminal.exe");
+            if (!File.Exists(exe)) exe = Suite.AppPath("terminal");
+            if (exe == null) return false;
+            var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) };
+            psi.ArgumentList.Add(dir);
+            Process.Start(psi);
+            return true;
+        }
+        catch (Exception ex) { Host.Log("terminal KDX : " + ex.Message); return false; }
+    }
+
     public static void OpenTerminal(string dir)
     {
         if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
+        if (OpenKdxTerminal(dir)) return;
         var (exe, args, shell) = TerminalCommand(dir, HasWindowsTerminal());
         var psi = new ProcessStartInfo(exe) { UseShellExecute = shell, WorkingDirectory = dir };
         if (shell) psi.Arguments = string.Join(" ", args.Select(a => a.Contains(' ') ? "\"" + a + "\"" : a));   // l'alias wt.exe se lance par le shell, qui prend une ligne d'arguments

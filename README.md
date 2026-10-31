@@ -15,8 +15,9 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 | `bin\kdx-explorer.exe [--theme t] [dossier]` | l'Explorateur : une fenêtre par dossier ouvert, s'arrête avec la dernière ; **glisser-déposer** (voir ci-dessous) | une (un second lancement ouvre une fenêtre dans la première) | `journal-explorer.log` |
 | `bin\kdx-browser.exe [--theme t] [adresse]` | le navigateur à onglets | une (un second lancement ouvre un onglet) | `journal-browser.log`, profil `navigateur\` |
 | `bin\kdx-repos.exe [--theme t]` | **Dépôts** : tous les projets git du PC (ce qui reste à enregistrer ou à envoyer sur GitHub), en lecture seule | une (un second lancement passe devant) | `journal-repos.log`, `repos.json` (dossiers explorés, projets masqués) |
+| `bin\kdx-terminal.exe [--theme t] [dossier]` | **Terminal** : un shell (PowerShell 7 s'il est installé, sinon Windows PowerShell) dans une fenêtre de la charte : cadre KDX, fond noir, texte à la couleur d'accent, aucun coin arrondi. Pseudo-console Windows (ConPTY) côté C#, xterm.js dans la page. **Onglets** (Ctrl+Maj+T / W, Ctrl+Tab, Ctrl+Alt+1..9), **volets** côte à côte ou l'un sous l'autre (Alt+Maj+D, menu clic droit, séparateurs déplaçables, Alt+flèches), un shell par volet ; police pixel à chasse fixe de la charte (KIRC Pixel Mono, case de 7 px), texte dessiné par WebGL. Lancé avec un dossier (ou, s'il tourne déjà, un second lancement) : un onglet dans ce dossier. **Win+T** l'ouvre depuis le shell ; la tuile « Terminal KDX » du menu Démarrer le lance ; « Ouvrir dans un terminal » de l'Explorateur l'utilise (Windows Terminal puis cmd en repli) | une (un second lancement passe devant) | `journal-terminal.log` |
 
-Le shell lance les autres (`kdx:explorer`, `kdx:navigateur`, `kdx:repos`, Win+E) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
+Le shell lance les autres (`kdx:explorer`, `kdx:navigateur`, `kdx:repos`, `kdx:terminal`, Win+E, Win+T) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
 Toutes les données sont dans `%LOCALAPPDATA%\KdxShell\`.
 
 ## Organisation
@@ -28,6 +29,8 @@ src\Kdx.Shell\      kdx-shell : Program.cs (barre, Démarrer, centre, Alt+Tab, c
 src\Kdx.Explorer\   kdx-explorer : Fs.cs (fichiers), ExplorerForm.cs
 src\Kdx.Browser\    kdx-browser : Browser.cs (onglets, favoris, historique, téléchargements)
 src\Kdx.Repos\      kdx-repos : Git.cs (recherche et lecture de git, jamais d'écriture), ReposApp.cs
+src\Kdx.Terminal\   kdx-terminal : ConPty.cs (la pseudo-console : lancer le shell, faire passer les octets, redimensionner), TerminalApp.cs (fenêtre, une session par volet, messages de la page, presse-papiers)
+web\terminal\       la page du terminal (terminal.html, terminal.css, terminal.js : onglets, arbre de volets) ; fonts\ = KIRC Pixel Mono (générée par kdx-ui\gen\gen_font_mono.py, copie à refaire si la police change) ; vendor\ = xterm.js 6.0.0, addon-fit 0.11.0 et addon-webgl 0.19.0 (MIT, copiés tels quels ; exceptions du lint dans charte-lint.allow)
 web\kdx\            la charte (copie exacte de kdx-ui/dist : node tools/charte-sync.mjs --write kdx-windows) et host.js, le pont des pages
 web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
 couche1\            le cadre des fenêtres de Windows aux couleurs de la charte (DWM), réversible
@@ -36,7 +39,7 @@ tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, re
 
 ## Essais (aucune entrée simulée)
 
-- Auto-tests, sans fenêtre visible : `kdx-explorer --selftest-fs`, `--selftest-web` ; `kdx-shell --selftest-sys`, `--selftest-audio` ; `kdx-browser --selftest-browser` ; `kdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables).
+- Auto-tests, sans fenêtre visible : `kdx-explorer --selftest-fs`, `--selftest-web` ; `kdx-shell --selftest-sys`, `--selftest-audio` ; `kdx-browser --selftest-browser` ; `kdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables) ; `kdx-terminal --selftest-pty` (10 vérifications de la pseudo-console : sortie, code de sortie, UTF-8, redimensionnement, arrêt) ; `tests\terminal.ps1 -Bin <dossier>` (43 vérifications dans la vraie fenêtre isolée : shells, police et WebGL, couleurs de la charte, accent, onglets, volets, raccourcis, redimensionnement, titre, fermeture, dossier de départ, et avec `-ExplorerBin` l'Explorateur qui ouvre un onglet puis relance le terminal).
   Résultats dans `%LOCALAPPDATA%\KdxShell\selftest*.txt`.
 - Canal de contrôle : si `%LOCALAPPDATA%\KdxShell\debug.txt` existe au lancement, chaque programme ouvre un tube réservé à l'utilisateur courant
   (`kdx.shell.ctl`, `kdx.explorer.ctl`, `kdx.browser.ctl`, `kdx.repos.ctl`) pour lire son état et exécuter du JavaScript dans ses pages. `tests\navigateur.ps1` et

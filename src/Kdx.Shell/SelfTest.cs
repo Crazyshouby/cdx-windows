@@ -205,7 +205,7 @@ static class SelfTest
         try
         {
             var s = new PinStore(file);
-            Check("fichier absent : 9 épingles par défaut, 5 dans la barre", s.Items.Count == 9 && s.OnBar.Count == 5 && s.Items.All(p => p.Tile));
+            Check("fichier absent : 11 épingles par défaut (dont Notes et Terminal KDX), 5 dans la barre", s.Items.Count == 11 && s.OnBar.Count == 5 && s.Items.All(p => p.Tile));
             Check("la barre commence par l'Explorateur et finit par le Navigateur KDX", s.OnBar[0].Target == "kdx:explorer" && s.OnBar[^1].Target == "kdx:navigateur");
 
             Check("ajout d'un fichier existant", s.AddToBar("Essai", exe) && s.OnBar.Count == 6 && s.OnBar[^1].Target == exe);
@@ -256,14 +256,24 @@ static class SelfTest
 
             File.WriteAllText(file, "{{{ abîmé");
             var s3 = new PinStore(file);
-            Check("fichier abîmé : valeurs par défaut, aucune exception", s3.Items.Count == 9 && s3.OnBar.Count == 5);
+            Check("fichier abîmé : valeurs par défaut, aucune exception", s3.Items.Count == 11 && s3.OnBar.Count == 5);
             File.WriteAllText(file, "{\"version\":2,\"pins\":[]}");
-            Check("version inconnue : valeurs par défaut", new PinStore(file).Items.Count == 9);
-            File.WriteAllText(file, "{\"version\":1,\"pins\":[{\"name\":\"Bon\",\"target\":\"kdx:repos\",\"bar\":true,\"tile\":false},{\"name\":\"Mauvais\",\"target\":\"C:\\\\nexiste\\\\pas.exe\",\"bar\":true},{\"name\":\"Doublon\",\"target\":\"KDX:REPOS\",\"bar\":true},{\"name\":\"Rien\",\"target\":\"kdx:explorer\"},42]}");
+            Check("version inconnue : valeurs par défaut", new PinStore(file).Items.Count == 11);
+            string allSeen = "\"seen\":[" + string.Join(",", PinStore.Defaults.Select(d => "\"" + d.Target + "\"")) + "],";   // toutes les épingles par défaut déjà proposées : rien à ajouter
+            File.WriteAllText(file, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Bon\",\"target\":\"kdx:repos\",\"bar\":true,\"tile\":false},{\"name\":\"Mauvais\",\"target\":\"C:\\\\nexiste\\\\pas.exe\",\"bar\":true},{\"name\":\"Doublon\",\"target\":\"KDX:REPOS\",\"bar\":true},{\"name\":\"Rien\",\"target\":\"kdx:explorer\"},42]}");
             var s4 = new PinStore(file);
             Check("lecture tolérante : l'entrée valide seule est gardée (cible inexistante, doublon, ni barre ni tuile, élément inattendu écartés)", s4.Items.Count == 1 && s4.Items[0].Name == "Bon" && s4.Items[0].Bar && !s4.Items[0].Tile);
-            File.WriteAllText(file, "{\"version\":1,\"pins\":[]}");
+            File.WriteAllText(file, "{\"version\":1," + allSeen + "\"pins\":[]}");
             Check("liste vide enregistrée : elle reste vide (pas de retour aux valeurs par défaut)", new PinStore(file).Items.Count == 0);
+
+            // une nouvelle application de la suite (Notes) : sa tuile est proposée une fois aux fichiers déjà écrits, sans rien changer d'autre
+            string legacy = Path.Combine(dir, "ancien.json");
+            File.WriteAllText(legacy, "{\"version\":1,\"pins\":[{\"name\":\"Explorateur\",\"target\":\"kdx:explorer\",\"ic\":\"dossier\",\"bar\":true,\"tile\":true,\"barIndex\":0},{\"name\":\"Calculatrice\",\"target\":\"calc.exe\",\"ic\":\"apps\",\"bar\":false,\"tile\":true,\"barIndex\":-1}]}");
+            var lg = new PinStore(legacy);
+            Check("ancien fichier (sans « seen ») : seules les tuiles Notes et Terminal KDX sont ajoutées (hors barre), les neuf d'origine ne reviennent pas", lg.Items.Select(p => p.Target).SequenceEqual(new[] { "kdx:explorer", "calc.exe", "kdx:notes", "kdx:terminal" }) && lg.Find("kdx:notes") is { Tile: true, Bar: false } && lg.Find("kdx:terminal") is { Tile: true, Bar: false } && lg.OnBar.Count == 1);
+            Check("la migration est écrite : « seen » contient kdx:notes, une relecture ne la refait pas", File.ReadAllText(legacy).Contains("\"seen\"") && File.ReadAllText(legacy).Contains("kdx:notes") && File.ReadAllText(legacy).Contains("kdx:terminal") && new PinStore(legacy).Items.Count == 4);
+            File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Explorateur\",\"target\":\"kdx:explorer\",\"bar\":true,\"tile\":true,\"barIndex\":0}]}");
+            Check("tuile Notes retirée par l'utilisateur (déjà dans « seen ») : elle ne revient pas", new PinStore(legacy).Items.Count == 1);
 
             var big = new PinStore(Path.Combine(dir, "grand.json")); big.Items.Clear();
             int added = 0; for (int i = 0; i < PinStore.Max + 5; i++) if (big.AddToBar("App" + i, "kdx:app" + i)) added++;
@@ -485,3 +495,4 @@ static class SelfTest
         Environment.ExitCode = bad == 0 ? 0 : 1;
     }
 }
+

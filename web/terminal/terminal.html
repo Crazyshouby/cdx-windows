@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>KDX — Terminal</title>
+<link rel="stylesheet" href="/kdx/fonts.css">
+<link rel="stylesheet" href="/kdx/kdx-ui.css">
+<link rel="stylesheet" href="/kdx/themes.css">
+<link rel="stylesheet" href="/kdx/kdx-frame.css">
+<link rel="stylesheet" href="/kdx/page.css">
+<link rel="stylesheet" href="/terminal/vendor/xterm.css">
+<link rel="stylesheet" href="/terminal/terminal.css">
+<script src="/kdx/icons.js"></script>
+<script src="/kdx/kdx-bridge.js"></script>
+<script src="/kdx/kdx-frame.js"></script>
+<script src="/kdx/host.js"></script>
+<script src="/terminal/vendor/xterm.js"></script>
+<script src="/terminal/vendor/addon-fit.js"></script>
+<script src="/terminal/vendor/addon-webgl.js"></script>
+</head>
+<body>
+<div class="win active" id="win">
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Terminal</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="cb">
+    <div class="stage" id="stage"></div>
+  </div>
+</div>
+<i class="rz l" data-e="10"></i><i class="rz r" data-e="11"></i><i class="rz t" data-e="12"></i><i class="rz tl" data-e="13"></i><i class="rz tr" data-e="14"></i><i class="rz b" data-e="15"></i><i class="rz bl" data-e="16"></i><i class="rz br" data-e="17"></i>
+<script src="/terminal/terminal.js"></script>
+</body>
+</html>

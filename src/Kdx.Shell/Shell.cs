@@ -77,7 +77,7 @@ class Shell : IHostApp
         Bus.Listen("shell", OnBus);
         Suite.RegisterApp("shell", Environment.ProcessPath);
         // Les deux autres programmes sont posés à côté du shell : leur chemin est enregistré même s'ils n'ont pas encore tourné (ou si apps.json garde un ancien dossier).
-        foreach (var other in new[] { "explorer", "browser", "repos", "transfers" }) { var exe = Path.Combine(AppContext.BaseDirectory, "kdx-" + other + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other, exe); }
+        foreach (var other in new[] { "explorer", "browser", "repos", "transfers", "notes" }) { var exe = Path.Combine(AppContext.BaseDirectory, "kdx-" + other + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other, exe); }
         if (!pinnedTheme) suiteWatch = Suite.Watch(theme, a => { theme = a; foreach (var f in new HostForm[] { Bar, Start, Center, Switch, AudioMenu, BarMenu }) f.Send(new { type = "theme", value = a }); Host.Log("accent de la suite : " + a); });
         StartTray();
         Host.Log($"shell prêt : thème {theme}, échelle {scale}, racine {root}");
@@ -183,6 +183,7 @@ class Shell : IHostApp
                         {
                             winOther = true;
                             if (vk == 0x45 /* E */) { winHandled = true; Bar.BeginInvoke(new Action(() => { Host.Log("Win+E : Explorateur KDX"); Launch("kdx:explorer"); })); return (IntPtr)1; }
+                            if (vk == 0x54 /* T */) { winHandled = true; Bar.BeginInvoke(new Action(() => { Host.Log("Win+T : Terminal KDX"); Launch("kdx:terminal"); })); return (IntPtr)1; }   // la touche T de Windows fait défiler les boutons de sa barre : sans objet ici
                         }
                         else if (vk == 0x09 /* Tab */ && (altDown || (k.flags & 0x20 /* LLKHF_ALTDOWN */) != 0) && (N.GetAsyncKeyState(0x11) & 0x8000) == 0)
                         {
@@ -589,6 +590,8 @@ class Shell : IHostApp
     {
         if (target.StartsWith("kdx:navigateur")) { StartApp("kdx-browser.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
         if (target.StartsWith("kdx:repos")) { StartApp("kdx-repos.exe", null); return; }
+        if (target.StartsWith("kdx:terminal")) { StartApp("kdx-terminal.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
+        if (target.StartsWith("kdx:notes")) { StartApp("kdx-notes.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
         if (target.StartsWith("kdx:explorer")) { StartApp("kdx-explorer.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
         try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); Host.Log("lancé : " + target); }
         catch (Exception ex) { Host.Log($"lancement de {target} échoué : {ex.Message}"); }
@@ -691,3 +694,4 @@ class Shell : IHostApp
     }
 
 }
+
