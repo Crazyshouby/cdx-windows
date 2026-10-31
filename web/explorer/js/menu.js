@@ -11,7 +11,8 @@
 
   const viewItems = () => [
     ['Éléments cachés', () => setSetting('show.hidden', settings['show.hidden'] !== true), { check: settings['show.hidden'] === true, key: 'Ctrl+H' }],
-    ['Extensions des fichiers', () => setSetting('show.ext', !showExt()), { check: showExt() }],
+    ['Extensions des fichiers', () => setSetting('show.ext', !showExt()), { check: showExt() }], null,
+    ['Fenêtre des transferts', () => post({ cmd: 'fs.showxfers' }), { key: 'Ctrl+J' }],
   ];
   const SORTS = [['n', 'Nom'], ['m', 'Date de modification'], ['t', 'Type'], ['s', 'Taille']];
   const sortItems = () => { const t = T(); return [

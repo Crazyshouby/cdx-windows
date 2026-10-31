@@ -154,9 +154,12 @@ static class Fs
     // sans fenêtre parente, peuvent rester cachées derrière les autres, et bloquent le fil d'interface pendant le glisser-déposer.
     public sealed record TransferResult(string Error, List<string> Conflicts, List<(string src, string dst)> Done = null);
 
-    public static TransferResult Transfer(IEnumerable<string> sources, string dir, bool move, string onConflict = null)
+    // Ce qu'un transfert va faire, une fois les conflits réglés : chaque élément avec sa destination. `Error` : refusé d'avance ; `Conflicts` : des noms pris, il faut une consigne.
+    sealed record TransferPlan(List<PlanItem> Items, bool Move, string Dir, string Error, List<string> Conflicts);
+
+    static TransferPlan Plan(IEnumerable<string> sources, string dir, bool move, string onConflict)
     {
-        if (string.IsNullOrEmpty(dir) || dir.Length > 520 || !Path.IsPathRooted(dir) || !Directory.Exists(dir)) return new("Dossier de destination introuvable.", null);
+        if (string.IsNullOrEmpty(dir) || dir.Length > 520 || !Path.IsPathRooted(dir) || !Directory.Exists(dir)) return new(null, move, dir, "Dossier de destination introuvable.", null);
         string dirN = dir.TrimEnd('\\');
         var items = new List<(string src, bool isDir, string name, bool sameDir)>();
         foreach (var raw in sources)
@@ -166,14 +169,14 @@ static class Fs
             if (!isDir && !File.Exists(src)) continue;
             string name = Path.GetFileName(src);
             if (name.Length == 0) continue;   // la racine d'un disque ne se déplace pas
-            if (isDir && (string.Equals(src, dirN, StringComparison.OrdinalIgnoreCase) || dirN.StartsWith(src + "\\", StringComparison.OrdinalIgnoreCase))) return new("Impossible de placer un dossier dans lui-même.", null);
+            if (isDir && (string.Equals(src, dirN, StringComparison.OrdinalIgnoreCase) || dirN.StartsWith(src + "\\", StringComparison.OrdinalIgnoreCase))) return new(null, move, dir, "Impossible de placer un dossier dans lui-même.", null);
             bool sameDir = string.Equals(Path.GetDirectoryName(src), dirN, StringComparison.OrdinalIgnoreCase);
             if (move && sameDir) continue;
             items.Add((src, isDir, name, sameDir));
         }
         var conflicts = items.Where(i => !i.sameDir && Path.Exists(Path.Combine(dir, i.name))).Select(i => i.name).ToList();
-        if (conflicts.Count > 0 && onConflict == null) return new(null, conflicts);
-        var done = new List<(string src, string dst)>();   // ce qui a vraiment été fait : de quoi défaire (Annuler)
+        if (conflicts.Count > 0 && onConflict == null) return new(null, move, dir, null, conflicts);
+        var plan = new List<PlanItem>();
         foreach (var (src, isDir, name, sameDir) in items)
         {
             string dst = Path.Combine(dir, name); bool exists = !sameDir && Path.Exists(dst), overwrite = false;
@@ -183,16 +186,79 @@ static class Fs
                 if (onConflict == "skip") continue;
                 if (onConflict == "keep") dst = UniquePath(dir, name); else overwrite = onConflict == "replace";
             }
-            if (overwrite)   // sans boîte de dialogue : le choix est déjà fait
-            {
-                if (move) { if (isDir) FileSystem.MoveDirectory(src, dst, true); else FileSystem.MoveFile(src, dst, true); }
-                else { if (isDir) FileSystem.CopyDirectory(src, dst, true); else FileSystem.CopyFile(src, dst, true); }
-            }
-            else if (move) { if (isDir) FileSystem.MoveDirectory(src, dst, UIOption.AllDialogs); else FileSystem.MoveFile(src, dst, UIOption.AllDialogs); }
-            else { if (isDir) FileSystem.CopyDirectory(src, dst, UIOption.AllDialogs); else FileSystem.CopyFile(src, dst, UIOption.AllDialogs); }
-            done.Add((src, dst));
+            plan.Add(new PlanItem(src, isDir, dst, overwrite));
         }
-        return new(null, null, done);
+        return new(plan, move, dir, null, null);
+    }
+
+    static TransferResult ResultOf(CopyOutcome o)
+    {
+        string err = o.Errors.Count == 0 ? null : o.Errors[0] + (o.Errors.Count > 1 ? " (et " + (o.Errors.Count - 1) + " autre" + (o.Errors.Count > 2 ? "s" : "") + ")" : "");
+        return new(err, null, o.Done);
+    }
+
+    public static TransferResult Transfer(IEnumerable<string> sources, string dir, bool move, string onConflict = null)
+    {
+        var p = Plan(sources, dir, move, onConflict);
+        if (p.Error != null || p.Conflicts != null) return new(p.Error, p.Conflicts);
+        return ResultOf(Copier.Run(p.Items, p.Move, null));
+    }
+
+    // La file de tâches de fond (posée par le programme : sans elle, par exemple dans l'auto-test, les transferts se font sur place) et la question « cette fenêtre existe-t-elle encore ? ».
+    internal static JobQueue Queue;
+    internal static Func<IntPtr, bool> WindowAlive = _ => true;
+
+    // Le « 3 éléments » ou le nom d'un seul, pour intituler un transfert.
+    static string TitleOf(List<PlanItem> items) => items.Count == 1 ? Path.GetFileName(items[0].Src) : items.Count + " éléments";
+    static string FolderLabel(string p) { string n = Path.GetFileName(p.TrimEnd('\\')); return string.IsNullOrEmpty(n) ? p : n; }
+
+    // Le transfert d'une fenêtre : conflits d'abord (la page demande), puis, si la file existe, en tâche de fond (le résultat revient par `send` quand c'est fini) ; sinon sur place.
+    // `afterOk` : à faire une fois le transfert réussi (vider le presse-papiers après un « couper »).
+    static void RunTransfer(IntPtr owner, Action<object> send, IEnumerable<string> sources, string dir, bool move, string onConflict, string tab, Action afterOk = null)
+    {
+        var list = sources.ToList(); var p = Plan(list, dir, move, onConflict);
+        if (p.Error != null || p.Conflicts != null) { send(Outcome(new(p.Error, p.Conflicts), tab, list, dir, move)); return; }
+        if (p.Items.Count == 0) { send(new { type = "fs.done", tab }); return; }
+        if (Queue == null)
+        {
+            var res = ResultOf(Copier.Run(p.Items, move, null)); RecordTransfer(owner, send, res, move); if (res.Error == null) afterOk?.Invoke(); send(Outcome(res, tab, list, dir, move));
+            return;
+        }
+        var ctx = SynchronizationContext.Current;
+        void Finish(Job j)   // hors du fil d'interface : le retour à la page s'y fait par le contexte de synchronisation
+        {
+            void Back()
+            {
+                if (!WindowAlive(owner)) return;
+                if (j.Tag is TransferResult r) RecordTransfer(owner, send, r, move);
+                if (j.State == JobState.Done) afterOk?.Invoke();
+                send(new { type = "fs.done", tab, error = j.State == JobState.Failed ? j.Error : null });
+            }
+            if (ctx != null) ctx.Post(_ => Back(), null); else Back();
+        }
+        Job Start(TransferPlan q, string from)
+        {
+            string parent = Path.GetDirectoryName(q.Items[0].Src);
+            return Queue.Enqueue(move ? "move" : "copy", TitleOf(q.Items), job =>
+            {
+                var o = Copier.Run(q.Items, move, job);
+                var r = ResultOf(o); job.Tag = r; job.Failed.AddRange(o.Failed);
+                if (o.Canceled) throw new OperationCanceledException();
+                if (r.Error != null) throw new IOException(r.Error);
+            }, Finish, j =>
+            {
+                j.Items = q.Items.Count; j.To = FolderLabel(dir); j.Path = q.Items[0].Dst;
+                j.From = from ?? (q.Items.All(i => Path.GetDirectoryName(i.Src) == parent) ? FolderLabel(parent) : "plusieurs dossiers");
+                // « Réessayer » : seulement ce qui a échoué, en remplaçant ce qu'une copie interrompue aurait laissé à moitié
+                j.Retry = () =>
+                {
+                    var again = j.Failed.Distinct().ToList(); if (again.Count == 0) return null;
+                    var q2 = Plan(again, dir, move, "replace"); if (q2.Error != null || q2.Items.Count == 0) return null;
+                    return Start(q2, j.From);
+                };
+            });
+        }
+        Start(p, null);
     }
 
     // Inscrit dans la pile « Annuler » de la fenêtre ce qu'un transfert a fait (déplacement ou copie), et dit à la page ce qu'on peut annuler.
@@ -231,7 +297,7 @@ static class Fs
     {
         var list = (paths ?? Array.Empty<string>()).ToList();
         bool move = shift || (!ctrl && SameVolume(list, dir));
-        try { var res = Transfer(list, dir, move); RecordTransfer(owner, send, res, move); send(Outcome(res, tab, list, dir, move)); }
+        try { RunTransfer(owner, send, list, dir, move, null, tab); }
         catch (OperationCanceledException) { send(new { type = "fs.done", tab }); }
         catch (Exception ex) { Host.Log("explorateur : dépôt de fichiers a échoué : " + ex.Message); send(new { type = "fs.done", tab, error = ex.Message }); }
     }
@@ -258,7 +324,7 @@ static class Fs
                 case "fs.sendto":
                     {
                         var (sdir, sexe) = ShellData.SendToTarget(Str("item")); var ps = Paths();
-                        if (sdir != null) { var res = Transfer(ps, sdir, false); RecordTransfer(owner, send, res, false); send(Outcome(res, tab, ps, sdir, false)); }   // une copie, avec la boîte « Éléments existants » si un nom est pris
+                        if (sdir != null) RunTransfer(owner, send, ps, sdir, false, null, tab);   // une copie ; si un nom est pris, la page demande
                         else if (sexe != null) ShellData.RunProgramOn(sexe, ps);
                         else send(new { type = "fs.done", tab, error = "Destination introuvable." });
                         break;
@@ -312,8 +378,22 @@ static class Fs
                         break;
                     }
                 case "fs.deleteperm":   // Maj+Suppr, après confirmation dans la page : pas de corbeille, pas d'annulation
-                    send(new { type = "fs.done", tab, error = Recycle.DeletePermanently(Paths()) });
-                    break;
+                    {
+                        var ps = Paths();
+                        if (Queue == null) { send(new { type = "fs.done", tab, error = Recycle.DeletePermanently(ps) }); break; }
+                        var ctx = SynchronizationContext.Current; string first = ps.FirstOrDefault(x => !string.IsNullOrEmpty(x));
+                        if (first == null) { send(new { type = "fs.done", tab }); break; }
+                        Queue.Enqueue("delete", ps.Length == 1 ? Path.GetFileName(first.TrimEnd('\\')) : ps.Length + " éléments", job =>
+                        {
+                            string e = Copier.DeleteMany(ps, job);
+                            if (e != null) throw new IOException(e);
+                        }, j =>
+                        {
+                            void Back() { if (WindowAlive(owner)) send(new { type = "fs.done", tab, error = j.State == JobState.Failed ? j.Error : null }); }
+                            if (ctx != null) ctx.Post(_ => Back(), null); else Back();
+                        }, j => { j.Items = ps.Length; j.From = FolderLabel(Path.GetDirectoryName(first.TrimEnd('\\')) ?? first); j.Path = Path.GetDirectoryName(first.TrimEnd('\\')); });
+                        break;
+                    }
                 case "fs.restore":   // depuis la corbeille : chaque élément retrouve sa place (jamais d'écrasement)
                     {
                         var back = new List<string>(); var errs = new List<string>();
@@ -338,17 +418,14 @@ static class Fs
                     {
                         var (files, cut) = ClipboardFiles(); string pdir = Str("dir");
                         if (files.Count == 0) { send(new { type = "fs.done", tab }); break; }
-                        var res = Transfer(files, pdir, cut); RecordTransfer(owner, send, res, cut);
-                        if (cut && res.Conflicts == null && res.Error == null) Clipboard.Clear();
-                        send(Outcome(res, tab, files, pdir, cut));
+                        RunTransfer(owner, send, files, pdir, cut, null, tab, cut ? () => Clipboard.Clear() : null);
                         break;
                     }
                 case "fs.drop":
                     {
                         bool mv = r.TryGetProperty("move", out var mvv) && mvv.ValueKind == JsonValueKind.True;
                         var ps = Paths(); string dir = Str("dir");
-                        var res = Transfer(ps, dir, mv, Str("conflict")); RecordTransfer(owner, send, res, mv);
-                        send(Outcome(res, tab, ps, dir, mv));
+                        RunTransfer(owner, send, ps, dir, mv, Str("conflict"), tab);
                         break;
                     }
             }

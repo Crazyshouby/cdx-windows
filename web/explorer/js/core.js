@@ -33,4 +33,12 @@
   // Un message de la barre d'état qui survit quelques secondes aux relectures de la liste (qui réécrivent sinon « n sélectionnés »).
   let flash = null;
   const say = text => { flash = { text, until: Date.now() + 6000 }; $('st2').textContent = text; };
+  // Un transfert en arrière-plan : la barre d'état dit où il en est (la fenêtre « Transferts » a le détail).
+  const JOB_WORD = { copy: 'Copie', move: 'Déplacement', delete: 'Suppression' };
+  handlers['fs.job'] = m => {
+    const j = m.job; if (!j || !JOB_WORD[j.kind]) return;
+    if (j.state === 'running' || j.state === 'paused') say(JOB_WORD[j.kind] + ' de ' + j.title + (j.state === 'paused' ? ' en pause' : j.total > 0 ? ' : ' + Math.min(100, Math.floor(j.done * 100 / j.total)) + ' %' : '…'));
+    else if (j.state === 'done') say(JOB_WORD[j.kind] + ' terminée : ' + j.title);
+    else if (j.state === 'canceled') say(JOB_WORD[j.kind] + ' annulée : ' + j.title);
+  };
   handlers['fs.undone'] = m => { say(m.error ? 'Impossible ' + (m.redo ? 'de rétablir' : "d'annuler") + ' : ' + m.error : (m.redo ? 'Rétabli' : 'Annulé') + ' : ' + m.label); $('orb').className = m.error ? 'orb red' : 'orb green'; };

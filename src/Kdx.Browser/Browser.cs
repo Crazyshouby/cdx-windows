@@ -16,6 +16,9 @@ class DownloadItem
     public bool Announced;   // la fin du téléchargement a déjà été annoncée au shell
     public int Id; public string Name = "", Path = "", Url = "", State = "progress"; public long Received, Total;
     public CoreWebView2DownloadOperation Op;
+    public bool Paused, Canceled;            // pour la fenêtre des transferts (la page interne du navigateur ne connaît que progress · done · error)
+    public double Speed; public DateTime Tick = DateTime.UtcNow; public long TickBytes;
+    public DateTime Started = DateTime.UtcNow;
     public object Info() => new { id = Id, name = Name, path = Path, url = Url, state = State, received = Received, total = Total };
 }
 
@@ -48,6 +51,35 @@ static class BrowserData
         SaveHistory();
     }
     public static int NextDownloadId() => ++dlSeq;
+
+    // Ce que la fenêtre « Transferts » voit d'un téléchargement.
+    public static XferInfo XferOf(DownloadItem d)
+    {
+        string site = ""; try { site = new Uri(d.Url).Host; } catch { }
+        string st = d.State == "done" ? "done" : d.State == "error" ? (d.Canceled ? "canceled" : "failed") : d.Paused ? "paused" : "running";
+        return new XferInfo
+        {
+            Id = d.Id, Kind = "download", Title = d.Name, State = st, From = site, To = "Téléchargements", Path = d.Path, Done = d.Received, Total = Math.Max(d.Total, 0), Speed = st == "running" ? d.Speed : 0,
+            Error = st == "failed" ? "Le téléchargement a été interrompu." : null, CanPause = d.Op != null && (st == "running" || st == "paused"),
+        };
+    }
+
+    // Les ordres de la fenêtre : pause, reprise, annulation (sur le fil d'interface).
+    public static bool Control(int id, string action)
+    {
+        var d = Downloads.FirstOrDefault(x => x.Id == id); var op = d?.Op; if (op == null) return false;
+        try
+        {
+            switch (action)
+            {
+                case "pause": if (d.State == "progress" && !d.Paused) { op.Pause(); return true; } return false;
+                case "resume": if (d.Paused && op.CanResume) { op.Resume(); return true; } return false;
+                case "cancel": if (d.State == "progress") { op.Cancel(); return true; } return false;
+            }
+        }
+        catch (Exception ex) { Host.Log("téléchargement : " + action + " : " + ex.Message); }
+        return false;
+    }
 }
 
 class BrowserTab
@@ -314,13 +346,22 @@ class BrowserForm : HostForm
         var op = e.DownloadOperation;
         var d = new DownloadItem { Id = BrowserData.NextDownloadId(), Name = Path.GetFileName(path), Path = path, Url = op.Uri, Total = op.TotalBytesToReceive.HasValue ? (long)op.TotalBytesToReceive.Value : -1, Op = op };
         BrowserData.Downloads.Insert(0, d);
-        op.BytesReceivedChanged += (s, a) => { d.Received = op.BytesReceived; d.Total = op.TotalBytesToReceive.HasValue ? (long)op.TotalBytesToReceive.Value : -1; PushDownloads(); };
+        op.BytesReceivedChanged += (s, a) =>
+        {
+            d.Received = op.BytesReceived; d.Total = op.TotalBytesToReceive.HasValue ? (long)op.TotalBytesToReceive.Value : -1;
+            double dt = (DateTime.UtcNow - d.Tick).TotalSeconds;
+            if (dt >= 0.5) { double inst = (d.Received - d.TickBytes) / dt; d.Speed = d.Speed <= 0 ? inst : d.Speed * 0.7 + inst * 0.3; d.Tick = DateTime.UtcNow; d.TickBytes = d.Received; }
+            PushDownloads(); Xfer.Publish(BrowserData.XferOf(d));
+        };
         op.StateChanged += (s, a) =>
         {
-            d.State = op.State == CoreWebView2DownloadState.Completed ? "done" : op.State == CoreWebView2DownloadState.Interrupted ? "error" : "progress";
-            bool finished = d.State != "progress" && !d.Announced; if (finished) d.Announced = true;
+            var why = op.State == CoreWebView2DownloadState.Interrupted ? op.InterruptReason : CoreWebView2DownloadInterruptReason.None;
+            d.Paused = why == CoreWebView2DownloadInterruptReason.UserPaused; d.Canceled = why == CoreWebView2DownloadInterruptReason.UserCanceled;
+            d.State = op.State == CoreWebView2DownloadState.Completed ? "done" : op.State == CoreWebView2DownloadState.Interrupted ? (d.Paused ? "progress" : "error") : "progress";
+            if (d.State != "progress") d.Speed = 0;
+            bool finished = d.State != "progress" && !d.Canceled && !d.Announced; if (finished) d.Announced = true;
             if (d.State == "done") { try { d.Received = new FileInfo(d.Path).Length; if (d.Total < 0) d.Total = d.Received; } catch { } }   // un petit fichier n'émet parfois aucun avis de progression
-            PushDownloads();
+            PushDownloads(); Xfer.Publish(BrowserData.XferOf(d));
             // La barre du shell garde la trace (SUITE.md §3.1) : « Téléchargement terminé » ou « échoué ».
             if (finished) { string nm = d.Name, st = d.State; _ = Task.Run(() => Bus.Send("shell", "notify", new { title = st == "done" ? "Téléchargement terminé" : "Téléchargement échoué", text = nm, level = st == "done" ? "info" : "warn" }, "browser")); }
         };
@@ -390,6 +431,7 @@ class BrowserForm : HostForm
             case "br.devtools": c?.OpenDevToolsWindow(); break;
             case "br.fullscreen": SetFullscreen(!fullscreen); break;
             case "br.internal": OpenInternal(Str("p")); break;
+            case "in.xfers": Xfer.Show(); break;
             case "br.focus": active?.Web.Focus(); break;
             case "br.findOpen": findOpen = true; break;
             case "br.findClose": CloseFind(); break;

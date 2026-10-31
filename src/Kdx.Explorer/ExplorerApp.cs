@@ -25,7 +25,38 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
         _ = Anchor.Handle;
         if (theme == null) watch = Suite.Watch(this.theme, a => { this.theme = a; foreach (var w in windows.ToArray()) w.Send(new { type = "theme", value = a }); });
         side = new SideButtons(() => windows.ToArray());
-        Jobs.Changed += j => Anchor.BeginInvoke(new Action(() => Broadcast(new { type = "fs.job", job = JobInfo(j) })));
+        Jobs.Changed += j => { Xfer.Publish(XferOf(j)); Anchor.BeginInvoke(new Action(() => { Broadcast(new { type = "fs.job", job = JobInfo(j) }); ExitWhenIdle(); })); };
+        Fs.Queue = Jobs; Fs.WindowAlive = h => windows.Any(w => !w.IsDisposed && w.Handle == h);
+        Xfer.Active = () => Jobs.Snapshot().Where(j => j.State is JobState.Queued or JobState.Running or JobState.Paused).Select(XferOf).ToList();
+        Xfer.Control = (id, action) =>
+        {
+            var j = Jobs.Get(id); if (j == null) return false;
+            switch (action)
+            {
+                case "pause": return Jobs.Pause(id) || j.State == JobState.Paused;
+                case "resume": return Jobs.Resume(id) || j.State == JobState.Running;
+                case "cancel": return Jobs.Cancel(id) || j.State == JobState.Canceled;
+                case "retry": { var again = j.State is JobState.Failed or JobState.Canceled ? j.Retry?.Invoke() : null; return again != null; }
+            }
+            return false;
+        };
+    }
+
+    // Ce que la fenêtre des transferts voit d'une tâche (copie, déplacement, suppression).
+    static XferInfo XferOf(Job j) => new()
+    {
+        Id = j.Id, Kind = j.Kind, Title = j.Title, State = j.State.ToString().ToLowerInvariant(), Done = j.Done, Total = j.Total, Speed = j.Speed, Current = j.Current, Error = j.Error,
+        From = j.From, To = j.To, Path = j.Path, Items = j.Items, CanPause = j.Kind is "copy" or "move" or "delete", CanRetry = j.Retry != null && j.Failed.Count > 0,
+    };
+
+    // Sans fenêtre, le programme reste tant qu'un transfert est en cours (fermer la dernière fenêtre n'interrompt pas une copie), puis s'arrête un instant après la dernière annonce.
+    System.Windows.Forms.Timer exitTimer;
+    void ExitWhenIdle()
+    {
+        if (windows.Count > 0 || Jobs.Busy || exitTimer != null || Closing) return;
+        exitTimer = new System.Windows.Forms.Timer { Interval = 2500 };
+        exitTimer.Tick += (s, e) => { exitTimer.Dispose(); exitTimer = null; if (windows.Count == 0 && !Jobs.Busy) ExitThread(); };
+        exitTimer.Start();
     }
 
     static object JobInfo(Job j) => new { id = j.Id, kind = j.Kind, title = j.Title, state = j.State.ToString().ToLowerInvariant(), done = j.Done, total = j.Total, speed = j.Speed, current = j.Current, error = j.Error };
@@ -85,7 +116,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             env ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview-explorer"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
             var f = new ExplorerForm(this);
             windows.Add(f);
-            var hnd = f.Handle; f.FormClosed += (s, e) => { Undo.Forget(hnd); CancelLists(f); windows.Remove(f); if (windows.Count == 0) ExitThread(); };
+            var hnd = f.Handle; f.FormClosed += (s, e) => { Undo.Forget(hnd); CancelLists(f); windows.Remove(f); if (windows.Count == 0) { if (Jobs.Busy) Host.Log("explorateur : dernière fenêtre fermée, un transfert continue"); else ExitThread(); } };
             double scale = f.DeviceDpi / 96.0;
             int off = (count++ % 6) * 28;
             f.Bounds = new Rectangle(160 + off, 70 + off, (int)(1180 * scale), (int)(720 * scale));
@@ -99,6 +130,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
     // Les messages du bus (SUITE.md §3.2) : open-path { path? } et select { path }. Chaque champ est validé ; un chemin qui n'existe pas est refusé.
     public bool OnBus(string type, string from, JsonElement data)
     {
+        if (Xfer.OnBus(type, data)) return true;
         static bool Rooted(JsonElement d, out string p)
         {
             p = d.TryGetProperty("path", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
@@ -214,6 +246,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
                 if (r.TryGetProperty("id", out var jid) && jid.TryGetInt32(out int id)) { if (cmd == "fs.job.pause") Jobs.Pause(id); else if (cmd == "fs.job.resume") Jobs.Resume(id); else Jobs.Cancel(id); }
                 return;
             }
+            if (cmd == "fs.showxfers") { Xfer.Show(); return; }
             if (cmd.StartsWith("fs.")) { Fs.Handle(from.Handle, from.Send, cmd, r); return; }
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             if (Host.CommonMessage(from, cmd, r)) return;

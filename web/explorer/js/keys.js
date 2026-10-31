@@ -63,6 +63,7 @@
     { g: 'Fichiers', k: 'Ctrl+Shift+N', t: 'Nouveau dossier', run: newFolder },
     { g: 'Fichiers', k: 'Shift+F10', t: "Menu complet de Windows (Plus d'options)", run: () => { const s = selected(), t = T(); const paths = s.length ? s.map(pathOf) : (t.path && !t.search ? [t.path] : []); if (paths.length) post({ cmd: 'fs.shellmenu', paths, shift: false }); } },
     { g: 'Affichage', k: 'Ctrl+H', t: 'Éléments cachés', run: toggleHidden },
+    { g: 'Affichage', k: 'Ctrl+J', t: 'Fenêtre des transferts', run: () => post({ cmd: 'fs.showxfers' }) },
     { g: 'Affichage', k: 'Alt+P', t: "Volet d'aperçu", run: () => { if (typeof setPreview === 'function') setPreview(!pvOn); } },
     { g: 'Affichage', k: 'F1|Ctrl+/', t: 'Raccourcis clavier', run: () => keyHelp() },
   ];

@@ -25,6 +25,8 @@ sealed class BrowserApp : ApplicationContext, IHostApp
         _ = Anchor.Handle;
         if (theme == null) watch = Suite.Watch(this.theme, a => { this.theme = a; browser?.SetTheme(a); });
         side = new SideButtons(() => browser != null && !browser.IsDisposed ? new HostForm[] { browser } : Array.Empty<HostForm>());
+        Xfer.Active = () => BrowserData.Downloads.Where(d => d.State == "progress").Select(BrowserData.XferOf).ToList();
+        Xfer.Control = BrowserData.Control;
     }
 
     protected override void ExitThreadCore() { Closing = true; watch?.Dispose(); side.Dispose(); base.ExitThreadCore(); }
@@ -72,6 +74,7 @@ sealed class BrowserApp : ApplicationContext, IHostApp
     // Les messages du bus (SUITE.md §3.3) : open-url { url } (http ou https seulement) et open-file { path }.
     public bool OnBus(string type, string from, JsonElement data)
     {
+        if (Xfer.OnBus(type, data)) return true;
         if (type == "open-file")
         {
             // un fichier local que le navigateur sait afficher (page web, PDF, image, texte, son, vidéo) : chemin absolu d'un fichier qui existe

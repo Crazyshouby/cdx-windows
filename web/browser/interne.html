@@ -76,11 +76,12 @@
     },
     telechargements() {
       const d = data.downloads;
-      $('app').innerHTML = `<h1>Téléchargements</h1>` + (d.length ? `<div class="row"><span style="flex:1"></span><button class="btn" id="dc">Effacer la liste</button></div><div class="list">${d.map(x => {
+      $('app').innerHTML = `<h1>Téléchargements</h1>` + (d.length ? `<div class="row"><span style="flex:1"></span><button class="btn" id="dx" title="Copies, déplacements et téléchargements, au même endroit">Fenêtre des transferts</button><button class="btn" id="dc">Effacer la liste</button></div><div class="list">${d.map(x => {
         const pct = x.total > 0 ? Math.min(100, Math.round(100 * x.received / x.total)) : 0;
         return `<div class="ri" data-noopen><div><div class="t">${esc(x.name)}</div>${x.state === 'progress' ? `<div class="gauge"><i style="width:${pct}%"></i></div><div class="u">${size(x.received)}${x.total > 0 ? ' sur ' + size(x.total) + ' (' + pct + ' %)' : ''}</div>` : `<div class="u">${x.state === 'done' ? 'Terminé · ' + size(x.total > 0 ? x.total : x.received) : 'Interrompu'} · ${esc(x.path)}</div>`}</div>
           <div class="acts">${x.state === 'done' ? `<button class="btn" data-open="${x.id}">Ouvrir</button><button class="btn" data-rev="${x.id}">Dossier</button>` : x.state === 'progress' ? `<button class="btn" data-cancel="${x.id}">Annuler</button>` : ''}</div></div>`; }).join('')}</div>` : '<div class="empty">Aucun téléchargement.</div>');
       if ($('dc')) $('dc').onclick = () => post({ cmd: 'in.dl.clear' });
+      if ($('dx')) $('dx').onclick = () => post({ cmd: 'in.xfers' });
     },
   };
   const render = () => (views[page] || views.newtab)();

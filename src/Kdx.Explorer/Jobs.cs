@@ -19,6 +19,12 @@ sealed class Job
     public string Error { get; internal set; }
     public double Speed { get; private set; }    // octets par seconde, lissé
     public DateTime Started { get; internal set; }
+    public string From, To, Path;                // d'où, vers où, et ce que « Ouvrir » désigne (pour la fenêtre des transferts)
+    public int Items;                            // éléments de premier niveau
+    public List<string> Failed = new();          // ceux qui n'ont pas pu être traités : de quoi réessayer
+    public object Tag;                           // le résultat du travail, pour celui qui l'a demandé
+    public Func<Job> Retry;                      // remet les éléments en échec dans la file ; rend la nouvelle tâche
+    internal Action<Job> Finished;               // appelé à la fin (réussie, annulée ou en échec), hors du fil d'interface
     public CancellationToken Token => cts.Token;
     internal readonly CancellationTokenSource cts = new();
     readonly ManualResetEventSlim gate = new(true);   // levé : on avance ; baissé : en pause
@@ -41,6 +47,9 @@ sealed class Job
     // À appeler aux points d'arrêt possibles : bloque pendant une pause, lève OperationCanceledException si la tâche est annulée.
     public void WaitIfPaused() { gate.Wait(cts.Token); Token.ThrowIfCancellationRequested(); }
 
+    // La même attente pour un rappel natif (où une exception ne doit pas traverser) : bloque pendant une pause, rend true si la tâche est annulée.
+    public bool WaitPaused() { try { gate.Wait(cts.Token); } catch (OperationCanceledException) { } return Token.IsCancellationRequested; }
+
     internal void SetPaused(bool paused) { if (paused) gate.Reset(); else gate.Set(); }
     internal void ResetClock() { lastTick = DateTime.UtcNow; lastDone = Done; }
 }
@@ -56,12 +65,13 @@ sealed class JobQueue
     public IReadOnlyList<Job> Snapshot() { lock (lk) return jobs.ToList(); }
 
     // Met une tâche en file ; elle part quand les précédentes ont fini. Rend la tâche (son Id sert à la piloter).
-    public Job Enqueue(string kind, string title, JobBody body)
+    public Job Enqueue(string kind, string title, JobBody body, Action<Job> finished = null, Action<Job> setup = null)
     {
         Job j;
         lock (lk)
         {
-            j = new Job { Id = nextId++, Kind = kind, Title = title, Body = body, Notify = Fire };
+            j = new Job { Id = nextId++, Kind = kind, Title = title, Body = body, Notify = Fire, Finished = finished };
+            setup?.Invoke(j);
             jobs.Add(j); waiting.Enqueue(j);
             if (!running) { running = true; Task.Run(Pump); }
         }
@@ -83,8 +93,13 @@ sealed class JobQueue
             catch (OperationCanceledException) { j.State = JobState.Canceled; }
             catch (Exception ex) { j.State = JobState.Failed; j.Error = ex.Message; Host.Log("tâche " + j.Id + " (" + j.Kind + ") : " + ex.Message); }
             Fire(j);
+            try { j.Finished?.Invoke(j); } catch (Exception ex) { Host.Log("tâche " + j.Id + " : fin : " + ex.Message); }
         }
     }
+
+    public bool Busy { get { lock (lk) return jobs.Any(j => j.State is JobState.Queued or JobState.Running or JobState.Paused); } }
+
+    public Job Get(int id) => Find(id);
 
     Job Find(int id) { lock (lk) return jobs.FirstOrDefault(j => j.Id == id); }
 

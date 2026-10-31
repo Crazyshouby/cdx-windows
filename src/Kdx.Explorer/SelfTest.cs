@@ -283,6 +283,112 @@ static class SelfTest
             Recycle.Purge(Recycle.List().Where(x => x.Original.StartsWith(dir, StringComparison.OrdinalIgnoreCase)).Select(x => x.Id));
             Check("corbeille : plus rien de l'essai dans la corbeille", !Recycle.List().Any(x => x.Original.StartsWith(dir, StringComparison.OrdinalIgnoreCase)));
 
+            // --- moteur de copie : pas de boîte Windows, progression, pause, annulation sans reste, erreurs par fichier ---
+            string cp = Path.Combine(dir, "moteur"); Directory.CreateDirectory(cp);
+            void MakeBig(string path, int mb) { using var fsb = new FileStream(path, FileMode.Create); fsb.SetLength((long)mb << 20); fsb.Position = 0; fsb.WriteByte(7); fsb.Position = ((long)mb << 20) - 1; fsb.WriteByte(9); }
+            string Sha(string path) { using var h = System.Security.Cryptography.SHA256.Create(); using var s = File.OpenRead(path); return Convert.ToHexString(h.ComputeHash(s)); }
+            bool WaitFor(Func<bool> f, int ms) { var sw = Stopwatch.StartNew(); while (sw.ElapsedMilliseconds < ms) { if (f()) return true; Thread.Sleep(15); } return f(); }
+            string srcDir = Path.Combine(cp, "src"), dstDir = Path.Combine(cp, "dst"); Directory.CreateDirectory(srcDir); Directory.CreateDirectory(dstDir);
+            string tree = Path.Combine(srcDir, "arbre"); Directory.CreateDirectory(Path.Combine(tree, "vide")); Directory.CreateDirectory(Path.Combine(tree, "n1", "n2"));
+            File.WriteAllText(Path.Combine(tree, "racine.txt"), "à la racine"); File.WriteAllText(Path.Combine(tree, "n1", "n2", "profond é.txt"), "profond");
+            File.SetAttributes(Path.Combine(tree, "racine.txt"), FileAttributes.ReadOnly); var tracine = new DateTime(2020, 5, 17, 12, 30, 0, DateTimeKind.Utc); File.SetLastWriteTimeUtc(Path.Combine(tree, "racine.txt"), tracine);
+            var rc = Fs.Transfer(new[] { tree }, dstDir, false);
+            Check("moteur : copier un dossier recrée l'arborescence (dossier vide compris), le contenu, l'horodatage ; l'original reste intact", rc.Error == null && Directory.Exists(Path.Combine(dstDir, "arbre", "vide")) && File.ReadAllText(Path.Combine(dstDir, "arbre", "n1", "n2", "profond é.txt")) == "profond"
+                && File.GetLastWriteTimeUtc(Path.Combine(dstDir, "arbre", "racine.txt")) == tracine && File.Exists(Path.Combine(tree, "racine.txt")) && rc.Done.Count == 1);
+            File.SetAttributes(Path.Combine(tree, "racine.txt"), FileAttributes.Normal);
+            File.WriteAllText(Path.Combine(tree, "racine.txt"), "changé"); File.SetAttributes(Path.Combine(dstDir, "arbre", "racine.txt"), FileAttributes.ReadOnly);
+            var rr = Fs.Transfer(new[] { tree }, dstDir, false, "replace");
+            Check("moteur : « remplacer » écrase aussi un fichier en lecture seule et fusionne le dossier", rr.Error == null && File.ReadAllText(Path.Combine(dstDir, "arbre", "racine.txt")) == "changé" && File.Exists(Path.Combine(dstDir, "arbre", "n1", "n2", "profond é.txt")));
+            var rk = Fs.Transfer(new[] { tree }, dstDir, false, "keep");
+            Check("moteur : « garder les deux » crée « arbre (2) » à côté, sans toucher au premier", rk.Error == null && Directory.Exists(Path.Combine(dstDir, "arbre (2)", "n1")) && File.ReadAllText(Path.Combine(dstDir, "arbre", "racine.txt")) == "changé");
+            string mv = Path.Combine(srcDir, "a-deplacer"); Directory.CreateDirectory(mv); File.WriteAllText(Path.Combine(mv, "x.txt"), "x");
+            var rm = Fs.Transfer(new[] { mv }, dstDir, true);
+            Check("moteur : déplacer sur le même disque renomme (le dossier arrive avec son contenu, l'original disparaît)", rm.Error == null && !Directory.Exists(mv) && File.ReadAllText(Path.Combine(dstDir, "a-deplacer", "x.txt")) == "x" && rm.Done[0].src == mv);
+            // chemin très long (plus de 260 caractères)
+            string deep = srcDir; for (int k = 0; k < 6; k++) deep = Path.Combine(deep, new string('d', 50) + k);
+            Directory.CreateDirectory(Copier.Long(deep)); File.WriteAllText(Copier.Long(Path.Combine(deep, "profond.txt")), "très long");
+            var rl = Fs.Transfer(new[] { Path.Combine(srcDir, new string('d', 50) + "0") }, dstDir, false);
+            string deepDst = dstDir; for (int k = 0; k < 6; k++) deepDst = Path.Combine(deepDst, new string('d', 50) + k);
+            Check("moteur : un chemin de plus de 260 caractères se copie (préfixe « \\\\?\\ »)", rl.Error == null && deepDst.Length > 260 && File.Exists(Copier.Long(Path.Combine(deepDst, "profond.txt"))));
+            Copier.DeleteTree(Path.Combine(srcDir, new string('d', 50) + "0")); Copier.DeleteTree(Path.Combine(dstDir, new string('d', 50) + "0"));
+
+            // progression, pause, reprise : une copie de 64 Mo dans la file, arrêtée par un point d'accroche au premier méga-octet
+            var mq = new JobQueue(); string mbig = Path.Combine(srcDir, "gros.bin"); MakeBig(mbig, 64); string bigDst = Path.Combine(dstDir, "gros.bin");
+            using (var mgate = new ManualResetEventSlim(false))
+            {
+                Job pj = null; CopyOutcome po = null;
+                Copier.TestHook = (name, x) => { if (name == "gros.bin" && x >= (1 << 20) && !mgate.IsSet) { pj.SetPaused(true); mgate.Set(); } };
+                var plan = new List<PlanItem> { new PlanItem(mbig, false, bigDst, false) };
+                pj = mq.Enqueue("copy", "gros.bin", job => { pj = job; po = Copier.Run(plan, false, job); });
+                bool hit = mgate.Wait(15000); Thread.Sleep(400); long md1 = pj.Done; Thread.Sleep(400); long md2 = pj.Done;
+                Check("pause : la copie s'arrête au méga-octet demandé et n'avance plus tant qu'on ne la reprend pas", hit && md1 == md2 && md2 < (64L << 20) && pj.Total == (64L << 20) && pj.State == JobState.Running);
+                bool paused = mq.Pause(pj.Id) && pj.State == JobState.Paused; bool resumed = mq.Resume(pj.Id) && pj.State == JobState.Running;
+                Check("pause : la file annonce la tâche « en pause » puis « en cours » à la reprise", paused && resumed);
+                Check("reprise : la copie se termine, le fichier est identique à l'original (même empreinte)", WaitFor(() => pj.State == JobState.Done, 20000) && File.Exists(bigDst) && Sha(mbig) == Sha(bigDst) && po.Done.Count == 1 && pj.Done == pj.Total);
+                Copier.TestHook = null;
+            }
+            File.Delete(bigDst);
+
+            // annulation en plein fichier : rien de moitié copié
+            using (var mgate = new ManualResetEventSlim(false))
+            {
+                Job cj = null; CopyOutcome co = null;
+                Copier.TestHook = (name, x) => { if (name == "gros.bin" && x >= (1 << 20) && !mgate.IsSet) { cj.SetPaused(true); mgate.Set(); } };
+                var plan = new List<PlanItem> { new PlanItem(mbig, false, bigDst, false) };
+                cj = mq.Enqueue("copy", "gros.bin", job => { cj = job; co = Copier.Run(plan, false, job); });
+                bool hit = mgate.Wait(15000); mq.Cancel(cj.Id);
+                Check("annulation en plein fichier : la tâche est « annulée », la copie partielle est effacée, l'original est intact, rien n'est inscrit pour « Annuler »", hit && WaitFor(() => cj.State == JobState.Canceled, 15000) && !File.Exists(bigDst) && File.Exists(mbig) && co != null && co.Canceled && co.Done.Count == 0);
+                Copier.TestHook = null;
+            }
+            // annulation d'un dossier : ce que l'élément avait déjà copié disparaît avec lui
+            string many = Path.Combine(srcDir, "lot"); Directory.CreateDirectory(many); foreach (var n in new[] { "f1.bin", "f2.bin", "f3.bin" }) MakeBig(Path.Combine(many, n), 4);
+            using (var mgate = new ManualResetEventSlim(false))
+            {
+                Job dj = null; CopyOutcome dout = null;
+                Copier.TestHook = (name, x) => { if (name == "f2.bin" && x >= (1 << 20) && !mgate.IsSet) { dj.SetPaused(true); mgate.Set(); } };
+                var plan = new List<PlanItem> { new PlanItem(many, true, Path.Combine(dstDir, "lot"), false) };
+                dj = mq.Enqueue("copy", "lot", job => { dj = job; dout = Copier.Run(plan, false, job); });
+                bool hit = mgate.Wait(15000); mq.Cancel(dj.Id);
+                Check("annulation d'un dossier : le dossier créé et ses fichiers déjà copiés sont retirés, l'original est intact", hit && WaitFor(() => dj.State == JobState.Canceled, 15000) && !Directory.Exists(Path.Combine(dstDir, "lot")) && Directory.GetFiles(many).Length == 3);
+                Copier.TestHook = null;
+            }
+            // un fichier verrouillé n'arrête pas les autres ; l'original d'un déplacement n'est pas effacé
+            string lk = Path.Combine(srcDir, "verrou"); Directory.CreateDirectory(lk); File.WriteAllText(Path.Combine(lk, "libre.txt"), "libre"); File.WriteAllText(Path.Combine(lk, "pris.txt"), "pris");
+            using (var hold = new FileStream(Path.Combine(lk, "pris.txt"), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                var ro = Copier.Run(new[] { new PlanItem(lk, true, Path.Combine(dstDir, "verrou"), false) }, false, null);
+                Check("erreur par fichier : le fichier verrouillé est signalé, les autres sont copiés, l'élément est dit en échec (réessayable)", ro.Errors.Count == 1 && ro.Errors[0].StartsWith("pris.txt") && File.Exists(Path.Combine(dstDir, "verrou", "libre.txt")) && ro.Failed.SequenceEqual(new[] { lk }) && ro.Done.Count == 0);
+                Directory.Delete(Path.Combine(dstDir, "verrou"), true);
+                var rv = Copier.Run(new[] { new PlanItem(lk, true, Path.Combine(dstDir, "verrou2"), false) }, true, null);
+                Check("déplacer un dossier dont un fichier est tenu ouvert échoue avec un message et laisse tout l'original en place", rv.Errors.Count == 1 && rv.Done.Count == 0 && File.Exists(Path.Combine(lk, "libre.txt")) && File.Exists(Path.Combine(lk, "pris.txt")));
+            }
+            if (Directory.Exists(Path.Combine(dstDir, "verrou2"))) Directory.Delete(Path.Combine(dstDir, "verrou2"), true);
+
+            // la même chose par les messages de la page, avec la file de tâches : fs.drop en arrière-plan, puis « réessayer »
+            Fs.Queue = new JobQueue();
+            try
+            {
+                string dq = Path.Combine(cp, "dq"); Directory.CreateDirectory(dq);
+                File.WriteAllText(Path.Combine(srcDir, "via-file.txt"), "par la file");
+                Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(Path.Combine(srcDir, "via-file.txt"))}],\"dir\":{J(dq)},\"move\":false,\"tab\":\"t\"}}");
+                Check("file de tâches : fs.drop en arrière-plan rend fs.done sans erreur et le fichier est copié", WaitFor(() => replies.Count > 0 && replies.Any(x => x.GetProperty("type").GetString() == "fs.done"), 10000) && File.ReadAllText(Path.Combine(dq, "via-file.txt")) == "par la file");
+                var qj = Fs.Queue.Snapshot().Last();
+                Check("file de tâches : la tâche porte son titre, son dossier d'origine et de destination, et finit « done »", qj.Kind == "copy" && qj.Title == "via-file.txt" && qj.From == "src" && qj.To == "dq" && qj.State == JobState.Done && qj.Path == Path.Combine(dq, "via-file.txt"));
+                Check("file de tâches : le geste est inscrit pour « Annuler » (« Copier »)", Undo.For(IntPtr.Zero).UndoLabel == "Copier");
+                string lk2 = Path.Combine(srcDir, "verrou3"); Directory.CreateDirectory(lk2); File.WriteAllText(Path.Combine(lk2, "ok.txt"), "ok"); File.WriteAllText(Path.Combine(lk2, "tenu.txt"), "tenu");
+                FileStream hold2 = new FileStream(Path.Combine(lk2, "tenu.txt"), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(lk2)}],\"dir\":{J(dq)},\"move\":false,\"tab\":\"t\"}}");
+                bool failed = WaitFor(() => replies.Any(x => x.GetProperty("type").GetString() == "fs.done" && x.TryGetProperty("error", out var ee) && ee.ValueKind == JsonValueKind.String), 10000);
+                var fj = Fs.Queue.Snapshot().Last();
+                Check("file de tâches : une copie avec un fichier verrouillé finit « échec » avec le message, et sait quoi réessayer", failed && fj.State == JobState.Failed && fj.Error.Contains("tenu.txt") && fj.Failed.Count == 1 && fj.Retry != null);
+                hold2.Dispose(); var again = fj.Retry();
+                Check("file de tâches : « réessayer » ne refait que l'élément en échec et mène la copie à terme", again != null && WaitFor(() => again.State == JobState.Done, 10000) && File.ReadAllText(Path.Combine(dq, "verrou3", "tenu.txt")) == "tenu");
+                Do($"{{\"cmd\":\"fs.deleteperm\",\"paths\":[{J(Path.Combine(dq, "verrou3"))}],\"tab\":\"t\"}}");
+                Check("file de tâches : la suppression définitive passe aussi par la file (fichier par fichier) et efface le dossier", WaitFor(() => !Directory.Exists(Path.Combine(dq, "verrou3")), 10000) && Fs.Queue.Snapshot().Last().Kind == "delete" && WaitFor(() => Fs.Queue.Snapshot().Last().State == JobState.Done, 5000));
+            }
+            finally { Fs.Queue = null; }
+            Check("suppression : la racine d'un disque et un chemin relatif sont refusés (rien n'est effacé)", Copier.DeleteMany(new[] { @"C:\", "relatif" }, null) == null && Directory.Exists(@"C:\"));
+
             // --- lecture annulable d'un dossier ---
             string big2 = Path.Combine(dir, "gros"); Directory.CreateDirectory(big2);
             for (int i = 0; i < 300; i++) File.WriteAllText(Path.Combine(big2, "f" + i + ".txt"), "x");
