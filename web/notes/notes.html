@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>KDX — Notes</title>
+<link rel="stylesheet" href="/kdx/fonts.css">
+<link rel="stylesheet" href="/kdx/kdx-ui.css">
+<link rel="stylesheet" href="/kdx/themes.css">
+<link rel="stylesheet" href="/kdx/kdx-frame.css">
+<link rel="stylesheet" href="/kdx/page.css">
+<link rel="stylesheet" href="/notes/notes.css">
+<script src="/kdx/icons.js"></script>
+<script src="/kdx/kdx-bridge.js"></script>
+<script src="/kdx/kdx-frame.js"></script>
+<script src="/kdx/kdx-split.js"></script>
+<script src="/kdx/host.js"></script>
+</head>
+<body>
+<div class="win active" id="win">
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Notes</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="cb">
+    <div class="nav">
+      <button class="btn" id="bNew" title="Nouvelle note (Ctrl+N)"><span class="pix" data-ic="editer"></span> Nouvelle note</button>
+      <button class="btn" id="bFolder" title="Nouveau dossier"><span class="pix" data-ic="dossier"></span> Nouveau dossier</button>
+      <span class="grow"></span>
+      <div class="mbar" id="modes"><button class="mb" data-m="edit" title="Édition seule">Édition</button><button class="mb" data-m="split" title="Édition et aperçu côte à côte">Double</button><button class="mb" data-m="view" title="Aperçu seul">Aperçu</button></div>
+    </div>
+    <div class="split">
+      <div class="col side" id="side">
+        <input id="filter" class="text-input" type="text" placeholder="Filtrer (#étiquette pour une étiquette)" spellcheck="false" autocomplete="off">
+        <div class="list" id="tree" tabindex="0"></div>
+      </div>
+      <div class="col main" id="main">
+        <div class="notice" id="notice" hidden></div>
+        <div class="pane" id="pane">
+          <textarea id="ed" class="text-input" spellcheck="false" placeholder="Choisis une note à gauche, ou crée-en une (Ctrl+N)."></textarea>
+          <div id="pv" class="pv"></div>
+        </div>
+      </div>
+    </div>
+    <div class="status"><span class="orb" id="orb"></span><span id="st1"></span><span class="faint" id="st2"></span><span style="margin-left:auto" id="st3"></span></div>
+  </div>
+</div>
+<i class="rz l" data-e="10"></i><i class="rz r" data-e="11"></i><i class="rz t" data-e="12"></i><i class="rz tl" data-e="13"></i><i class="rz tr" data-e="14"></i><i class="rz b" data-e="15"></i><i class="rz bl" data-e="16"></i><i class="rz br" data-e="17"></i>
+<div id="layer"></div>
+<script src="/notes/js/md.js"></script>
+<script src="/notes/js/core.js"></script>
+<script src="/notes/js/tree.js"></script>
+<script src="/notes/js/doc.js"></script>
+<script src="/notes/js/boot.js"></script>
+</body>
+</html>
