@@ -18,7 +18,10 @@ class Shell : IHostApp
     public readonly SwitcherForm Switch;
     public readonly CenterForm Center;
     public readonly AudioMenuForm AudioMenu;
+    public readonly BarMenuForm BarMenu;   // le menu contextuel d'un bouton de la barre (épingles, fenêtres), ouvert au-dessus de la barre
     public uint CallbackMsg;
+    readonly PinStore pinStore;
+    bool barMenuOpen; Action<string> barMenuAct;
 
     string theme; readonly string root;
     readonly bool pinnedTheme;   // un thème donné en argument : la suite ne le change pas
@@ -32,11 +35,13 @@ class Shell : IHostApp
     long pIdle, pKernel, pUser; int tick;
     bool audioMenuOpen; DateTime audioMenuHiddenAt = DateTime.MinValue; volatile object lastAudio;
     AudioLink audio;   // la liaison avec AudioLinker (tube « kdx.audiolinker »), si ce programme tourne
+    TrayRelay tray;    // la zone de notification : les icônes des applis, reçues à la place de la barre de Windows
 
     public Shell(string theme)
     {
         pinnedTheme = theme != null; this.theme = theme ?? Suite.ReadAccent(); root = Host.FindWebRoot();
-        Bar = new BarForm(this); Start = new StartForm(this); Switch = new SwitcherForm(this); Center = new CenterForm(this); AudioMenu = new AudioMenuForm(this);
+        Bar = new BarForm(this); Start = new StartForm(this); Switch = new SwitcherForm(this); Center = new CenterForm(this); AudioMenu = new AudioMenuForm(this); BarMenu = new BarMenuForm(this);
+        pinStore = new PinStore(Path.Combine(Host.DataDir, "epingles.json"));
         Bar.Load += async (s, e) => { try { await InitAsync(); } catch (Exception ex) { Host.Log("initialisation échouée : " + ex); } };
     }
 
@@ -63,6 +68,8 @@ class Shell : IHostApp
         await Switch.InitWebAsync(env, root, "shell/alttab.html?theme=" + theme, scale);
         _ = AudioMenu.Handle;
         await AudioMenu.InitWebAsync(env, root, "shell/audiomenu.html?theme=" + theme, scale);
+        _ = BarMenu.Handle;
+        await BarMenu.InitWebAsync(env, root, "shell/barmenu.html?theme=" + theme, scale);
 
         var timer = new System.Windows.Forms.Timer { Interval = 500 };
         timer.Tick += (s, e) => Tick();
@@ -70,9 +77,29 @@ class Shell : IHostApp
         Bus.Listen("shell", OnBus);
         Suite.RegisterApp("shell", Environment.ProcessPath);
         // Les deux autres programmes sont posés à côté du shell : leur chemin est enregistré même s'ils n'ont pas encore tourné (ou si apps.json garde un ancien dossier).
-        foreach (var other in new[] { "explorer", "browser", "repos" }) { var exe = Path.Combine(AppContext.BaseDirectory, "kdx-" + other + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other, exe); }
-        if (!pinnedTheme) suiteWatch = Suite.Watch(theme, a => { theme = a; foreach (var f in new HostForm[] { Bar, Start, Center, Switch, AudioMenu }) f.Send(new { type = "theme", value = a }); Host.Log("accent de la suite : " + a); });
+        foreach (var other in new[] { "explorer", "browser", "repos", "transfers" }) { var exe = Path.Combine(AppContext.BaseDirectory, "kdx-" + other + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other, exe); }
+        if (!pinnedTheme) suiteWatch = Suite.Watch(theme, a => { theme = a; foreach (var f in new HostForm[] { Bar, Start, Center, Switch, AudioMenu, BarMenu }) f.Send(new { type = "theme", value = a }); Host.Log("accent de la suite : " + a); });
+        StartTray();
         Host.Log($"shell prêt : thème {theme}, échelle {scale}, racine {root}");
+    }
+
+    // Fusible : un fichier %LOCALAPPDATA%\KdxShell\sans-zone.txt empêche le shell de prendre en charge la zone de notification (Windows garde la sienne).
+    void StartTray()
+    {
+        if (File.Exists(Path.Combine(Host.DataDir, "sans-zone.txt"))) { Host.Log("zone de notification désactivée par sans-zone.txt"); return; }
+        var t = new TrayRelay { OnBalloon = (title, text, exe) => AddBalloon(title, text, exe) };
+        if (!t.Create(Bar.Bounds)) return;
+        tray = t; t.Announce();
+        Host.Log("zone de notification : relais en place, applis invitées à se réinscrire");
+    }
+
+    void SendTray() => Bar.Send(new { type = "tray", items = tray?.Items() ?? new List<object>() });
+
+    // Une bulle d'une appli (NIF_INFO) devient une notification du centre rapide.
+    void AddBalloon(string title, string text, string exe)
+    {
+        if (string.IsNullOrWhiteSpace(title)) title = exe.Length > 0 ? exe : "Notification";
+        AddNotification(title.Length > 80 ? title[..80] : title, text.Length > 400 ? text[..400] : text, "info", exe);
     }
 
     void PlaceBar(ref APPBARDATA abd)
@@ -80,11 +107,17 @@ class Shell : IHostApp
         var scr = Screen.PrimaryScreen.Bounds;
         abd.uEdge = N.ABE_BOTTOM;
         abd.rc = new RECT { Left = scr.Left, Right = scr.Right, Top = scr.Bottom - barH, Bottom = scr.Bottom };
-        N.SHAppBarMessage(N.ABM_QUERYPOS, ref abd);
-        abd.rc.Top = abd.rc.Bottom - barH;
-        N.SHAppBarMessage(N.ABM_SETPOS, ref abd);
+        tray?.Suspend();   // les messages de barre d'application doivent atteindre la barre de Windows, pas le relais de la zone de notification
+        try
+        {
+            N.SHAppBarMessage(N.ABM_QUERYPOS, ref abd);
+            abd.rc.Top = abd.rc.Bottom - barH;
+            N.SHAppBarMessage(N.ABM_SETPOS, ref abd);
+        }
+        finally { tray?.Resume(); }
         Bar.Bounds = Rectangle.FromLTRB(abd.rc.Left, abd.rc.Top, abd.rc.Right, abd.rc.Bottom);
         Host.Log($"barre placée : {Bar.Bounds}");
+        tray?.Place(Bar.Bounds);
     }
 
     // ---------- crochet clavier : touche Windows, Win+E, Alt+Tab ----------
@@ -224,6 +257,7 @@ class Shell : IHostApp
     {
         if (cleaned) return; cleaned = true;
         try { audio?.Stop(); suiteWatch?.Dispose(); } catch { }
+        try { tray?.Shutdown(); } catch { }   // avant les appels de barre d'application, qui doivent atteindre la barre de Windows
         try { var abd = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = Bar.Handle }; N.SHAppBarMessage(N.ABM_REMOVE, ref abd); } catch { }
         if (kbdHook != IntPtr.Zero) { N.UnhookWindowsHookEx(kbdHook); kbdHook = IntPtr.Zero; }
         TaskbarState.Restore();
@@ -243,10 +277,19 @@ class Shell : IHostApp
             {
                 case "ready":
                     Host.Log($"page {Str("page")} prête");
-                    if (Str("page") == "bar") { Tick(); SendStats(); audio?.Refresh(); PushNotifs(); }
+                    if (Str("page") == "bar") { Tick(); SendStats(); audio?.Refresh(); PushNotifs(); SendTray(); from.Send(PinsMessage()); }
                     else if (Str("page") == "audiomenu") { if (lastAudio != null) from.Send(lastAudio); }
-                    else { from.Send(new { type = "user", name = Environment.UserName }); from.Send(new { type = "apps", items = ScanApps() }); }
+                    else if (Str("page") == "barmenu") { }
+                    else { from.Send(new { type = "user", name = Environment.UserName }); from.Send(new { type = "apps", items = ScanApps() }); from.Send(PinsMessage()); }
                     break;
+                case "pin.add": if (pinStore.AddToBar(Str("name"), Str("target"), null, Str("before"))) { Host.Log("épinglée à la barre : " + Str("name")); PushPins(); } break;
+                case "pin.reorder": if (pinStore.MoveTo(Str("target") ?? "", Str("before"))) PushPins(); break;
+                case "pin.dropfiles": PinDropped(from.DroppedPaths, Str("before")); break;
+                case "pin.addtask": PinTask(Str("h"), Str("before")); break;
+                case "pin.remove": if (pinStore.RemoveFromBar(Str("target") ?? "")) { Host.Log("retirée de la barre : " + Str("target")); PushPins(); } break;
+                case "bar.menu": OpenBarMenu(Str("kind"), Str("key") ?? "", r.TryGetProperty("x", out var bx) && bx.TryGetInt32(out var bxi) ? bxi : 0); break;
+                case "barmenu.pick": { var act = barMenuAct; HideBarMenu(); act?.Invoke(Str("id") ?? ""); break; }
+                case "hideBarMenu": HideBarMenu(); break;
                 case "alttab.pick": CommitSwitcher(new IntPtr(long.Parse(Str("h")))); break;
                 case "launch": Launch(Str("target")); break;
                 case "activate": Activate(new IntPtr(long.Parse(Str("h")))); break;
@@ -267,7 +310,7 @@ class Shell : IHostApp
                 case "vol.mute": try { SysInfo.SetMute(r.GetProperty("on").GetBoolean()); } catch (Exception ex) { Host.Log("coupure du son : " + ex.Message); } from.Send(SysInfo.Center()); break;
                 case "power": HideStart(); SysInfo.Power(Str("action")); break;
                 case "lock": N.LockWorkStation(); break;
-                case "nativeTray": RevealNativeTray(); break;
+                case "tray.click": tray?.Click(Str("k") ?? "", Str("b") ?? ""); break;
                 case "quit": Host.Log("arrêt demandé depuis le menu"); Bar.Close(); break;
             }
         }
@@ -287,12 +330,17 @@ class Shell : IHostApp
         string text = data.TryGetProperty("text", out var x) && x.ValueKind == JsonValueKind.String ? x.GetString() : "";
         string level = data.TryGetProperty("level", out var l) && l.ValueKind == JsonValueKind.String ? l.GetString() : "info";
         if (string.IsNullOrEmpty(title) || title.Length > 80 || text.Length > 400 || level is not ("info" or "warn" or "error")) return false;
+        AddNotification(title, text, level, from);
+        return true;
+    }
+
+    void AddNotification(string title, string text, string level, string from)
+    {
         var n = new { title, text, level, from, at = DateTimeOffset.Now.ToUnixTimeSeconds() };
         notifications.Add(n); if (notifications.Count > 50) notifications.RemoveAt(0);
         if (!centerOpen) unreadNotifs++;
         Host.Log($"notification de {from} : {title}");
         PushNotifs();
-        return true;
     }
 
     async Task<string> HandleControl(string line)
@@ -303,6 +351,11 @@ class Shell : IHostApp
             case "launch": Launch(a); return "ok";
             case "evalbar": return await Bar.Web.CoreWebView2.ExecuteScriptAsync(a);   // exécute du JavaScript dans la page de la barre (tests)
             case "notifs": return notifications.Count + "/" + unreadNotifs;
+            case "pins": return string.Join(" ; ", pinStore.Items.Select(p => (p.Bar ? "B" : "-") + (p.Tile ? "T" : "-") + " " + p.Target));
+            case "barmenu": { var parts = a.Split(' ', 3); OpenBarMenu(parts[0], parts.Length > 1 ? parts[1] : "", 0); return barMenuOpen ? "ouvert" : "refusé"; }
+            case "barmenupick": { var act = barMenuAct; HideBarMenu(); act?.Invoke(a); return act == null ? "pas de menu" : "ok"; }
+            case "tray": return tray == null ? "pas de relais" : tray.Count + " reçues : " + JsonSerializer.Serialize(tray.Describe());
+            case "trayclick": { var parts = a.Split(' '); return tray != null && parts.Length == 2 && tray.Click(parts[0], parts[1]) ? "ok" : "refusé"; }
             case "audio": return audio == null ? "pas de liaison" : audio.Connected ? "connecté" : "déconnecté";
             default: return "commande inconnue";
         }
@@ -353,6 +406,148 @@ class Shell : IHostApp
     }
 
     public void OnAudioMenuDeactivated() { if (audioMenuOpen) HideAudioMenu(); }
+
+    // ---------- applications épinglées ----------
+    // Le shell détient la liste (epingles.json) ; la barre affiche celles qui ont Bar, le menu Démarrer celles qui ont Tile.
+    object PinsMessage() => new
+    {
+        type = "pins",
+        items = pinStore.Items.Select(p => new { name = p.Name, target = p.Target, ic = p.Ic, bar = p.Bar, tile = p.Tile, barIndex = pinStore.BarIndex(p.Target), path = File.Exists(p.Target) ? p.Target : null }).ToList()
+    };
+
+    void PushPins() { var m = PinsMessage(); Bar.Send(m); Start.Send(m); }
+
+    // Le nom d'une épingle : la description du programme (Chrome, Bloc-notes…), sinon le nom du fichier ou du dossier sans extension.
+    static string PinNameOf(string path)
+    {
+        string name = Directory.Exists(path) ? new DirectoryInfo(path).Name : Path.GetFileNameWithoutExtension(path);
+        if (path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) { try { var d = FileVersionInfo.GetVersionInfo(path).FileDescription; if (!string.IsNullOrWhiteSpace(d)) name = d.Trim(); } catch { } }
+        return string.IsNullOrWhiteSpace(name) ? path : (name.Length > 80 ? name[..80] : name);
+    }
+
+    // Des fichiers déposés sur la barre (depuis l'Explorateur KDX ou celui de Windows) : seuls les programmes, raccourcis, scripts et dossiers sont épinglés.
+    void PinDropped(string[] paths, string before)
+    {
+        if (paths == null || paths.Length == 0) return;
+        int n = 0, skipped = 0;
+        foreach (var path in paths.Take(20))
+        {
+            if (!PinStore.Pinnable(path)) { skipped++; continue; }
+            if (pinStore.AddToBar(PinNameOf(path), path, null, before)) n++; else skipped++;
+        }
+        Host.Log($"dépôt sur la barre : {n} épinglée(s), {skipped} ignoré(s)");
+        if (n > 0) PushPins();
+    }
+
+    // Une fenêtre de la barre glissée parmi les épingles : on épingle son programme.
+    void PinTask(string h, string before)
+    {
+        if (!long.TryParse(h, out long hv)) return;
+        var hw = new IntPtr(hv); if (!N.IsWindow(hw)) return;
+        string exe = N.ExePathOf(hw);
+        if (string.IsNullOrEmpty(exe) || exe.EndsWith("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(exe)) return;
+        if (pinStore.AddToBar(PinNameOf(exe), exe, null, before)) { Host.Log("fenêtre épinglée par glisser : " + exe); PushPins(); }
+    }
+
+    // Le menu d'un bouton de la barre : « pin » (clé = cible de l'épingle) ou « task » (clé = poignée de la fenêtre).
+    void OpenBarMenu(string kind, string key, int x)
+    {
+        var items = new List<(string id, string label)>(); Action<string> act; string title;
+        var marks = new Dictionary<string, (string mark, bool faint)>();   // repère « ▶ » de la fenêtre active, texte pâle des fenêtres réduites
+        if (kind == "pin")
+        {
+            var p = pinStore.Find(key); if (p == null || !p.Bar) return;
+            var bar = pinStore.OnBar; int k = bar.FindIndex(q => q.Target == p.Target);
+            title = p.Name;
+            items.Add(("open", "Ouvrir")); items.Add(("remove", "Retirer de la barre"));
+            if (k > 0) items.Add(("left", "Déplacer à gauche"));
+            if (k < bar.Count - 1) items.Add(("right", "Déplacer à droite"));
+            act = id =>
+            {
+                switch (id)
+                {
+                    case "open": Launch(p.Target); break;
+                    case "remove": if (pinStore.RemoveFromBar(p.Target)) PushPins(); break;
+                    case "left": if (pinStore.Move(p.Target, -1)) PushPins(); break;
+                    case "right": if (pinStore.Move(p.Target, 1)) PushPins(); break;
+                }
+            };
+        }
+        else if (kind == "task" && long.TryParse(key, out long hv))
+        {
+            var h = new IntPtr(hv); if (!N.IsWindow(h)) return;
+            string exe = N.ExePathOf(h);
+            bool pinnable = !string.IsNullOrEmpty(exe) && !exe.EndsWith("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase) && File.Exists(exe);
+            var existing = pinnable ? pinStore.Find(exe) : null;
+            title = N.TitleOf(h); if (title.Length > 40) title = title[..40] + "…";
+            if (pinnable) items.Add(existing is { Bar: true } ? ("unpin", "Détacher de la barre") : ("pin", "Épingler à la barre"));
+            items.Add(("activate", "Afficher")); items.Add(("close", "Fermer la fenêtre"));
+            act = id =>
+            {
+                switch (id)
+                {
+                    case "pin":
+                        string name = PinNameOf(exe);
+                        if (pinStore.AddToBar(name, exe)) { Host.Log("épinglée à la barre : " + name); PushPins(); }
+                        break;
+                    case "unpin": if (pinStore.RemoveFromBar(exe)) PushPins(); break;
+                    case "activate": Activate(h); break;
+                    case "close": N.PostMessage(h, 0x0010 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero); break;
+                }
+            };
+        }
+        else if (kind is "windows" or "group")
+        {
+            // Un bouton qui réunit plusieurs fenêtres d'une application : « windows » (clic) en liste les fenêtres, « group » (clic droit) offre épingler / tout fermer.
+            var wins = TaskWins().Where(t => TaskGrouping.KeyOf(t) == key).ToList(); if (wins.Count == 0) return;
+            string exe = wins[0].Exe; title = AppNameOf(exe);
+            if (kind == "windows")
+            {
+                foreach (var t in wins.Take(60))
+                {
+                    string id = "w:" + t.H.ToInt64(), label = string.IsNullOrWhiteSpace(t.Title) ? title : (t.Title.Length > 70 ? t.Title[..70] + "…" : t.Title);
+                    items.Add((id, label)); marks[id] = (t.Active ? "▶" : "", t.Min);
+                }
+                act = id => { if (id.StartsWith("w:") && long.TryParse(id[2..], out long wv) && N.IsWindow(new IntPtr(wv))) ForceForeground(new IntPtr(wv)); };
+            }
+            else
+            {
+                bool pinnable = File.Exists(exe); var existing = pinnable ? pinStore.Find(exe) : null;
+                if (pinnable) items.Add(existing is { Bar: true } ? ("unpin", "Détacher de la barre") : ("pin", "Épingler à la barre"));
+                items.Add(("closeall", $"Fermer toutes les fenêtres ({wins.Count})"));
+                var handles = wins.Select(t => t.H).ToList();
+                act = id =>
+                {
+                    switch (id)
+                    {
+                        case "pin": if (pinStore.AddToBar(AppNameOf(exe), exe)) { Host.Log("épinglée à la barre : " + exe); PushPins(); } break;
+                        case "unpin": if (pinStore.RemoveFromBar(exe)) PushPins(); break;
+                        case "closeall": foreach (var wh in handles) N.PostMessage(wh, 0x0010 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero); break;
+                    }
+                };
+            }
+        }
+        else return;
+        if (startOpen) HideStart(); if (centerOpen) HideCenter(); HideAudioMenu();
+        barMenuAct = act;
+        int w = (int)(280 * scale), hgt = (int)((21 + 12 + 4 + Math.Min(items.Count, 14) * 27) * scale), m = (int)(6 * scale);   // au-delà de 14 lignes, la liste défile
+        var scr = Screen.FromControl(Bar).Bounds;
+        BarMenu.Bounds = new Rectangle(Math.Clamp(Bar.Left + x, scr.Left, scr.Right - w), Bar.Top - m - hgt, w, hgt);
+        BarMenu.Send(new { type = "items", title, items = items.Select(i => new { id = i.id, label = i.label, mark = marks.TryGetValue(i.id, out var mk) ? mk.mark : "", faint = marks.TryGetValue(i.id, out var mf) && mf.faint }).ToList() });
+        BarMenu.Show(); BarMenu.Activate(); ForceForeground(BarMenu.Handle);
+        BarMenu.Send(new { type = "show" });
+        barMenuOpen = true;
+        Host.Log("menu de la barre ouvert : " + kind);
+    }
+
+    void HideBarMenu()
+    {
+        if (!barMenuOpen) return;
+        barMenuOpen = false; barMenuAct = null;
+        BarMenu.Hide();
+    }
+
+    public void OnBarMenuDeactivated() { if (barMenuOpen) HideBarMenu(); }
 
     void ShowStart()
     {
@@ -413,7 +608,7 @@ class Shell : IHostApp
     // ---------- fenêtres ouvertes ----------
     bool IsTaskWindow(IntPtr h)
     {
-        if (!N.IsWindowVisible(h) || h == Bar.Handle || h == Start.Handle || h == Switch.Handle || h == Center.Handle || h == AudioMenu.Handle) return false;
+        if (!N.IsWindowVisible(h) || h == Bar.Handle || h == Start.Handle || h == Switch.Handle || h == Center.Handle || h == AudioMenu.Handle || h == BarMenu.Handle) return false;
         int ex = N.GetWindowLong(h, -20);
         bool appWindow = (ex & 0x00040000) != 0, tool = (ex & 0x80) != 0;
         if (tool && !appWindow) return false;
@@ -425,41 +620,45 @@ class Shell : IHostApp
         return N.TitleOf(h).Length > 0;
     }
 
-    // La zone de notification de Windows (icônes de Sunshine, TeamViewer…) n'a pas d'équivalent dans le shell : le bouton ▲ de la
-    // barre remontre celle de Windows 8 secondes, par-dessus la nôtre.
-    DateTime nativeUntil = DateTime.MinValue;
-
-    void RevealNativeTray()
-    {
-        nativeUntil = DateTime.UtcNow.AddSeconds(8);
-        var t = N.FindWindow("Shell_TrayWnd", null);
-        if (t != IntPtr.Zero) N.SetWindowPos(t, new IntPtr(-1) /* HWND_TOPMOST */, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040 /* SWP_NOSIZE|NOMOVE|NOACTIVATE|SHOWWINDOW */);
-    }
-
     void Tick()
     {
         if (Bar.Web.CoreWebView2 == null) return;
-        if (DateTime.UtcNow >= nativeUntil)
-        {
-            bool wasShown = nativeUntil != DateTime.MinValue; nativeUntil = DateTime.MinValue;
-            TaskbarState.HideWindow();
-            if (wasShown) { Bar.TopMost = false; Bar.TopMost = true; }   // se remettre au-dessus
-        }
+        TaskbarState.HideWindow();
+        if (tray != null) { tray.EnsureTop(); if (tray.Flush()) SendTray(); }
         var fg = N.GetAncestor(N.GetForegroundWindow(), 2);
-        if (fg != IntPtr.Zero && fg != Bar.Handle && fg != Start.Handle && fg != Switch.Handle && fg != Center.Handle && fg != AudioMenu.Handle) lastFg = fg;   // « active » = la dernière fenêtre qui n'est pas du shell
+        if (fg != IntPtr.Zero && fg != Bar.Handle && fg != Start.Handle && fg != Switch.Handle && fg != Center.Handle && fg != AudioMenu.Handle && fg != BarMenu.Handle) lastFg = fg;   // « active » = la dernière fenêtre qui n'est pas du shell
 
+        // Un bouton par application : les fenêtres d'un même programme sont réunies (count > 1, g = clé du groupe) ; la liste de ses fenêtres s'ouvre au clic.
+        var items = TaskGrouping.Build(TaskWins()).Select(g =>
+        {
+            var r = g.Representative;
+            return new
+            {
+                h = r.H.ToInt64().ToString(), title = g.Many ? AppNameOf(r.Exe) : r.Title, exe = r.Exe,
+                active = g.Many ? g.Active : r.Active, min = g.Many ? g.Min : r.Min, count = g.Windows.Count, g = g.Many ? g.Key : (string)null
+            };
+        }).ToList();
+        Bar.Send(new { type = "tasks", items });
+        if (++tick % 4 == 0) SendStats();
+    }
+
+    // Les fenêtres de la barre des tâches, dans l'ordre où elles sont apparues.
+    List<TaskWin> TaskWins()
+    {
         var found = new List<IntPtr>();
         N.EnumWindows((h, _) => { if (IsTaskWindow(h)) found.Add(h); return true; }, IntPtr.Zero);
         foreach (var h in found) if (!order.ContainsKey(h)) order[h] = ++seq;
         foreach (var dead in order.Keys.Where(k => !found.Contains(k)).ToList()) order.Remove(dead);
+        return found.OrderBy(h => order[h]).Select(h => new TaskWin(h, N.ExePathOf(h) ?? "", N.TitleOf(h), h == lastFg && !N.IsIconic(h), N.IsIconic(h))).ToList();
+    }
 
-        var items = found.OrderBy(h => order[h]).Select(h => new
-        {
-            h = h.ToInt64().ToString(), title = N.TitleOf(h), exe = N.ExePathOf(h) ?? "",
-            active = h == lastFg && !N.IsIconic(h), min = N.IsIconic(h)
-        }).ToList();
-        Bar.Send(new { type = "tasks", items });
-        if (++tick % 4 == 0) SendStats();
+    // Le nom d'une application pour son bouton groupé : la description du programme (« Google Chrome »…), gardée en mémoire.
+    readonly Dictionary<string, string> appNames = new(StringComparer.OrdinalIgnoreCase);
+    string AppNameOf(string exe)
+    {
+        if (string.IsNullOrEmpty(exe)) return "Application";
+        if (!appNames.TryGetValue(exe, out var n)) appNames[exe] = n = PinNameOf(exe);
+        return n;
     }
 
     void SendStats()

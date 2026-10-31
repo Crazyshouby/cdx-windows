@@ -42,6 +42,14 @@ class AudioMenuForm : HostForm
     protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); shell.OnAudioMenuDeactivated(); }
 }
 
+// Le menu contextuel d'un bouton de la barre (épingles, fenêtres) : même principe que la liste des setups, au-dessus de la barre.
+class BarMenuForm : HostForm
+{
+    Shell shell => (Shell)app;
+    public BarMenuForm(Shell s) : base(s, "barmenu") { TopMost = true; }
+    protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); shell.OnBarMenuDeactivated(); }
+}
+
 class CenterForm : HostForm
 {
     Shell shell => (Shell)app;

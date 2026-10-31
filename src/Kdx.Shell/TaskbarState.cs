@@ -17,7 +17,8 @@ static class TaskbarState
 
     // Les messages d'état doivent partir de la fenêtre de la barre de Windows elle-même (Shell_TrayWnd), pas de la nôtre :
     // envoyés depuis une autre fenêtre, GETSTATE répond 0 et SETSTATE est ignoré (constaté sur la build 26300).
-    static APPBARDATA Data() => new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = N.FindWindow("Shell_TrayWnd", null) };
+    // Le relais de la zone de notification porte lui aussi la classe « Shell_TrayWnd » : la barre de Windows se reconnaît à son processus.
+    static APPBARDATA Data() => new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = TrayRelay.ExplorerTray() };
 
     // L'état d'origine se lit dans le registre (StuckRects3, octet 8 : bit 0 = masquage automatique, bit 1 = toujours visible) :
     // GETSTATE reflète la mémoire de l'explorateur, qu'un shell planté peut avoir laissée modifiée.
@@ -45,13 +46,13 @@ static class TaskbarState
     // Windows 11 libère bien la zone de travail en masquage automatique, mais ne fait pas disparaître la fenêtre : on la cache nous-mêmes.
     public static void HideWindow()
     {
-        var t = N.FindWindow("Shell_TrayWnd", null);
+        var t = TrayRelay.ExplorerTray();
         if (t != IntPtr.Zero && N.IsWindowVisible(t)) N.ShowWindow(t, 0 /* SW_HIDE */);
     }
 
     public static void Restore()
     {
-        var t = N.FindWindow("Shell_TrayWnd", null);
+        var t = TrayRelay.ExplorerTray();
         if (t != IntPtr.Zero) N.ShowWindow(t, 5 /* SW_SHOW */);
         if (!File.Exists(FilePath)) return;
         if (!int.TryParse(File.ReadAllText(FilePath).Trim(), out int orig)) orig = 2;

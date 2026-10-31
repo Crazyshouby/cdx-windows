@@ -88,6 +88,43 @@ static class Host
     // L'icône d'un fichier ou d'un programme, en PNG (base64) à la taille demandée, gardée en mémoire.
     static readonly Dictionary<string, string> icons = new();
 
+    // Vrai dans le shell : l'icône d'un raccourci (.lnk) est celle de son programme, sans la flèche de raccourci que Windows superpose à celle du fichier .lnk.
+    // L'Explorateur garde la flèche (c'est bien un raccourci dans une liste de fichiers).
+    public static bool ResolveShortcuts;
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern uint ExtractIconEx(string file, int index, IntPtr[] large, IntPtr[] small, uint n);
+    [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr h);
+
+    // L'image de l'icône d'un raccourci : le fichier et l'index d'icône qu'il désigne (IconLocation), sinon son programme ; null si on ne sait pas la résoudre
+    // (raccourci vers une appli du Store, sans cible) : l'appelant garde alors l'icône du .lnk.
+    static Bitmap ShortcutIcon(string lnk)
+    {
+        object sh = null, sc = null;
+        try
+        {
+            var t = Type.GetTypeFromProgID("WScript.Shell"); if (t == null) return null;
+            sh = Activator.CreateInstance(t);
+            sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, sh, new object[] { lnk });
+            string Get(string n) => sc.GetType().InvokeMember(n, System.Reflection.BindingFlags.GetProperty, null, sc, null) as string ?? "";
+            string target = Get("TargetPath"), loc = Get("IconLocation"), file; int idx = 0;
+            int comma = loc.LastIndexOf(',');
+            if (comma >= 0) { file = loc[..comma]; int.TryParse(loc[(comma + 1)..], out idx); } else file = loc;
+            if (string.IsNullOrWhiteSpace(file)) file = target;
+            file = Environment.ExpandEnvironmentVariables(file.Trim().Trim('"'));
+            if (!File.Exists(file)) return null;
+            var large = new IntPtr[1]; var small = new IntPtr[1];
+            if (ExtractIconEx(file, idx, large, small, 1) > 0 && large[0] != IntPtr.Zero)
+            {
+                try { using var ic = Icon.FromHandle(large[0]); return new Bitmap(ic.ToBitmap()); }
+                finally { DestroyIcon(large[0]); if (small[0] != IntPtr.Zero) DestroyIcon(small[0]); }
+            }
+            if (File.Exists(target)) { using var ic = Icon.ExtractAssociatedIcon(target); return ic == null ? null : new Bitmap(ic.ToBitmap()); }
+            return null;
+        }
+        catch { return null; }
+        finally { if (sc != null) Marshal.FinalReleaseComObject(sc); if (sh != null) Marshal.FinalReleaseComObject(sh); }
+    }
+
     public static string IconPng(string path, int size = 16)
     {
         if (string.IsNullOrEmpty(path)) return null;
@@ -96,15 +133,16 @@ static class Host
         string png = null;
         try
         {
-            using var big = Icon.ExtractAssociatedIcon(path);
-            if (big != null)
+            using var clean = ResolveShortcuts && path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ? ShortcutIcon(path) : null;
+            using var big = clean == null ? Icon.ExtractAssociatedIcon(path) : null;
+            if (clean != null || big != null)
             {
                 using var bmp = new Bitmap(size, size, PixelFormat.Format32bppArgb);
                 using (var g = Graphics.FromImage(bmp))
                 {
                     g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
                     g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
-                    g.DrawIcon(big, new Rectangle(0, 0, size, size));
+                    if (clean != null) g.DrawImage(clean, new Rectangle(0, 0, size, size)); else g.DrawIcon(big, new Rectangle(0, 0, size, size));
                 }
                 using var ms = new MemoryStream(); bmp.Save(ms, ImageFormat.Png); png = Convert.ToBase64String(ms.ToArray());
             }

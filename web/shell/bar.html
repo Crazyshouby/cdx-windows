@@ -18,15 +18,27 @@
   .tk.on { background: #2a2a2a; box-shadow: var(--bevel-down); padding-left: 14px; }
   .tk.on::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--bar); border-right: 1px solid #000; }
   .tk.min { color: var(--faint); }
+  /* Le nombre de fenêtres d'un bouton qui en réunit plusieurs, et une marque ▲ : la liste s'ouvre vers le haut. */
+  .tk .cnt { flex: none; margin-left: auto; min-width: 16px; padding: 0 4px; text-align: center; color: var(--field-ink); background: var(--ink); border: 1px solid; border-color: var(--sunken-border); }
+  .tk.multi::after { content: "▲"; flex: none; transform: scale(0.6); color: var(--faint); }
   .tk.start { flex: none; padding: 0 14px 0 8px; }
   .tk.start.on { padding-left: 14px; }
+  .tk.insL { box-shadow: -3px 0 0 var(--bar), var(--bevel); }   /* repère d'insertion pendant un glisser-déposer */
+  .tk.insR { box-shadow: 3px 0 0 var(--bar), var(--bevel); }
   .tk.pin { flex: none; min-width: 0; width: 30px; padding: 0; justify-content: center; }
-  .tk img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; }
+  .tk img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; -webkit-user-drag: none; }
   .tsep { flex: none; width: 2px; height: 22px; border-left: 1px solid #111; border-right: 1px solid #555; }
   .tsearch { flex: none; width: 210px; height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 8px; cursor: default; }
   .ph { color: var(--faint) !important; }
   .pins { display: flex; gap: 6px; flex: none; }
   .tasks { display: flex; gap: 6px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
+  /* La zone de notification : une case par icône reçue des applis (clic gauche, double-clic, clic droit renvoyés à l'appli). */
+  .zone { flex: none; display: flex; align-items: center; gap: 2px; height: 26px; }
+  .zone:empty { display: none; }
+  .zi { flex: none; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; font: inherit; color: var(--text); background: transparent; border: 1px solid transparent; cursor: default; }
+  .zi:hover { background: var(--btn); border-color: #000; box-shadow: var(--bevel); }
+  .zi:active { background: #2a2a2a; box-shadow: var(--bevel-down); }
+  .zi img { width: 16px; height: 16px; flex: none; }
   .tray { flex: none; display: flex; align-items: center; gap: 14px; height: 26px; padding: 0 10px; background: var(--ink); color: var(--field-ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
   .tray .faint { color: var(--faint); }
   .tray .hot { color: var(--warn); }
@@ -65,30 +77,107 @@
     <span class="alval" id="alVal">100</span>
     <button class="tk alset" id="alSet" title="Setup d'AudioLinker à jouer"><span id="alSetLbl">Setup…</span><span>▲</span></button>
   </div>
+  <div class="zone" id="zone"></div>
   <div class="tray click" id="tray" title="Centre rapide : son, réseau, notifications, calendrier"><span id="nt" class="hot" style="visibility:hidden;display:inline-flex;align-items:center;gap:4px;width:34px"><span class="pix" data-ic="cloche"></span><span id="ntn">0</span></span><span id="cpu">CPU –</span><span id="ram">RAM –</span><span id="clock"></span><span id="date"></span></div>
-  <button class="tk pin" id="systray" title="Zone de notification de Windows (8 secondes)">▲</button>
 </div>
 <script>
   fillPix();
   const $ = id => document.getElementById(id);
   $('start').onclick = () => post({ cmd: 'toggleStart' });
   $('search').onclick = () => post({ cmd: 'toggleStart' });
-  $('systray').onclick = () => post({ cmd: 'nativeTray' });
 
-  $('pins').innerHTML = PINS.slice(0, 5).map((p, i) => `<button class="tk pin" data-i="${i}" title="${esc(p.name)}">${pix(p.ic, 16)}</button>`).join('');
-  $('pins').onclick = e => { const b = e.target.closest('[data-i]'); if (b) post({ cmd: 'launch', target: PINS[+b.dataset.i].target }); };
+  // Les applications épinglées à la barre : la liste vient du programme (epingles.json) ; clic = lancer, clic droit = menu (retirer, déplacer).
+  let lastPins = '';
+  handlers.pins = m => {
+    // L'ordre de la barre (barIndex) est indépendant de celui des tuiles du menu Démarrer (ordre de la liste).
+    const items = m.items.filter(p => p.bar).sort((a, b) => a.barIndex - b.barIndex), key = JSON.stringify(items);
+    if (key === lastPins) return; lastPins = key;
+    $('pins').innerHTML = items.map(p => `<button class="tk pin" draggable="true" data-t="${esc(p.target)}" title="${esc(p.name)}">${pinIcon(p, 16)}</button>`).join('');
+    fillPinIcons($('pins'), 16);
+    log('épingles affichées : ' + items.length);
+  };
+  // Glisser-déposer. Sources : une épingle de la barre (la réordonner), une fenêtre ouverte, une application ou une tuile du menu Démarrer (les épingler),
+  // des fichiers venus de l'Explorateur (programmes, raccourcis, dossiers). Cible : toute la barre ; la place est donnée par la position de la souris
+  // parmi les épingles (devant la moitié gauche d'une épingle, ou à la fin). Le programme valide tout : la page ne fait que transmettre.
+  const KIND = 'application/x-kdx-pin';
+  const pinBtns = () => [...$('pins').querySelectorAll('[data-t]')];
+  const beforeOf = x => { for (const b of pinBtns()) { const r = b.getBoundingClientRect(); if (x < r.left + r.width / 2) return b.dataset.t; } return ''; };
+  const clearMark = () => document.querySelectorAll('.insL, .insR').forEach(b => b.classList.remove('insL', 'insR'));
+  const mark = x => {
+    clearMark(); const bs = pinBtns(); if (!bs.length) return;
+    const before = beforeOf(x);
+    if (before) bs.find(b => b.dataset.t === before).classList.add('insL'); else bs[bs.length - 1].classList.add('insR');
+  };
+  const hasType = (e, t) => e.dataTransfer && [...e.dataTransfer.types].includes(t);
+  document.addEventListener('dragstart', e => {
+    const p = e.target.closest && e.target.closest('[data-t]'), t = e.target.closest && e.target.closest('[data-h]');
+    if (p && $('pins').contains(p)) { e.dataTransfer.setData(KIND, JSON.stringify({ k: 'move', t: p.dataset.t })); e.dataTransfer.effectAllowed = 'move'; }
+    else if (t && $('tasks').contains(t)) { e.dataTransfer.setData(KIND, JSON.stringify({ k: 'task', h: t.dataset.h })); e.dataTransfer.effectAllowed = 'copy'; }
+    else return;
+    log('glisser commencé');
+  });
+  // L'effet du dépôt doit faire partie de ceux que la source autorise (effectAllowed), sinon le navigateur refuse de déposer :
+  // une épingle de la barre se déplace, tout le reste (fenêtre, application du menu Démarrer, fichiers) s'épingle en copie.
+  let overLogged = false;
+  document.addEventListener('dragover', e => {
+    if (!hasType(e, KIND) && !hasType(e, 'Files')) return;
+    const ea = e.dataTransfer.effectAllowed;
+    e.preventDefault(); e.dataTransfer.dropEffect = ea === 'move' ? 'move' : 'copy'; mark(e.clientX);
+    if (!overLogged) { overLogged = true; log('survol de glisser-déposer (effectAllowed ' + ea + ')'); }
+  });
+  document.addEventListener('dragleave', e => { if (!e.relatedTarget) clearMark(); });
+  document.addEventListener('dragend', () => { overLogged = false; clearMark(); });
+  document.addEventListener('drop', e => {
+    overLogged = false;
+    const kind = hasType(e, KIND), files = hasType(e, 'Files');
+    log('dépôt reçu : ' + [...(e.dataTransfer ? e.dataTransfer.types : [])].join(','));
+    if (!kind && !files) return;
+    e.preventDefault(); const before = beforeOf(e.clientX); clearMark();
+    if (kind) {
+      let p = null; try { p = JSON.parse(e.dataTransfer.getData(KIND)); } catch { return; }
+      if (p.k === 'move') post({ cmd: 'pin.reorder', target: p.t, before });
+      else if (p.k === 'task') post({ cmd: 'pin.addtask', h: p.h, before });
+      else if (p.k === 'app') post({ cmd: 'pin.add', name: p.name, target: p.t, before });
+    } else if (hasHost && e.dataTransfer.files.length) window.chrome.webview.postMessageWithAdditionalObjects({ cmd: 'pin.dropfiles', before }, e.dataTransfer.files);
+  });
+
+  $('pins').onclick = e => { const b = e.target.closest('[data-t]'); if (b) post({ cmd: 'launch', target: b.dataset.t }); };
+  $('pins').oncontextmenu = e => { e.preventDefault(); const b = e.target.closest('[data-t]'); if (b) post({ cmd: 'bar.menu', kind: 'pin', key: b.dataset.t, x: Math.round(b.getBoundingClientRect().left) }); };
 
   // La liste des fenêtres ouvertes : poussée par le programme tous les 500 ms, redessinée seulement si elle a changé.
   let last = '';
   handlers.tasks = m => {
     const key = JSON.stringify(m.items);
     if (key === last) return; last = key;
-    $('tasks').innerHTML = m.items.map(t => `<button class="tk ${t.active ? 'on' : ''} ${t.min ? 'min' : ''}" data-h="${t.h}" title="${esc(t.title)}"><img data-p="${esc(t.exe)}" alt=""><span>${esc(t.title)}</span></button>`).join('');
+    // Un bouton par application ; plusieurs fenêtres du même programme : un seul bouton avec leur nombre (data-g = clé du groupe), la liste s'ouvre au clic.
+    $('tasks').innerHTML = m.items.map(t => `<button class="tk ${t.active ? 'on' : ''} ${t.min ? 'min' : ''} ${t.count > 1 ? 'multi' : ''}" draggable="true" data-h="${t.h}"${t.g ? ` data-g="${esc(t.g)}"` : ''} title="${esc(t.count > 1 ? t.title + ' — ' + t.count + ' fenêtres' : t.title)}"><img data-p="${esc(t.exe)}" alt=""><span>${esc(t.title)}</span>${t.count > 1 ? `<span class="cnt">${t.count}</span>` : ''}</button>`).join('');
     $('tasks').querySelectorAll('img').forEach(img => wantIcon(img.dataset.p, img));
     log('tâches affichées : ' + m.items.length);
   };
-  $('tasks').onclick = e => { const b = e.target.closest('[data-h]'); if (b) post({ cmd: 'activate', h: b.dataset.h }); };
-  $('tasks').onauxclick = e => { if (e.button === 1) { const b = e.target.closest('[data-h]'); if (b) post({ cmd: 'close', h: b.dataset.h }); } };
+  // Une fenêtre seule : clic = l'afficher (ou la réduire si elle est active), clic droit = son menu, clic molette = la fermer.
+  // Un groupe : clic = la liste de ses fenêtres (au-dessus de la barre), clic droit = épingler / tout fermer ; pas de fermeture au clic molette.
+  const menuX = b => Math.round(b.getBoundingClientRect().left);
+  $('tasks').onclick = e => {
+    const b = e.target.closest('[data-h]'); if (!b) return;
+    if (b.dataset.g) post({ cmd: 'bar.menu', kind: 'windows', key: b.dataset.g, x: menuX(b) }); else post({ cmd: 'activate', h: b.dataset.h });
+  };
+  $('tasks').oncontextmenu = e => {
+    e.preventDefault(); const b = e.target.closest('[data-h]'); if (!b) return;
+    if (b.dataset.g) post({ cmd: 'bar.menu', kind: 'group', key: b.dataset.g, x: menuX(b) }); else post({ cmd: 'bar.menu', kind: 'task', key: b.dataset.h, x: menuX(b) });
+  };
+  $('tasks').onauxclick = e => { if (e.button === 1) { const b = e.target.closest('[data-h]'); if (b && !b.dataset.g) post({ cmd: 'close', h: b.dataset.h }); } };
+
+  // Les icônes de la zone de notification : poussées quand elles changent (ajout, retrait, image, infobulle).
+  let lastZone = '';
+  handlers.tray = m => {
+    const key = JSON.stringify(m.items);
+    if (key === lastZone) return; lastZone = key;
+    $('zone').innerHTML = m.items.map(t => `<button class="zi" data-k="${esc(t.k)}" title="${esc(t.tip || t.exe)}"><img src="data:image/png;base64,${t.png}" alt=""></button>`).join('');
+    log('zone de notification : ' + m.items.length + ' icône(s)');
+  };
+  // Le second clic d'un double-clic part comme « double-clic » (comme la barre de Windows : bouton enfoncé, relâché, double-clic, relâché).
+  $('zone').onclick = e => { const b = e.target.closest('[data-k]'); if (b && e.detail <= 2) post({ cmd: 'tray.click', k: b.dataset.k, b: e.detail === 2 ? 'd' : 'l' }); };
+  $('zone').oncontextmenu = e => { e.preventDefault(); const b = e.target.closest('[data-k]'); if (b) post({ cmd: 'tray.click', k: b.dataset.k, b: 'r' }); };
 
   $('tray').onclick = () => post({ cmd: 'toggleCenter' });
   // Notifications non vues (envoyées par les autres applications) : la cloche et leur nombre, à place fixe (la barre ne bouge pas).

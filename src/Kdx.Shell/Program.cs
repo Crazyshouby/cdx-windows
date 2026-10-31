@@ -21,11 +21,16 @@ static class Program
     static void Main(string[] args)
     {
         Host.Init("shell");
+        Host.ResolveShortcuts = true;   // barre et menu Démarrer : l'icône d'une appli, sans la flèche de raccourci
         if (args.Length > 0 && args[0] == "--restore") { TaskbarState.Restore(); return; }
         if (args.Length > 1 && args[0] == "--accent") { Suite.WriteAccent(args[1]); return; }
         if (args.Length > 0 && args[0] == "--selftest-sys") { SelfTest.RunSys(); return; }
         if (args.Length > 0 && args[0] == "--selftest-audio") { SelfTest.RunAudio(); return; }
         if (args.Length > 0 && args[0] == "--selftest-bus") { SelfTest.RunBus(); return; }
+        if (args.Length > 0 && args[0] == "--selftest-tray") { SelfTest.RunTray(); return; }
+        if (args.Length > 0 && args[0] == "--selftest-pins") { SelfTest.RunPins(); return; }
+        if (args.Length > 0 && args[0] == "--selftest-icons") { SelfTest.RunIcons(); return; }
+        if (args.Length > 0 && args[0] == "--selftest-tasks") { SelfTest.RunTasks(); return; }
 
         if (!SingleInstance.Acquire("shell", out var mutex)) return;
         using var _ = mutex;
@@ -34,7 +39,7 @@ static class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.ThreadException += (s, e) => Host.Log("exception (interface) : " + e.Exception);
-        AppDomain.CurrentDomain.UnhandledException += (s, e) => { Host.Log("exception fatale : " + e.ExceptionObject); TaskbarState.Restore(); };
+        AppDomain.CurrentDomain.UnhandledException += (s, e) => { Host.Log("exception fatale : " + e.ExceptionObject); try { TrayRelay.Current?.Shutdown(); } catch { } TaskbarState.Restore(); };
 
         var shell = new Shell(args.Length > 0 && Suite.IsAccent(args[0]) ? args[0] : null);
         Application.Run(shell.Bar);

@@ -14,13 +14,16 @@
   .blk { display: block !important; }
   .apps { flex: 1; min-height: 0; }
   .apps .row-item { cursor: default; }
-  .apps img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; }
+  .apps img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; -webkit-user-drag: none; }
+  .tile img { -webkit-user-drag: none; }
   .ph { color: var(--faint) !important; }
   #q { flex: none; height: 28px; }
   .grp.fill { flex: 1; min-height: 0; display: flex !important; flex-direction: column; align-items: stretch; padding-bottom: 8px; }
   .btn.row { display: flex; align-items: center; gap: 8px; }
   .btns { gap: 6px; }
   .btns .btn { padding: 0 10px; }
+  .ctxm { position: fixed; z-index: 80; min-width: 190px; padding: 4px; background: var(--panel); border: 1px solid #000; box-shadow: var(--bevel); }
+  .ctxm .row-item { cursor: default; }
   .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .5); }
   .veil .win { position: relative; inset: auto; width: 420px; }
 </style>
@@ -50,9 +53,47 @@
   const $ = id => document.getElementById(id);
   let apps = [], shown = [];
 
-  $('tiles').innerHTML = PINS.map((p, i) => `<button class="btn tile" data-i="${i}">${pix(p.ic, 32)}<span>${esc(p.name)}</span></button>`).join('');
-  $('tiles').onclick = e => { const b = e.target.closest('[data-i]'); if (b) launch(PINS[+b.dataset.i].target); };
+  // Les tuiles « Épinglées » : la liste vient du programme (epingles.json). Clic droit sur une tuile ou une application : ajouter à la barre / retirer de la barre.
+  let pins = [];
+  const onBar = t => pins.some(p => p.bar && p.target.toLowerCase() === String(t).toLowerCase());
+  function renderTiles() {
+    const tiles = pins.filter(p => p.tile);
+    $('tiles').innerHTML = tiles.map(p => `<button class="btn tile" draggable="true" data-t="${esc(p.target)}">${pinIcon(p, 32)}<span>${esc(p.name)}</span></button>`).join('');
+    fillPinIcons($('tiles'), 32);
+  }
+  $('tiles').onclick = e => { const b = e.target.closest('[data-t]'); if (b) launch(b.dataset.t); };
   const launch = t => { post({ cmd: 'launch', target: t }); post({ cmd: 'hideStart' }); };
+  handlers.pins = m => { pins = m.items; renderTiles(); closeCtx(); };
+
+  // Le petit menu du clic droit : une seule ligne, posée au pointeur, qui se ferme au moindre autre geste.
+  let ctx = null;
+  function closeCtx() { if (ctx) { ctx.remove(); ctx = null; } }
+  function openCtx(x, y, label, fn) {
+    closeCtx();
+    ctx = document.createElement('div'); ctx.className = 'ctxm';
+    const row = document.createElement('div'); row.className = 'row-item'; row.textContent = label; row.onclick = () => { closeCtx(); fn(); };
+    ctx.appendChild(row); document.body.appendChild(ctx);
+    const r = ctx.getBoundingClientRect();
+    ctx.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px'; ctx.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
+  }
+  $('tiles').oncontextmenu = e => {
+    e.preventDefault(); const b = e.target.closest('[data-t]'); if (!b) return;
+    const t = b.dataset.t, p = pins.find(q => q.target === t);
+    if (onBar(t)) openCtx(e.clientX, e.clientY, 'Retirer de la barre', () => post({ cmd: 'pin.remove', target: t }));
+    else openCtx(e.clientX, e.clientY, 'Ajouter à la barre', () => post({ cmd: 'pin.add', name: p.name, target: t }));
+  };
+  // Glisser une tuile ou une application du menu Démarrer sur la barre : l'épingle à l'endroit lâché (la barre reçoit le glisser, le programme valide).
+  document.addEventListener('dragstart', e => {
+    const tile = e.target.closest('[data-t]'), row = e.target.closest('#apps [data-i]');
+    let it = null;
+    if (tile) { const p = pins.find(q => q.target === tile.dataset.t); if (p) it = { k: 'app', name: p.name, t: p.target }; }
+    else if (row) { const a = shown[+row.dataset.i]; if (a) it = { k: 'app', name: a.name, t: a.path }; }
+    if (!it) { e.preventDefault(); return; }
+    closeCtx(); e.dataTransfer.setData('application/x-kdx-pin', JSON.stringify(it)); e.dataTransfer.effectAllowed = 'copy';
+    log('glisser commencé : ' + it.name);
+  });
+  document.addEventListener('mousedown', e => { if (ctx && !ctx.contains(e.target)) closeCtx(); });
+  document.addEventListener('contextmenu', e => { if (!e.target.closest('[data-t], #apps')) e.preventDefault(); });
 
   // Liste des applications : filtrée à chaque frappe ; l'icône d'une ligne n'est demandée que lorsqu'elle devient visible.
   const io = new IntersectionObserver(es => es.forEach(en => { if (en.isIntersecting) { io.unobserve(en.target); wantIcon(en.target.dataset.p, en.target); } }), { root: $('apps') });
@@ -60,10 +101,16 @@
     const q = $('q').value.trim().toLowerCase();
     shown = apps.filter(a => !q || a.name.toLowerCase().includes(q)).slice(0, 300);
     $('appsTitle').textContent = q ? `Résultats (${shown.length})` : 'Toutes les applications';
-    $('apps').innerHTML = shown.length ? shown.map((a, i) => `<div class="row-item ${q && i === 0 ? 'sel' : ''}" data-i="${i}"><img data-p="${esc(a.path)}" alt=""><span class="grow">${esc(a.name)}</span></div>`).join('') : '<div class="empty">Aucune application</div>';
+    $('apps').innerHTML = shown.length ? shown.map((a, i) => `<div class="row-item ${q && i === 0 ? 'sel' : ''}" draggable="true" data-i="${i}"><img data-p="${esc(a.path)}" alt=""><span class="grow">${esc(a.name)}</span></div>`).join('') : '<div class="empty">Aucune application</div>';
     $('apps').querySelectorAll('img').forEach(img => io.observe(img));
   }
   $('apps').onclick = e => { const r = e.target.closest('[data-i]'); if (r) launch(shown[+r.dataset.i].path); };
+  $('apps').oncontextmenu = e => {
+    e.preventDefault(); const r = e.target.closest('[data-i]'); if (!r) return;
+    const a = shown[+r.dataset.i];
+    if (onBar(a.path)) openCtx(e.clientX, e.clientY, 'Retirer de la barre', () => post({ cmd: 'pin.remove', target: a.path }));
+    else openCtx(e.clientX, e.clientY, 'Épingler à la barre', () => post({ cmd: 'pin.add', name: a.name, target: a.path }));
+  };
   $('q').oninput = render;
   $('q').onkeydown = e => { if (e.key === 'Enter' && shown.length) launch(shown[0].path); };
   document.onkeydown = e => { if (e.key === 'Escape') post({ cmd: 'hideStart' }); };

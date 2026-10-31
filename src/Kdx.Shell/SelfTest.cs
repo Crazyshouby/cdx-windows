@@ -99,6 +99,279 @@ static class SelfTest
         Environment.ExitCode = bad == 0 ? 0 : 1;
     }
 
+    // kdx-shell.exe --selftest-tasks : le regroupement des fenêtres par application (logique pure, aucune fenêtre réelle).
+    public static void RunTasks()
+    {
+        var lines = new List<string>(); int bad = 0;
+        void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
+        TaskWin W(long h, string exe, string title, bool active = false, bool min = false) => new(new IntPtr(h), exe, title, active, min);
+        try
+        {
+            const string chrome = @"C:\Program Files\Google\Chrome\Application\chrome.exe", note = @"C:\Windows\notepad.exe", frame = @"C:\Windows\System32\ApplicationFrameHost.exe";
+            var g0 = TaskGrouping.Build(new[] { W(1, chrome, "A"), W(2, note, "N"), W(3, chrome, "B"), W(4, chrome, "C") });
+            Check("trois fenêtres du même programme : un seul groupe, deux groupes en tout", g0.Count == 2 && g0[0].Windows.Count == 3 && g0[1].Windows.Count == 1);
+            Check("le groupe prend la place de sa première fenêtre (Chrome avant Bloc-notes)", g0[0].Windows[0].H == new IntPtr(1) && g0[1].Windows[0].H == new IntPtr(2));
+            Check("les fenêtres d'un groupe gardent leur ordre d'apparition", g0[0].Windows.Select(w => w.H.ToInt64()).SequenceEqual(new long[] { 1, 3, 4 }));
+            Check("Many : vrai à partir de deux fenêtres", g0[0].Many && !g0[1].Many);
+
+            var g1 = TaskGrouping.Build(new[] { W(1, chrome.ToUpperInvariant(), "A"), W(2, chrome, "B") });
+            Check("la casse du chemin ne sépare pas un groupe", g1.Count == 1 && g1[0].Windows.Count == 2);
+
+            var g2 = TaskGrouping.Build(new[] { W(1, frame, "Paramètres"), W(2, frame, "Calculatrice") });
+            Check("applis du Store (ApplicationFrameHost) : jamais regroupées", g2.Count == 2 && g2.All(g => !g.Many));
+            var g3 = TaskGrouping.Build(new[] { W(1, "", "Élevée 1"), W(2, null, "Élevée 2"), W(3, "", "Élevée 3") });
+            Check("programme inconnu (processus élevé) : jamais regroupé", g3.Count == 3);
+            Check("clé d'un groupe : le chemin en minuscules ; clé d'une fenêtre isolée : sa poignée", TaskGrouping.KeyOf(W(7, chrome, "x")) == chrome.ToLowerInvariant() && TaskGrouping.KeyOf(W(7, "", "x")) == "h7");
+
+            var a = TaskGrouping.Build(new[] { W(1, chrome, "A", false, true), W(2, chrome, "B", true, false), W(3, chrome, "C", false, true) })[0];
+            Check("groupe actif si une fenêtre l'est ; représentant = la fenêtre active", a.Active && a.Representative.H == new IntPtr(2));
+            Check("groupe non réduit si une fenêtre ne l'est pas", !a.Min);
+            var b = TaskGrouping.Build(new[] { W(1, chrome, "A", false, true), W(2, chrome, "B", false, true) })[0];
+            Check("groupe réduit si toutes ses fenêtres le sont ; sans fenêtre active, représentant = la première", b.Min && !b.Active && b.Representative.H == new IntPtr(1));
+            Check("aucune fenêtre : aucun groupe", TaskGrouping.Build(Array.Empty<TaskWin>()).Count == 0);
+            Check("une fenêtre : un groupe à une fenêtre", TaskGrouping.Build(new[] { W(9, note, "N") }) is { Count: 1 } one && !one[0].Many);
+        }
+        catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
+        lines.Add(bad == 0 ? "TOUT EST BON" : $"{bad} vérification(s) en échec");
+        File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-tasks.txt"), lines);
+        Environment.ExitCode = bad == 0 ? 0 : 1;
+    }
+
+    // kdx-shell.exe --selftest-icons : l'icône d'un raccourci sans la flèche. Un raccourci jetable vers notepad.exe : avec ResolveShortcuts, son icône est exactement
+    // celle de notepad.exe ; sans, elle en diffère (flèche). Raccourci vers une cible disparue : une icône quand même (repli sur celle du .lnk).
+    [STAThread]
+    public static void RunIcons()
+    {
+        var lines = new List<string>(); int bad = 0;
+        void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
+        string dir = Path.Combine(Path.GetTempPath(), "kdx-icons-test-" + Environment.ProcessId); Directory.CreateDirectory(dir);
+        try
+        {
+            string exe = Path.Combine(Environment.SystemDirectory, "notepad.exe");
+            string Make(string name, string target, string icon = null)
+            {
+                var t = Type.GetTypeFromProgID("WScript.Shell"); var sh = Activator.CreateInstance(t);
+                string p = Path.Combine(dir, name + ".lnk");
+                var sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, sh, new object[] { p });
+                void Set(string n, string v) => sc.GetType().InvokeMember(n, System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { v });
+                Set("TargetPath", target); if (icon != null) Set("IconLocation", icon);
+                sc.GetType().InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, sc, null);
+                System.Runtime.InteropServices.Marshal.FinalReleaseComObject(sc); System.Runtime.InteropServices.Marshal.FinalReleaseComObject(sh);
+                return p;
+            }
+            string lnk = Make("bloc", exe), lnk2 = Make("icone", exe, exe + ",0"), gone = Make("disparu", Path.Combine(dir, "plus-la.exe"));
+
+            // La flèche de raccourci occupe le coin bas-gauche : on compte les pixels différents de celui du programme dans ce quart de l'image.
+            double Corner(string a, string b)
+            {
+                using var ba = new Bitmap(new MemoryStream(Convert.FromBase64String(a))); using var bb = new Bitmap(new MemoryStream(Convert.FromBase64String(b)));
+                int n = 0, tot = 0, h = ba.Height, w = ba.Width;
+                for (int y = h / 2; y < h; y++) for (int x = 0; x < w / 2; x++) { tot++; var p = ba.GetPixel(x, y); var q = bb.GetPixel(x, y); if (Math.Abs(p.A - q.A) + Math.Abs(p.R - q.R) + Math.Abs(p.G - q.G) + Math.Abs(p.B - q.B) > 60) n++; }
+                return (double)n / tot;
+            }
+            Host.ResolveShortcuts = false;
+            string withArrow = Host.IconPng(lnk, 32), plain = Host.IconPng(exe, 32);
+            double dArrow = withArrow != null && plain != null ? Corner(withArrow, plain) : 0;
+            Check($"sans résolution : le coin de l'icône du .lnk diffère de celle du programme ({dArrow:P0} des pixels : la flèche)", dArrow > 0.15);
+            Host.ResolveShortcuts = true;
+            string clean = Host.IconPng(lnk, 40), plain40 = Host.IconPng(exe, 40);
+            double dClean = clean != null ? Corner(clean, plain40) : 1;
+            Check($"avec résolution : le coin est celui du programme ({dClean:P0} de différence), sans flèche", clean != null && dClean < 0.05);
+            string clean2 = Host.IconPng(lnk2, 40);
+            double dClean2 = clean2 != null ? Corner(clean2, plain40) : 1;
+            Check($"raccourci avec IconLocation explicite (fichier,0) : même icône ({dClean2:P0} de différence)", clean2 != null && dClean2 < 0.05);
+            string miss = Host.IconPng(gone, 20);
+            Check("raccourci vers une cible disparue : une icône quand même (repli)", miss != null && miss.Length > 100);
+            Check("fichier .lnk inexistant : null, aucune exception", Host.IconPng(Path.Combine(dir, "rien.lnk"), 20) == null);
+            Check("un programme (.exe) n'est pas touché par la résolution", Host.IconPng(exe, 24) != null);
+        }
+        catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
+        try { Directory.Delete(dir, true); } catch { }
+        lines.Add(bad == 0 ? "TOUT EST BON" : $"{bad} vérification(s) en échec");
+        File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-icons.txt"), lines);
+        Environment.ExitCode = bad == 0 ? 0 : 1;
+    }
+
+    // kdx-shell.exe --selftest-pins : le magasin des applications épinglées, sur un fichier temporaire (jamais le vrai epingles.json).
+    // Valeurs par défaut, ajout à la barre (nouvelle épingle, tuile existante, doublon), retrait (la tuile reste, l'épingle seule disparaît),
+    // déplacement, relecture après « redémarrage », cibles refusées, fichier abîmé ou d'une autre version, écriture atomique, plafond.
+    public static void RunPins()
+    {
+        var lines = new List<string>(); int bad = 0;
+        void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
+        string dir = Path.Combine(Path.GetTempPath(), "kdx-pins-test-" + Environment.ProcessId); Directory.CreateDirectory(dir);
+        string file = Path.Combine(dir, "epingles.json"), exe = Path.Combine(dir, "essai.exe"), exe2 = Path.Combine(dir, "autre.exe");
+        File.WriteAllText(exe, "x"); File.WriteAllText(exe2, "x");
+        try
+        {
+            var s = new PinStore(file);
+            Check("fichier absent : 9 épingles par défaut, 5 dans la barre", s.Items.Count == 9 && s.OnBar.Count == 5 && s.Items.All(p => p.Tile));
+            Check("la barre commence par l'Explorateur et finit par le Navigateur KDX", s.OnBar[0].Target == "kdx:explorer" && s.OnBar[^1].Target == "kdx:navigateur");
+
+            Check("ajout d'un fichier existant", s.AddToBar("Essai", exe) && s.OnBar.Count == 6 && s.OnBar[^1].Target == exe);
+            Check("la nouvelle épingle n'est pas une tuile du menu Démarrer", !s.Find(exe).Tile);
+            Check("doublon (autre casse) : pas de seconde épingle", s.AddToBar("Essai bis", exe.ToUpperInvariant()) && s.Items.Count(p => string.Equals(p.Target, exe, StringComparison.OrdinalIgnoreCase)) == 1);
+            Check("ajout d'une tuile existante à la barre : même entrée, Bar vrai", s.AddToBar("Calculatrice", "calc.exe") && s.Items.Count(p => p.Target == "calc.exe") == 1 && s.Find("calc.exe").Bar && s.Find("calc.exe").Tile);
+
+            Check("écriture atomique : aucun .tmp ne reste", File.Exists(file) && !File.Exists(file + ".tmp"));
+            var s2 = new PinStore(file);
+            Check("relecture : même ordre, mêmes drapeaux", s2.Items.Select(p => p.Target + p.Bar + p.Tile).SequenceEqual(s.Items.Select(p => p.Target + p.Bar + p.Tile)));
+
+            Check("retrait d'une tuile : elle reste dans le menu Démarrer", s.RemoveFromBar("calc.exe") && s.Find("calc.exe") is { Bar: false, Tile: true });
+            Check("retrait d'une épingle de la barre seule : elle disparaît", s.RemoveFromBar(exe) && s.Find(exe) == null);
+            Check("retrait d'une application qui n'est pas dans la barre : refusé", !s.RemoveFromBar("calc.exe") && !s.RemoveFromBar("inconnu.exe"));
+
+            s.AddToBar("Autre", exe2);
+            var before = s.OnBar.Select(p => p.Target).ToList();
+            Check("déplacement vers la gauche", s.Move(exe2, -1) && s.OnBar[^2].Target == exe2 && s.OnBar[^1].Target == before[^2]);
+            Check("déplacement vers la droite", s.Move(exe2, 1) && s.OnBar[^1].Target == exe2);
+            Check("déplacement au-delà des bords ou de plus d'un cran : refusé", !s.Move(exe2, 1) && !s.Move("kdx:explorer", -1) && !s.Move("kdx:explorer", 2) && !s.Move("inconnu.exe", 1));
+            Check("les tuiles hors barre n'ont pas bougé de rang", s.Items.Select(p => p.Target).Intersect(new[] { "kdx:repos", "calc.exe", "notepad.exe", "shell:My Pictures" }).SequenceEqual(new[] { "kdx:repos", "calc.exe", "notepad.exe", "shell:My Pictures" }));
+
+            // glisser-déposer : réordonner, insérer devant une épingle, ordre des tuiles indépendant
+            var tilesBefore = s.Items.Where(p => p.Tile).Select(p => p.Target).ToList();
+            Check("glisser une épingle devant une autre", s.MoveTo("kdx:navigateur", "kdx:explorer") && s.OnBar[0].Target == "kdx:navigateur" && s.OnBar[1].Target == "kdx:explorer");
+            Check("rang dans la barre (envoyé à la page pour l'afficher dans le bon ordre)", s.OnBar.Select((p, i) => s.BarIndex(p.Target) == i).All(x => x) && s.BarIndex("calc.exe") == -1);
+            Check("glisser une épingle à la fin (devant « rien »)", s.MoveTo("kdx:navigateur", "") && s.OnBar[^1].Target == "kdx:navigateur");
+            Check("glisser à sa place actuelle ou sur soi-même : sans effet", !s.MoveTo("kdx:navigateur", "") && !s.MoveTo("kdx:explorer", "kdx:explorer"));
+            Check("glisser devant une épingle qui n'est pas dans la barre ou inconnue : refusé", !s.MoveTo("kdx:explorer", "calc.exe") && !s.MoveTo("inconnu.exe", "kdx:explorer") && !s.MoveTo("kdx:explorer", "inconnu.exe"));
+            Check("réordonner la barre ne change pas l'ordre des tuiles du menu Démarrer", s.Items.Where(p => p.Tile).Select(p => p.Target).SequenceEqual(tilesBefore));
+            Check("épingle nouvelle déposée devant une autre", s.AddToBar("Insérée", exe, null, "wt.exe") && s.OnBar.FindIndex(p => p.Target == exe) == s.OnBar.FindIndex(p => p.Target == "wt.exe") - 1);
+            Check("épingle déjà présente redéposée devant une autre : déplacée, pas dupliquée", s.AddToBar("Insérée", exe, null, "kdx:explorer") && s.OnBar[0].Target == exe && s.Items.Count(p => p.Target == exe) == 1);
+            s.RemoveFromBar(exe);
+            Check("tuile hors barre déposée devant une épingle", s.AddToBar("Calculatrice", "calc.exe", null, "kdx:explorer") && s.OnBar[0].Target == "calc.exe"); s.RemoveFromBar("calc.exe");
+            var s5 = new PinStore(file);
+            Check("l'ordre de la barre survit au redémarrage", s5.OnBar.Select(p => p.Target).SequenceEqual(s.OnBar.Select(p => p.Target)));
+            File.WriteAllText(Path.Combine(dir, "a.lnk"), "x"); File.WriteAllText(Path.Combine(dir, "a.cmd"), "x");
+            Check("fichiers déposés : programme, raccourci, script, dossier acceptés", PinStore.Pinnable(exe) && PinStore.Pinnable(dir) && PinStore.Pinnable(Path.Combine(dir, "a.lnk")) && PinStore.Pinnable(Path.Combine(dir, "a.cmd")));
+            File.WriteAllText(Path.Combine(dir, "note.txt"), "x");
+            Check("fichiers déposés : document, chemin inexistant ou relatif refusés", !PinStore.Pinnable(Path.Combine(dir, "note.txt")) && !PinStore.Pinnable(Path.Combine(dir, "nexiste.exe")) && !PinStore.Pinnable("a.exe"));
+
+            Check("cible inexistante refusée", !s.AddToBar("Fantôme", Path.Combine(dir, "nexiste-pas.exe")));
+            Check("chemin relatif refusé", !s.AddToBar("Rel", @"dossier\a.exe"));
+            Check("caractère de contrôle refusé", !s.AddToBar("Ctl", "kdx:explorer\n") && !s.AddToBar("Nom\u0001", exe));
+            Check("nom vide ou de plus de 80 caractères refusé", !s.AddToBar("  ", exe) && !s.AddToBar(new string('x', 81), exe));
+            Check("cible de plus de 520 caractères refusée", !s.AddToBar("Long", "kdx:" + new string('x', 520)));
+            Check("schémas connus et programmes nus acceptés", PinStore.Valid("A", "ms-settings:network") && PinStore.Valid("B", "shell:Downloads") && PinStore.Valid("C", "mmc.exe") && !PinStore.Valid("D", "http://exemple.org") && !PinStore.Valid("E", "cmd.exe /c calc"));
+
+            File.WriteAllText(file, "{{{ abîmé");
+            var s3 = new PinStore(file);
+            Check("fichier abîmé : valeurs par défaut, aucune exception", s3.Items.Count == 9 && s3.OnBar.Count == 5);
+            File.WriteAllText(file, "{\"version\":2,\"pins\":[]}");
+            Check("version inconnue : valeurs par défaut", new PinStore(file).Items.Count == 9);
+            File.WriteAllText(file, "{\"version\":1,\"pins\":[{\"name\":\"Bon\",\"target\":\"kdx:repos\",\"bar\":true,\"tile\":false},{\"name\":\"Mauvais\",\"target\":\"C:\\\\nexiste\\\\pas.exe\",\"bar\":true},{\"name\":\"Doublon\",\"target\":\"KDX:REPOS\",\"bar\":true},{\"name\":\"Rien\",\"target\":\"kdx:explorer\"},42]}");
+            var s4 = new PinStore(file);
+            Check("lecture tolérante : l'entrée valide seule est gardée (cible inexistante, doublon, ni barre ni tuile, élément inattendu écartés)", s4.Items.Count == 1 && s4.Items[0].Name == "Bon" && s4.Items[0].Bar && !s4.Items[0].Tile);
+            File.WriteAllText(file, "{\"version\":1,\"pins\":[]}");
+            Check("liste vide enregistrée : elle reste vide (pas de retour aux valeurs par défaut)", new PinStore(file).Items.Count == 0);
+
+            var big = new PinStore(Path.Combine(dir, "grand.json")); big.Items.Clear();
+            int added = 0; for (int i = 0; i < PinStore.Max + 5; i++) if (big.AddToBar("App" + i, "kdx:app" + i)) added++;
+            Check($"plafond de {PinStore.Max} épingles", added == PinStore.Max && big.Items.Count == PinStore.Max);
+        }
+        catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
+        try { Directory.Delete(dir, true); } catch { }
+        lines.Add(bad == 0 ? "TOUT EST BON" : $"{bad} vérification(s) en échec");
+        File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-pins.txt"), lines);
+        Environment.ExitCode = bad == 0 ? 0 : 1;
+    }
+
+    // kdx-shell.exe --selftest-tray : le relais de la zone de notification, avec une vraie icône (NotifyIcon de WinForms) inscrite par le chemin normal
+    // (Shell_NotifyIcon → FindWindow « Shell_TrayWnd »). Vérifie : le relais est trouvé en premier, icône reçue avec son image et son infobulle, infobulle
+    // changée, clics gauche / double / droit rendus à l'appli, bulle transformée en notification, retrait, message mal formé ignoré, messages de barre
+    // d'application renvoyés à la vraie barre (même position avant et pendant), relais retiré à l'arrêt. Aucune diffusion de « TaskbarCreated » avant la fin.
+    [STAThread]
+    public static void RunTray()
+    {
+        var lines = new List<string>(); int bad = 0;
+        void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
+        TrayRelay relay = null; NotifyIcon ni = null;
+        try
+        {
+            Application.EnableVisualStyles();
+            const uint ABM_GETTASKBARPOS = 5;
+            (bool ok, RECT rc) TaskbarPos()
+            {
+                var abd = new APPBARDATA { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<APPBARDATA>() };
+                bool r = N.SHAppBarMessage(ABM_GETTASKBARPOS, ref abd) != UIntPtr.Zero;
+                return (r, abd.rc);
+            }
+            // Un shell déjà lancé tient son propre relais, qui refuse (à raison) les messages de barre d'application : les contrôles de position sont alors sautés.
+            // Il reprend la première place toutes les 500 ms : le relais d'essai se ferait doubler en plein test. Le test attend donc qu'aucun shell ne tourne.
+            bool liveShell = N.FindWindow("Shell_TrayWnd", null) != TrayRelay.ExplorerTray();
+            if (liveShell)
+            {
+                lines.Add("SAUTÉ  un shell tourne déjà (son relais est en place) : ce test doit être lancé quand le shell est arrêté");
+                File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-tray.txt"), lines);
+                return;
+            }
+            var before = TaskbarPos();
+            Check($"référence : la barre de Windows répond (position {before.rc.Left},{before.rc.Top} {before.rc.Right},{before.rc.Bottom})", before.ok && before.rc.Right > before.rc.Left);
+
+            var balloons = new List<string>();
+            relay = new TrayRelay { OnBalloon = (t, x, e) => balloons.Add(t + "|" + x) };
+            var scr = Screen.PrimaryScreen.Bounds;
+            Check("relais créé", relay.Create(new Rectangle(scr.Left, scr.Bottom - 36, scr.Width, 36)));
+            Check("FindWindow(Shell_TrayWnd) trouve le relais en premier", N.FindWindow("Shell_TrayWnd", null) == relay.Handle);
+            Check("la vraie barre de Windows reste trouvable (autre processus)", TrayRelay.ExplorerTray() != IntPtr.Zero && TrayRelay.ExplorerTray() != relay.Handle);
+
+            bool Until(Func<bool> f, int ms) { var t0 = DateTime.UtcNow; while ((DateTime.UtcNow - t0).TotalMilliseconds < ms) { Application.DoEvents(); relay.Flush(); if (f()) return true; Thread.Sleep(20); } Application.DoEvents(); relay.Flush(); return f(); }
+            string me = System.Diagnostics.Process.GetCurrentProcess().ProcessName, tip1 = "KDX essai " + Environment.ProcessId;
+            string KeyOf(string tip) { foreach (var o in relay.Items()) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(o)); if (d.RootElement.GetProperty("tip").GetString() == tip) return d.RootElement.GetProperty("k").GetString(); } return null; }
+            string PngOf(string tip) { foreach (var o in relay.Items()) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(o)); if (d.RootElement.GetProperty("tip").GetString() == tip) return d.RootElement.GetProperty("png").GetString(); } return null; }
+
+            var mouse = new List<string>();
+            ni = new NotifyIcon { Icon = SystemIcons.Information, Text = tip1, Visible = true };
+            ni.MouseUp += (s, e) => mouse.Add("up" + e.Button);
+            ni.MouseDoubleClick += (s, e) => mouse.Add("double" + e.Button);
+            Check("icône inscrite par le chemin normal : reçue avec son programme", Until(() => relay.Describe().Any(d => d.Contains(" " + me + " ") && d.Contains(tip1)), 3000));
+            Check("icône affichée, avec une image PNG", Until(() => KeyOf(tip1) != null, 3000) && (PngOf(tip1) ?? "").Length > 100);
+
+            ni.Text = tip1 + " bis";
+            Check("infobulle changée", Until(() => KeyOf(tip1 + " bis") != null, 3000));
+            string key = KeyOf(tip1 + " bis");
+
+            Check("clic gauche renvoyé à l'appli", key != null && relay.Click(key, "l") && Until(() => mouse.Contains("upLeft"), 3000));
+            Check("clic droit renvoyé à l'appli", relay.Click(key, "r") && Until(() => mouse.Contains("upRight"), 3000));
+            Check("double-clic renvoyé à l'appli", relay.Click(key, "d") && Until(() => mouse.Contains("doubleLeft"), 3000));
+            Check("clic sur une icône inconnue : refusé", !relay.Click("0:0", "l") && !relay.Click(key, "x"));
+
+            ni.ShowBalloonTip(1000, "Titre essai", "Texte essai", ToolTipIcon.Info);
+            Check("bulle de l'appli : remise comme notification", Until(() => balloons.Contains("Titre essai|Texte essai"), 3000));
+
+            // un message de zone de notification tronqué (4 octets) : ignoré, sans exception
+            int n0 = relay.Count;
+            var mem = System.Runtime.InteropServices.Marshal.AllocHGlobal(32); var data = System.Runtime.InteropServices.Marshal.AllocHGlobal(8);
+            System.Runtime.InteropServices.Marshal.WriteIntPtr(mem, 0, (IntPtr)1); System.Runtime.InteropServices.Marshal.WriteInt32(mem, IntPtr.Size, 4); System.Runtime.InteropServices.Marshal.WriteIntPtr(mem, IntPtr.Size * 2, data);
+            var bad1 = N.SendMessage(relay.Handle, 0x4A, IntPtr.Zero, mem);
+            System.Runtime.InteropServices.Marshal.FreeHGlobal(mem); System.Runtime.InteropServices.Marshal.FreeHGlobal(data);
+            Check("message tronqué : refusé, aucune icône ajoutée", bad1 == IntPtr.Zero && relay.Count == n0);
+
+            var during = TaskbarPos();
+            Check("message de barre d'application pendant que le relais est en tête : échec franc (pas de rectangle trompeur)", !during.ok);
+            relay.Suspend();
+            var held = TaskbarPos();
+            relay.Resume();
+            if (!liveShell) Check($"relais en retrait : le message atteint la vraie barre, même position ({held.rc.Left},{held.rc.Top} {held.rc.Right},{held.rc.Bottom})",
+                  held.ok && held.rc.Left == before.rc.Left && held.rc.Top == before.rc.Top && held.rc.Right == before.rc.Right && held.rc.Bottom == before.rc.Bottom);
+            Check("relais remis en tête après le retrait", N.FindWindow("Shell_TrayWnd", null) == relay.Handle);
+
+            ni.Visible = false;
+            Check("icône retirée", Until(() => KeyOf(tip1 + " bis") == null, 3000));
+
+            var h = relay.Handle; relay.Shutdown();
+            Check("relais retiré : FindWindow ne le trouve plus", N.FindWindow("Shell_TrayWnd", null) != h && !N.IsWindow(h) && TrayRelay.Current == null);
+            relay = null;
+            var after = TaskbarPos();
+            if (!liveShell) Check("la barre de Windows répond encore après le retrait", after.ok && after.rc.Left == before.rc.Left && after.rc.Bottom == before.rc.Bottom);
+        }
+        catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
+        finally { try { if (ni != null) { ni.Visible = false; ni.Dispose(); } } catch { } try { relay?.Shutdown(); } catch { } }
+        lines.Add(bad == 0 ? "TOUT EST BON" : $"{bad} vérification(s) en échec");
+        File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-tray.txt"), lines);
+        Environment.ExitCode = bad == 0 ? 0 : 1;
+    }
+
     // kdx-shell.exe --selftest-bus : le bus et les réglages communs, sur un tube de test (préfixe KDX_PIPE_PREFIX) et un dossier temporaire (KDX_SUITE_DIR) :
     // jamais le vrai bus ni les vrais réglages. Message valide, type inconnu, champ invalide, ligne illisible, ligne de plus de 64 Ko, deux connexions,
     // puis suite.json (lecture, écriture atomique, fichier abîmé, version inconnue, surveillance). Résultat dans selftest-bus.txt.
