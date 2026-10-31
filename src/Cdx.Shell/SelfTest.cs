@@ -460,8 +460,10 @@ static class SelfTest
                 using (var acl = new System.IO.Pipes.NamedPipeServerStream("cdxtest" + pid + ".acl", System.IO.Pipes.PipeDirection.In, 8, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous | System.IO.Pipes.PipeOptions.CurrentUserOnly))
                 {
                     var rules = System.IO.Pipes.PipesAclExtensions.GetAccessControl(acl).GetAccessRules(true, false, typeof(System.Security.Principal.SecurityIdentifier)).Cast<System.Security.AccessControl.AuthorizationRule>().Select(r => r.IdentityReference.Value).Distinct().ToList();
-                    string me = System.Security.Principal.WindowsIdentity.GetCurrent().User.Value;
-                    Check($"droits du tube : l'utilisateur courant seulement ({string.Join(", ", rules)})", rules.Count == 1 && rules[0] == me);
+                    // CurrentUserOnly accorde le tube au propriétaire du jeton : l'utilisateur, ou le groupe Administrateurs quand le processus est élevé (CI).
+                    var id = System.Security.Principal.WindowsIdentity.GetCurrent();
+                    string me = id.User.Value, owner = id.Owner?.Value;
+                    Check($"droits du tube : l'utilisateur courant seulement ({string.Join(", ", rules)})", rules.Count == 1 && (rules[0] == me || rules[0] == owner));
                 }
 
                 // ---- suite.json
