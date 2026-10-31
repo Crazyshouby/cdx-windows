@@ -37,17 +37,17 @@
   // Le programme demande d'ouvrir une note (bus : open-note).
   handlers['n.open'] = m => openNote(m.path);
 
-  KdxFrame.init();
-  KdxSplit.init({ pane: $('side'), side: 'left', key: 'notes-arbre', min: 180, max: 520 });
+  CdxFrame.init();
+  CdxSplit.init({ pane: $('side'), side: 'left', key: 'notes-arbre', min: 180, max: 520 });
   showDoc(); renderTabs(); renderTree();
 
   // Hors du programme (page ouverte dans un navigateur) : un coffre d'exemple pour voir la mise en page.
   if (!hasHost) {
     const t = n => Date.now() - n * 3600e3;
-    handlers.hello({ name: 'Notes KDX', root: 'C:\\Users\\Moi\\Documents\\Notes KDX', pinnedRoot: false });
+    handlers.hello({ name: 'Notes CDX', root: 'C:\\Users\\Moi\\Documents\\Notes CDX', pinnedRoot: false });
     handlers.index({ notes: [
       { p: 'Accueil.md', t: 'Accueil', m: t(2), g: [], y: null, s: null }, { p: 'Projets/Exemple de projet.md', t: 'Exemple de projet', m: t(5), g: ['exemple'], y: 'projet', s: 'actif' },
-      { p: 'Projets/KDX Notes.md', t: 'KDX Notes', m: t(1), g: ['kdx', 'projet'], y: 'projet', s: 'actif' }, { p: 'Idées/Piste.md', t: 'Piste', m: t(30), g: ['idée'], y: null, s: null }], folders: ['Idées', 'Projets', 'Archives'], images: [] });
+      { p: 'Projets/CDX Notes.md', t: 'CDX Notes', m: t(1), g: ['cdx', 'projet'], y: 'projet', s: 'actif' }, { p: 'Idées/Piste.md', t: 'Piste', m: t(30), g: ['idée'], y: null, s: null }], folders: ['Idées', 'Projets', 'Archives'], images: [] });
     const demo = '---\ntype: projet\nstatut: actif\ntags: [exemple]\n---\n# Exemple de projet\n\nUne note avec un [[Accueil|lien]], un lien [[Inconnue]] et #une-etiquette.\n\n## Prochaines actions\n\n- [ ] Lire [[Piste]]\n- [x] Ouvrir l\u2019application\n\n| Mot | Sens |\n|---|---|\n| **gras** | `code` |\n\n> [!note] Encart\n> Du texte.\n';
     handlers['n.note']({ path: 'Projets/Exemple de projet.md', text: demo, hash: 'demo', backlinks: [] });
   } else post({ cmd: 'ready' });

@@ -2,10 +2,10 @@
 <html lang="fr" data-theme="rouge">
 <head>
 <meta charset="utf-8">
-<title>KDX — barre des tâches</title>
-<link rel="stylesheet" href="/kdx/fonts.css">
-<link rel="stylesheet" href="/kdx/kdx-ui.css">
-<link rel="stylesheet" href="/kdx/themes.css">
+<title>CDX — barre des tâches</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
 <style>
   /* La barre des tâches de windows-ui.html, en vrai : mêmes règles (CHARTE-WINDOWS.md, extension « barre des tâches »). */
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--panel); }
@@ -45,7 +45,7 @@
   .tray.click { cursor: default; }
   .tray.click:hover { background: #0b0b0b; }
   .tray.on { border-color: #000 #444 #444 #000; background: #101010; }
-  /* Les boutons du son d'AudioLinker : visibles seulement tant qu'il tourne sur cette machine (le programme tient le tube « kdx.audiolinker »). */
+  /* Les boutons du son d'AudioLinker : visibles seulement tant qu'il tourne sur cette machine (le programme tient le tube « cdx.audiolinker »). */
   .alk { flex: none; display: flex; align-items: center; gap: 6px; height: 26px; }
   .alk[hidden] { display: none; }
   .alk input[type="range"] { flex: none; width: 90px; }
@@ -56,9 +56,9 @@
   .alk .orb.pulse { animation: alpulse 1s ease-in-out infinite; }
   @keyframes alpulse { 50% { opacity: 0.4; } }
 </style>
-<script src="/kdx/icons.js"></script>
-<script src="/kdx/kdx-bridge.js"></script>
-<script src="/kdx/host.js"></script>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/host.js"></script>
 <script src="/shell/shell.js"></script>
 </head>
 <body>
@@ -99,7 +99,7 @@
   // Glisser-déposer. Sources : une épingle de la barre (la réordonner), une fenêtre ouverte, une application ou une tuile du menu Démarrer (les épingler),
   // des fichiers venus de l'Explorateur (programmes, raccourcis, dossiers). Cible : toute la barre ; la place est donnée par la position de la souris
   // parmi les épingles (devant la moitié gauche d'une épingle, ou à la fin). Le programme valide tout : la page ne fait que transmettre.
-  const KIND = 'application/x-kdx-pin';
+  const KIND = 'application/x-cdx-pin';
   const pinBtns = () => [...$('pins').querySelectorAll('[data-t]')];
   const beforeOf = x => { for (const b of pinBtns()) { const r = b.getBoundingClientRect(); if (x < r.left + r.width / 2) return b.dataset.t; } return ''; };
   const clearMark = () => document.querySelectorAll('.insL, .insR').forEach(b => b.classList.remove('insL', 'insR'));

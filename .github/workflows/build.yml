@@ -1,4 +1,4 @@
-# Contrôles de kdx-windows (jamais exécuté à ce jour : à essayer au premier push).
+# Contrôles de cdx-windows (jamais exécuté à ce jour : à essayer au premier push).
 name: build
 on: [push, pull_request]
 jobs:
@@ -11,24 +11,24 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: 8.0.x }
 
-      # La charte (web/kdx) vient du dépôt kdx-ui (node tools/charte-sync.mjs --write kdx-windows là-bas) : une copie retouchée à la main échoue ici.
+      # La charte (web/cdx) vient du dépôt cdx-ui (node tools/charte-sync.mjs --write cdx-windows là-bas) : une copie retouchée à la main échoue ici.
       - name: Charter copies are untouched
-        run: node tools/kdx-verify.mjs web/kdx/kdx-sync.json
+        run: node tools/cdx-verify.mjs web/cdx/cdx-sync.json
 
-      # Les pages de la suite suivent les règles de la charte (CHARTE.md §8) ; les copies de web/kdx sont contrôlées à la source.
+      # Les pages de la suite suivent les règles de la charte (CHARTE.md §8) ; les copies de web/cdx sont contrôlées à la source.
       - name: Pages follow the charter
-        run: node tools/charte-lint.mjs web --manifest web/kdx/kdx-sync.json
+        run: node tools/charte-lint.mjs web --manifest web/cdx/cdx-sync.json
 
       - name: Build
-        run: dotnet build Kdx.sln -c Release -o bin
+        run: dotnet build Cdx.sln -c Release -o bin
 
       # Les auto-tests qui n'ouvrent pas de fenêtre visible ni ne touchent au son. Ce sont des programmes Windows (sans console) :
       # Start-Process -Wait est nécessaire pour attendre leur fin et lire leur code de sortie.
       - name: Self-tests (bus, AudioLinker link, files, git)
         shell: pwsh
         run: |
-          foreach ($t in @(@('kdx-shell', '--selftest-bus'), @('kdx-shell', '--selftest-audio'), @('kdx-explorer', '--selftest-fs'), @('kdx-repos', '--selftest-git'))) {
+          foreach ($t in @(@('cdx-shell', '--selftest-bus'), @('cdx-shell', '--selftest-audio'), @('cdx-explorer', '--selftest-fs'), @('cdx-repos', '--selftest-git'))) {
             $p = Start-Process "bin\$($t[0]).exe" -ArgumentList $t[1] -Wait -PassThru
             "$($t[0]) $($t[1]) : code $($p.ExitCode)"
-            if ($p.ExitCode -ne 0) { Get-Content "$env:LOCALAPPDATA\KdxShell\selftest*.txt"; throw "$($t[1]) en échec" }
+            if ($p.ExitCode -ne 0) { Get-Content "$env:LOCALAPPDATA\CdxShell\selftest*.txt"; throw "$($t[1]) en échec" }
           }

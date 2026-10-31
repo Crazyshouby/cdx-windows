@@ -1,4 +1,4 @@
-# Essai isolé de « Dépôts » (kdx-repos.exe) dans sa vraie fenêtre : des dépôts jetables (propre, modifié, en avance sur un remote local, vide) dans un dossier
+# Essai isolé de « Dépôts » (cdx-repos.exe) dans sa vraie fenêtre : des dépôts jetables (propre, modifié, en avance sur un remote local, vide) dans un dossier
 # temporaire désigné par un repos.json de test ; la page les affiche, le détail se remplit, les filtres et la recherche agissent, un second lancement
 # passe la main à la première instance. Aucune entrée simulée (la page est pilotée par le canal de test) et aucun vrai dépôt n'est lu.
 #   pwsh -File tests\repos.ps1 [-Bin <dossier des .exe>]
@@ -7,11 +7,11 @@ $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot
 if (-not $Bin) { $Bin = "$root\bin" }
 $id = "$PID"
-$suite = Join-Path $env:TEMP "kdx-rp-suite-$id"; $data = Join-Path $env:TEMP "kdx-rp-data-$id"; $work = Join-Path $env:TEMP "kdx-rp-work-$id"
+$suite = Join-Path $env:TEMP "cdx-rp-suite-$id"; $data = Join-Path $env:TEMP "cdx-rp-data-$id"; $work = Join-Path $env:TEMP "cdx-rp-work-$id"
 New-Item -ItemType Directory $suite, $data, $work -Force | Out-Null
 New-Item "$data\debug.txt" -ItemType File | Out-Null
-$prefix = "kdxrp$id."
-$env:KDX_PIPE_PREFIX = $prefix; $env:KDX_SUITE_DIR = $suite; $env:KDX_DATA_DIR = $data
+$prefix = "cdxrp$id."
+$env:CDX_PIPE_PREFIX = $prefix; $env:CDX_SUITE_DIR = $suite; $env:CDX_DATA_DIR = $data
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 function Ctl([string]$line) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', "${prefix}repos.ctl", [System.IO.Pipes.PipeDirection]::InOut)
@@ -36,7 +36,7 @@ try {
   $before = @(Get-ChildItem "$work\projets" -Recurse -Force -File | Where-Object { $_.FullName -notmatch '\\\.git\\' } | ForEach-Object { "$($_.FullName)|$($_.Length)|$($_.LastWriteTimeUtc.Ticks)" })
   @{ roots = @("$work\projets") } | ConvertTo-Json | Set-Content "$data\repos.json" -Encoding UTF8
 
-  $app = Start-Process "$Bin\kdx-repos.exe" -PassThru; $started += $app
+  $app = Start-Process "$Bin\cdx-repos.exe" -PassThru; $started += $app
   Check "la fenêtre s'ouvre et le canal de test répond" (Until { (Ctl 'state') -like 'fenêtre ouverte*' } 15000)
   Check "la recherche se termine : 4 projets lus" (Until { (JsInt "repos.size") -eq 4 -and (Js "scanning") -eq $false } 20000)
   Check "git est reconnu par la page (version)" ((Js "String(gitVersion)") -like 'git version*')
@@ -55,22 +55,22 @@ try {
   Js "document.querySelector('#chips [data-f=all]').click(); const f=document.getElementById('find'); f.value='vide'; f.dispatchEvent(new Event('input'))" | Out-Null
   Check "la recherche « vide » ne laisse que « vide »" (Until { (JsInt "document.querySelectorAll('#rows .fr').length") -eq 1 -and (Js "document.querySelector('#rows .fr b').textContent") -eq 'vide' } 3000)
 
-  # --- colonnes redimensionnables (kdx-columns.js) ---
+  # --- colonnes redimensionnables (cdx-columns.js) ---
   Js "document.getElementById('find').value=''; document.getElementById('find').dispatchEvent(new Event('input')); document.querySelector('#chips [data-f=all]').click()" | Out-Null
-  Check "l'en-tête a une poignée sur chaque colonne sauf la dernière" ((JsInt "document.querySelectorAll('#lhead .kdx-colrz').length") -eq 3)
+  Check "l'en-tête a une poignée sur chaque colonne sauf la dernière" ((JsInt "document.querySelectorAll('#lhead .cdx-colrz').length") -eq 3)
   $w0 = Js "JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))"
-  Js "(() => { const h = document.querySelector('#lhead .kdx-colrz'), x = h.getBoundingClientRect().left; for (const [t, d] of [['pointerdown', 0], ['pointermove', -60], ['pointerup', -60]]) h.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 5, clientX: x + d })); })()" | Out-Null
+  Js "(() => { const h = document.querySelector('#lhead .cdx-colrz'), x = h.getBoundingClientRect().left; for (const [t, d] of [['pointerdown', 0], ['pointermove', -60], ['pointerup', -60]]) h.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 5, clientX: x + d })); })()" | Out-Null
   $w1 = Js "JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))"
   $a = $w0 | ConvertFrom-Json; $b = $w1 | ConvertFrom-Json
   Check "tirer le bord de « Projet » de 60 px à gauche le rétrécit de 60 et élargit la colonne suivante de 60 ($w0 -> $w1)" (($a[0] - $b[0]) -eq 60 -and ($b[1] - $a[1]) -eq 60 -and $a[2] -eq $b[2])
   Check "les lignes de la liste suivent les colonnes de l'en-tête" ((Js "(() => { const r = document.querySelector('#rows .fr'), h = document.querySelectorAll('#lhead > .lh'); return [0, 1, 2, 3].every(i => Math.abs(r.children[i].getBoundingClientRect().width - h[i].getBoundingClientRect().width) <= 1); })()") -eq 'true')
   Check "tirer un bord ne change pas le tri" ((Js "document.querySelector('#lhead .lh.on').dataset.k") -eq 'd')
-  Js "document.querySelector('#lhead .kdx-colrz').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))" | Out-Null
+  Js "document.querySelector('#lhead .cdx-colrz').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))" | Out-Null
   Check "un double-clic sur une poignée rend les largeurs d'origine" ((Js "JSON.stringify([...document.querySelectorAll('#lhead > .lh')].map(b => Math.round(b.getBoundingClientRect().width)))") -eq $w0)
 
-  # --- la barre entre la liste et le détail (kdx-split.js) ---
+  # --- la barre entre la liste et le détail (cdx-split.js) ---
   $d0 = JsInt "Math.round(document.querySelector('.col.pv').getBoundingClientRect().width)"
-  Check "la barre entre la liste et le détail existe (détail de 380 px)" (((Js "document.querySelector('.col.pv').previousElementSibling.classList.contains('kdx-split')") -eq 'true') -and $d0 -eq 380)
+  Check "la barre entre la liste et le détail existe (détail de 380 px)" (((Js "document.querySelector('.col.pv').previousElementSibling.classList.contains('cdx-split')") -eq 'true') -and $d0 -eq 380)
   Js "(() => { const s = document.querySelector('.col.pv').previousElementSibling.firstElementChild, x = s.getBoundingClientRect().left; for (const [t, d] of [['pointerdown', 0], ['pointermove', -50], ['pointerup', -50]]) s.dispatchEvent(new PointerEvent(t, { bubbles: true, button: 0, pointerId: 5, clientX: x + d })); })()" | Out-Null
   Check "tirer la barre de 50 px à gauche élargit le détail (380 -> 430)" ((JsInt "Math.round(document.querySelector('.col.pv').getBoundingClientRect().width)") -eq 430)
   Js "document.querySelector('.col.pv').previousElementSibling.firstElementChild.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))" | Out-Null
@@ -93,7 +93,7 @@ try {
   Check "lecture seule : aucun index.lock laissé" (-not (Get-ChildItem "$work\projets" -Recurse -Force -Filter index.lock -ErrorAction SilentlyContinue))
 
   # --- instance unique : un second lancement passe la main et s'arrête ---
-  $second = Start-Process "$Bin\kdx-repos.exe" -PassThru
+  $second = Start-Process "$Bin\cdx-repos.exe" -PassThru
   Check "un second lancement s'arrête de lui-même (instance unique)" (Until { $second.HasExited } 10000)
   Check "la première instance tourne toujours" (-not $app.HasExited)
 
@@ -103,9 +103,9 @@ try {
 }
 finally {
   $started | ForEach-Object { try { if (-not $_.HasExited) { $_.Kill() } } catch { } }
-  Get-Process kdx-repos -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
+  Get-Process cdx-repos -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
   Start-Sleep -Seconds 1
   Get-ChildItem $work -Recurse -Force -File -ErrorAction SilentlyContinue | ForEach-Object { try { $_.Attributes = 'Normal' } catch { } }
   Remove-Item $suite, $data, $work -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item Env:KDX_PIPE_PREFIX, Env:KDX_SUITE_DIR, Env:KDX_DATA_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:CDX_PIPE_PREFIX, Env:CDX_SUITE_DIR, Env:CDX_DATA_DIR -ErrorAction SilentlyContinue
 }

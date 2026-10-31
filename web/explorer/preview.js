@@ -1,18 +1,18 @@
-// Aperçu et boutons latéraux de la souris de l'Explorateur KDX. Chargé après le script de explorer.html dont il utilise les fonctions
+// Aperçu et boutons latéraux de la souris de l'Explorateur CDX. Chargé après le script de explorer.html dont il utilise les fonctions
 // ($, T, selected, pathOf, typeOf, iconOf, extOf, sizeOf, dateOf, esc, post, handlers).
 
 // ---------------- aperçu ----------------
 const MEDIA = { img: 'png jpg jpeg gif bmp webp svg ico avif', vid: 'mp4 webm m4v mov mkv ogv', aud: 'mp3 wav flac ogg m4a aac opus', pdf: 'pdf' };
 const kindOf = it => { if (it.d) return 'dir'; const e = extOf(it.b ?? it.n); for (const k in MEDIA) if (MEDIA[k].split(' ').includes(e)) return k; return 'txt'; };
-// Les disques sont servis en lecture seule sous x.drive.kdx.shell (voir ExplorerForm.MapExtraHosts) : images, sons, vidéos et PDF s'y chargent.
-const fileUrl = p => { const m = /^([A-Za-z]):\\(.+)$/.exec(p); return m ? `https://${m[1].toLowerCase()}.drive.kdx.shell/` + m[2].split('\\').map(encodeURIComponent).join('/') : null; };
+// Les disques sont servis en lecture seule sous x.drive.cdx.shell (voir ExplorerForm.MapExtraHosts) : images, sons, vidéos et PDF s'y chargent.
+const fileUrl = p => { const m = /^([A-Za-z]):\\(.+)$/.exec(p); return m ? `https://${m[1].toLowerCase()}.drive.cdx.shell/` + m[2].split('\\').map(encodeURIComponent).join('/') : null; };
 
 let pvOn = false, pvKey = null;
-try { pvOn = localStorage.getItem('kdx.pv') === '1'; } catch { /* stockage indisponible : l'aperçu reste fermé */ }
+try { pvOn = localStorage.getItem('cdx.pv') === '1'; } catch { /* stockage indisponible : l'aperçu reste fermé */ }
 
 function setPreview(on) {
   pvOn = on; pvKey = null;
-  try { localStorage.setItem('kdx.pv', on ? '1' : '0'); } catch { }
+  try { localStorage.setItem('cdx.pv', on ? '1' : '0'); } catch { }
   $('pv').hidden = !on; $('cPv').classList.toggle('on', on);
   updatePreview();
 }

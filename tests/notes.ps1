@@ -6,12 +6,12 @@ $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot
 if (-not $Bin) { $Bin = "$root\bin" }
 $id = "$PID"
-$suite = Join-Path $env:TEMP "kdx-nt-suite-$id"; $data = Join-Path $env:TEMP "kdx-nt-data-$id"; $vault = Join-Path $env:TEMP "kdx-nt-coffre-$id"
+$suite = Join-Path $env:TEMP "cdx-nt-suite-$id"; $data = Join-Path $env:TEMP "cdx-nt-data-$id"; $vault = Join-Path $env:TEMP "cdx-nt-coffre-$id"
 New-Item -ItemType Directory $suite, $data, $vault -Force | Out-Null
 New-Item "$data\debug.txt" -ItemType File | Out-Null
-$prefix = "kdxnt$id."
-$env:KDX_PIPE_PREFIX = $prefix; $env:KDX_SUITE_DIR = $suite; $env:KDX_DATA_DIR = $data; $env:KDX_NOTES_DIR = $vault
-$env:KDX_NO_FOCUS = '1'   # la fenêtre d'essai ne prend pas le focus : la frappe de celui qui travaille à côté n'y tombe pas
+$prefix = "cdxnt$id."
+$env:CDX_PIPE_PREFIX = $prefix; $env:CDX_SUITE_DIR = $suite; $env:CDX_DATA_DIR = $data; $env:CDX_NOTES_DIR = $vault
+$env:CDX_NO_FOCUS = '1'   # la fenêtre d'essai ne prend pas le focus : la frappe de celui qui travaille à côté n'y tombe pas
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 function Ctl([string]$line) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', "${prefix}notes.ctl", [System.IO.Pipes.PipeDirection]::InOut)
@@ -33,7 +33,7 @@ function ReadV([string]$rel) {
   return $null
 }   # (« R » est un alias de PowerShell)
 function Has([string]$s, [string]$sub) { if ($null -eq $s) { return $false }; $s.Contains($sub) }   # (-like prendrait [[…]] pour des jokers)
-function Open-Notes { Start-Process "$Bin\kdx-notes.exe" -PassThru }
+function Open-Notes { Start-Process "$Bin\cdx-notes.exe" -PassThru }
 # édite le texte de l'éditeur comme le ferait la frappe (événement « input »)
 function Type-Text([string]$text) { $j = $text | ConvertTo-Json -Compress; Js "const e = document.getElementById('ed'); e.value = $j; e.dispatchEvent(new Event('input', { bubbles: true }))" | Out-Null }
 $png = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
@@ -51,7 +51,7 @@ try {
 
   $app = Open-Notes; $started += $app
   Check "la fenêtre s'ouvre, le coffre est lu : 6 notes dans l'index" (Until { (Js "notes.length") -eq '6' } 30000)
-  Check "le titre porte le nom du coffre" ((Js "document.getElementById('ttl').textContent") -like 'Notes — kdx-nt-coffre-*')
+  Check "le titre porte le nom du coffre" ((Js "document.getElementById('ttl').textContent") -like 'Notes — cdx-nt-coffre-*')
   Check "l'arborescence montre la racine, le dossier Projets (déplié, avec sa note) et les cinq notes de la racine" ((Js "document.querySelectorAll('#tree .root').length") -eq '1' -and ((Js "[...document.querySelectorAll('#tree .fld')].map(x => x.dataset.f).join(',')") -eq 'Projets') -and ((Js "document.querySelectorAll('#tree .nt').length") -eq '6'))
   Check "aucune note ouverte au départ : message d'accueil et éditeur désactivé" (((Js "document.getElementById('pv').textContent") -like '*Récemment modifiées*') -and ((Js "document.getElementById('ed').disabled") -eq 'true'))
 
@@ -137,7 +137,7 @@ try {
   # ---------- images du coffre ----------
   Js "openNote('Chantiers/Gamma.md')" | Out-Null; Until { (Js "cur") -eq 'Chantiers/Gamma.md' } 8000 | Out-Null
   Check "une image du coffre ![[logo.png]] est affichée, chargée par le programme (largeur 1 px)" (Until { (Js "const i = document.querySelector('#pv img.emb'); return !!i && i.complete && i.naturalWidth === 1") -eq 'true' } 8000)
-  $probe = 'const t = u => new Promise(r => { const i = new Image(); i.onload = () => r("ok"); i.onerror = () => r("refusé"); i.src = u; }); return Promise.all([t("https://vault.kdx.notes/logo.png"), t("https://vault.kdx.notes/.obsidian/cache.png"), t("https://vault.kdx.notes/Alpha.md"), t("https://vault.kdx.notes/..%2F..%2Fwindows%2Fsystem32%2Fx.png"), t("https://vault.kdx.notes/.trash/Nouvelle%20venue.md")]).then(a => window.__probe = a.join(","))'
+  $probe = 'const t = u => new Promise(r => { const i = new Image(); i.onload = () => r("ok"); i.onerror = () => r("refusé"); i.src = u; }); return Promise.all([t("https://vault.cdx.notes/logo.png"), t("https://vault.cdx.notes/.obsidian/cache.png"), t("https://vault.cdx.notes/Alpha.md"), t("https://vault.cdx.notes/..%2F..%2Fwindows%2Fsystem32%2Fx.png"), t("https://vault.cdx.notes/.trash/Nouvelle%20venue.md")]).then(a => window.__probe = a.join(","))'
   Js $probe | Out-Null
   Check "le serveur d'images ne sert que les images du coffre : logo.png oui ; dossier caché, note .md, chemin hors du coffre, corbeille : refusés" (Until { (Js "window.__probe") -eq 'ok,refusé,refusé,refusé,refusé' } 8000)
 
@@ -157,7 +157,7 @@ try {
   Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Coffre').click()" | Out-Null
   Check "Coffre : l'entrée « Changer de dossier » est grisée quand le dossier est imposé (variable d'essai)" ((Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Changer de dossier')).classList.contains('off')") -eq 'true')
   Js "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Claude et tes notes')).click()" | Out-Null
-  Check "« Claude et tes notes… » montre la commande de déclaration du serveur MCP" (Until { (Js "document.querySelector('.dlg-code')?.textContent") -like 'claude mcp add --scope user kdx-notes -- "*kdx-notes-mcp.exe"' } 5000)
+  Check "« Claude et tes notes… » montre la commande de déclaration du serveur MCP" (Until { (Js "document.querySelector('.dlg-code')?.textContent") -like 'claude mcp add --scope user cdx-notes -- "*cdx-notes-mcp.exe"' } 5000)
   Js "document.querySelector('.veil [data-y]').click()" | Out-Null
 
   # ---------- le bus : une autre application demande d'ouvrir une note ----------
@@ -166,8 +166,8 @@ try {
   Check "bus open-note : un chemin hors du coffre est refusé (rien ne s'ouvre)" ((Js "cur") -eq 'Beta.md' -and ((Js "tabs.some(p => p.includes('win.ini'))") -eq 'false'))
 
   # ---------- Claude écrit dans le coffre pendant que l'application est ouverte ----------
-  $psi = New-Object Diagnostics.ProcessStartInfo("$Bin\kdx-notes-mcp.exe"); $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
-  $psi.Environment['KDX_NOTES_DIR'] = $vault; $psi.Environment['KDX_DATA_DIR'] = $data
+  $psi = New-Object Diagnostics.ProcessStartInfo("$Bin\cdx-notes-mcp.exe"); $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+  $psi.Environment['CDX_NOTES_DIR'] = $vault; $psi.Environment['CDX_DATA_DIR'] = $data
   $mcp = [Diagnostics.Process]::Start($psi)
   function Rpc([string]$json) { $mcp.StandardInput.WriteLine($json); $mcp.StandardInput.Flush(); $mcp.StandardOutput.ReadLine() }
   Rpc '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' | Out-Null
@@ -194,5 +194,5 @@ finally {
   foreach ($p in $started) { if ($p -and -not $p.HasExited) { try { $p.Kill() } catch { } } }
   Start-Sleep -Seconds 1
   Remove-Item $suite, $data, $vault -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item Env:KDX_PIPE_PREFIX, Env:KDX_SUITE_DIR, Env:KDX_DATA_DIR, Env:KDX_NOTES_DIR, Env:KDX_NO_FOCUS -ErrorAction SilentlyContinue
+  Remove-Item Env:CDX_PIPE_PREFIX, Env:CDX_SUITE_DIR, Env:CDX_DATA_DIR, Env:CDX_NOTES_DIR, Env:CDX_NO_FOCUS -ErrorAction SilentlyContinue
 }

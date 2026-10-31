@@ -16,20 +16,20 @@ f.onload = async () => {
   const box = () => d.getElementById('pvbox');
 
   await run('double-clic dossier', () => { md(row('Charte graphique'), 1); md(row('Charte graphique'), 2); });
-  await run('double-clic fichier', () => { md(row('capture-kdx.png'), 1); md(row('capture-kdx.png'), 2); });
+  await run('double-clic fichier', () => { md(row('capture-cdx.png'), 1); md(row('capture-cdx.png'), 2); });
   await run('Entrée sur dossier KIRC', () => { md(row('KIRC'), 1); d.getElementById('files').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
   H['fs.list']({ tab: '1', path: SUB, items: [], free: 1 });           // la page affiche le dossier ouvert par Entrée ... on revient à Documents plus bas
-  H['fs.list']({ tab: '1', path: DOC, items: [{ n: 'Charte graphique', d: true, s: -1, m: 1 }, { n: 'KIRC', d: true, s: -1, m: 1 }, { n: 'capture-kdx.png', d: false, s: 2300000, m: 1 }, { n: 'notes-kdx.txt', d: false, s: 4000, m: 1 }, { n: 'données.bin', d: false, s: 900, m: 1 }], free: 1 });
+  H['fs.list']({ tab: '1', path: DOC, items: [{ n: 'Charte graphique', d: true, s: -1, m: 1 }, { n: 'KIRC', d: true, s: -1, m: 1 }, { n: 'capture-cdx.png', d: false, s: 2300000, m: 1 }, { n: 'notes-cdx.txt', d: false, s: 4000, m: 1 }, { n: 'données.bin', d: false, s: 900, m: 1 }], free: 1 });
 
   // ---- aperçu ----
   await run('clic sur « Aperçu » (ouverture du volet)', () => d.getElementById('cPv').click());
   res.push('   volet visible : ' + !d.getElementById('pv').hidden + ', bouton enfoncé : ' + d.getElementById('cPv').classList.contains('on'));
-  await run('sélection du texte notes-kdx.txt', () => md(row('notes-kdx.txt'), 1));
-  H['fs.preview']({ type: 'fs.preview', path: DOC + '\\notes-kdx.txt', kind: 'text', text: 'ligne 1\nligne 2 — é', truncated: true });
+  await run('sélection du texte notes-cdx.txt', () => md(row('notes-cdx.txt'), 1));
+  H['fs.preview']({ type: 'fs.preview', path: DOC + '\\notes-cdx.txt', kind: 'text', text: 'ligne 1\nligne 2 — é', truncated: true });
   res.push('   contenu : ' + JSON.stringify(box().textContent));
   await run('réponse périmée (autre chemin) ignorée', () => H['fs.preview']({ type: 'fs.preview', path: 'autre', kind: 'text', text: 'NON', truncated: false }));
   res.push('   contenu inchangé : ' + !box().textContent.includes('NON'));
-  await run('sélection de l\'image capture-kdx.png', () => md(row('capture-kdx.png'), 1));
+  await run('sélection de l\'image capture-cdx.png', () => md(row('capture-cdx.png'), 1));
   res.push('   <img src> : ' + (box().querySelector('img') ? box().querySelector('img').getAttribute('src') : 'aucune'));
   await run('sélection du dossier KIRC (pas de requête)', () => md(row('KIRC'), 1));
   await run('binaire données.bin', () => { md(row('données.bin'), 1); H['fs.preview']({ type: 'fs.preview', path: DOC + '\\données.bin', kind: 'binary' }); });

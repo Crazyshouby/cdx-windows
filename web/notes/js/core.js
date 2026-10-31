@@ -1,8 +1,8 @@
 // Le socle de la page « Notes » : état, résolution des liens, boîtes de saisie, messages du programme. Chargé en premier ; les fichiers suivants partagent ses noms (scripts classiques).
   fillPix();
   const $ = id => document.getElementById(id);
-  const ls = (k, d) => { try { const v = localStorage.getItem('kdx.notes.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
-  const lsSet = (k, v) => { try { localStorage.setItem('kdx.notes.' + k, JSON.stringify(v)); } catch (e) { /* pas de stockage : tant pis */ } };
+  const ls = (k, d) => { try { const v = localStorage.getItem('cdx.notes.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
+  const lsSet = (k, v) => { try { localStorage.setItem('cdx.notes.' + k, JSON.stringify(v)); } catch (e) { /* pas de stockage : tant pis */ } };
   const baseName = p => p.slice(p.lastIndexOf('/') + 1).replace(/\.md$/i, '');
   const folderOf = p => { const i = p.lastIndexOf('/'); return i < 0 ? '' : p.slice(0, i); };
 
@@ -37,7 +37,7 @@
     const lo = String(target).replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase(); let rel = imgPaths.get(lo) || null;
     if (!rel && typeof cur === 'string' && cur) { const base = folderOf(cur).toLowerCase(); rel = imgPaths.get((base ? base + '/' : '') + lo) || null; }   // à côté de la note
     if (!rel) { const k = lo.slice(lo.lastIndexOf('/') + 1), l = imgByName.get(k); if (l) rel = l.find(p => p.toLowerCase().endsWith('/' + lo) || p.toLowerCase() === lo) || (lo.includes('/') ? null : l[0]); }
-    return rel ? 'https://vault.kdx.notes/' + rel.split('/').map(encodeURIComponent).join('/') : null;
+    return rel ? 'https://vault.cdx.notes/' + rel.split('/').map(encodeURIComponent).join('/') : null;
   }
   const mdCtx = { resolve: resolveLink, imageUrl };
 
@@ -88,7 +88,7 @@
   };
   handlers['n.mcpinfo'] = m => info({
     title: 'Claude et tes notes',
-    text: 'Le serveur MCP « kdx-notes » permet à Claude de lire, chercher, créer et ranger les notes de ce coffre (il ne supprime jamais : ce qu\'il retire va dans le dossier .trash).\n\nPour le déclarer à Claude Code (une seule fois) :',
-    code: `claude mcp add --scope user kdx-notes -- "${m.exe}"`, copy: `claude mcp add --scope user kdx-notes -- "${m.exe}"`
+    text: 'Le serveur MCP « cdx-notes » permet à Claude de lire, chercher, créer et ranger les notes de ce coffre (il ne supprime jamais : ce qu\'il retire va dans le dossier .trash).\n\nPour le déclarer à Claude Code (une seule fois) :',
+    code: `claude mcp add --scope user cdx-notes -- "${m.exe}"`, copy: `claude mcp add --scope user cdx-notes -- "${m.exe}"`
   });
 

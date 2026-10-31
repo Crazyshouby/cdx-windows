@@ -1,6 +1,6 @@
-# KDX-UI pour Windows
+# CDX-UI pour Windows
 
-La charte KDX-UI (`CHARTE.md`) appliquée à **tout ce que Windows affiche** : bureau, barre des tâches, menu Démarrer,
+La charte CDX-UI (`CHARTE.md`) appliquée à **tout ce que Windows affiche** : bureau, barre des tâches, menu Démarrer,
 Explorateur, Paramètres, gestionnaire des tâches, centre rapide, Alt+Tab, dialogues, verrouillage, écran d'arrêt.
 Les dessins sont dans `windows-ui.html` (douze écrans de 1600 × 900 ; flèches gauche et droite pour passer de l'un à
 l'autre, sélecteur d'accent en haut) ; des aperçus PNG sont dans `apercus/`.
@@ -10,7 +10,7 @@ seule couleur d'accent, 14 px sans gras. Ce fichier dit **quoi mettre à la plac
 
 ## 1. Ce que devient chaque élément de Windows
 
-| Windows | Dans KDX-UI | Composant |
+| Windows | Dans CDX-UI | Composant |
 |---|---|---|
 | Fenêtre d'application | cadre à quatre lignes + barre de titre 21 px ; fermer à gauche, agrandir et réduire à droite | `.win > .tb + .cb` |
 | Fenêtre active / inactive | accent / gris | `.win.active` |
@@ -18,10 +18,10 @@ seule couleur d'accent, 14 px sans gras. Ce fichier dit **quoi mettre à la plac
 | Bouton Démarrer | bouton en relief, icône de quatre carrés rouges | `.tk.start` |
 | Application ouverte | bouton en relief ; **active** = enfoncé + barre d'accent de 4 px à gauche ; **attention** = texte ambre | `.tk`, `.tk.on`, `.tk.attn` |
 | Zone de notification, horloge | afficheur noir creusé, texte vert | `.tray` (extension) |
-| Menu Démarrer, centre rapide, calendrier | fenêtres KDX ancrées au-dessus de la barre | `.win` |
+| Menu Démarrer, centre rapide, calendrier | fenêtres CDX ancrées au-dessus de la barre | `.win` |
 | Bureau | icônes pixel 32 px (2 × 16), libellé blanc à ombre noire ; sélection = gris `#3f3f3f` cerné de `#777` | `.di` |
 | Fond d'écran | rampe d'accent assombrie (haut `--a-dark` 45 %, bas 80 %), lueur `--a-mid` en bas, trame de lignes à 1 px | `.wall` |
-| Explorateur | onglets KDX, barre de boutons carrés, arbre et liste à filets, en-têtes triables, afficheur d'état | `.tabs`, `.mb`, `.list`, `.lhead`, `.status` |
+| Explorateur | onglets CDX, barre de boutons carrés, arbre et liste à filets, en-têtes triables, afficheur d'état | `.tabs`, `.mb`, `.list`, `.lhead`, `.status` |
 | Paramètres | liste de rubriques à gauche, groupes gravés à droite, un seul bouton par défaut | `.list`, `fieldset.grp`, `.form` |
 | Gestionnaire des tâches | liste à jauges intégrées ; courbes = oscilloscopes noirs à traits verts en escalier | `.gauge`, `.scope` |
 | Interrupteur (« activé / désactivé ») | case à cocher | `.switch` |
@@ -38,8 +38,8 @@ seule couleur d'accent, 14 px sans gras. Ce fichier dit **quoi mettre à la plac
 
 ## 2. Extensions à la charte
 
-Cinq composants que Windows impose et que KDX n'a pas. Ils sont dans le `<style>` de `windows-ui.html` (section
-« Extensions Windows »), à reporter dans `kdx-ui.css` si le projet se réalise.
+Cinq composants que Windows impose et que CDX n'a pas. Ils sont dans le `<style>` de `windows-ui.html` (section
+« Extensions Windows »), à reporter dans `cdx-ui.css` si le projet se réalise.
 
 - **Barre des tâches** — 36 px, `--panel`, filet noir en haut, relief clair `#666` / `#444` ; boutons de 26 px,
   épinglés carrés de 30 px, séparateurs gravés (filet sombre + filet clair).
@@ -62,7 +62,7 @@ calculatrice (multiples entiers, jamais de taille intermédiaire).
   `disque`, `pc`, `wifi`, `volume`, `recherche`, `demarrer`, `musique`, `video`, `telecharger`, `bouclier`, `horloge`,
   `utilisateur`, `palette`, `apps`, `maj`, `avertissement`, `erreur`, `cadenas`, `processeur`). Dessin dans
   `outils/pixel_icons.py`, génération par `outils/gen_assets.py`. Sur le bureau, elles s'affichent à 32 px.
-- **Fenêtre enroulée** (`.shaded`) : titre seul, c'est l'état « réduit sur place » de KDX.
+- **Fenêtre enroulée** (`.shaded`) : titre seul, c'est l'état « réduit sur place » de CDX.
 
 
 ## 4. Appliquer le design à Windows : étude (30/10/2026)
@@ -82,11 +82,11 @@ dessinent pas toutes de la même façon, et chacune a sa porte d'entrée :
 | Chrome, Discord, VS Code | leur propre moteur | thèmes CSS de chaque application |
 | Connexion, UAC, écran d'arrêt | processus système | non modifiables |
 
-**Le meilleur levier : le thème classique, parce qu'il ressemble déjà à KDX.** Le thème classique (Win9x/2000) dessine
+**Le meilleur levier : le thème classique, parce qu'il ressemble déjà à CDX.** Le thème classique (Win9x/2000) dessine
 les contrôles en relief : arête claire en haut à gauche, sombre en bas à droite. Les cinq couleurs de relief se règlent
 (`HKCU\Control Panel\Colors`) et se rangent exactement sur nos jetons :
 
-| Couleur système Windows | Jeton KDX |
+| Couleur système Windows | Jeton CDX |
 |---|---|
 | `ButtonHilight` | `#666666` (arête claire extérieure) |
 | `ButtonLight` | `#444444` (arête claire intérieure) |
@@ -121,7 +121,7 @@ l'effet sur toutes les applications. Réserve de licence inchangée (`CHARTE.md`
    sur chaque fenêtre la couleur de bordure et de titre (`DWMWA_BORDER_COLOR`, `DWMWA_CAPTION_COLOR`, coins droits,
    Windows 11 22H2 et plus). Tout se défait en un clic. Résultat : cadre accent / gris, coins droits ; pas de relief,
    boutons de titre à la Windows.
-2. **Thème classique + police pixel.** Le relief KDX sur tout le Win32. À essayer d'abord **dans une machine virtuelle**
+2. **Thème classique + police pixel.** Le relief CDX sur tout le Win32. À essayer d'abord **dans une machine virtuelle**
    (Hyper-V, Windows 11 Pro l'a), jamais en premier sur le poste principal.
 3. **Shell maison.** La barre des tâches, Démarrer, le centre rapide, Alt+Tab. Trois candidats, à trancher :
    **Seelen UI** (libre, AGPL-3.0, thèmes en CSS/JSON, barre, lanceur, panneaux de volume et de luminosité, Alt+Tab,
@@ -166,7 +166,7 @@ mesurée**.
   un mod se branche sur l'arbre visuel d'une application XAML et réécrit les propriétés d'éléments choisis par type et
   nom (`CornerRadius=0`, `BorderThickness`, `Background:=<LinearGradientBrush…>`, polices…). Limite : on **modifie**
   l'existant, on n'ajoute pas d'éléments, donc pas de biseau en quatre lignes (au mieux une bordure à dégradé).
-- **Thème classique** : voir §4. Le plus fidèle au relief KDX, mais uniquement pour le Win32.
+- **Thème classique** : voir §4. Le plus fidèle au relief CDX, mais uniquement pour le Win32.
 - **Injection dans `dwm.exe`** (*Custom Window Corner Radius*, *Caption Buttons Customizer* ; en grand : OpenGlass,
   DWMBlurGlass) : permet de **redessiner le cadre et les boutons de titre de toutes les fenêtres**, XAML comprises.
   Contre : ces outils accrochent des fonctions privées de DWM, propres à chaque build ; OpenGlass déclare ne pas
@@ -176,7 +176,7 @@ mesurée**.
 saisie du mot de passe (LogonUI).
 
 **Une voie d'extrême recours, non vérifiée** : un compositeur maison qui affiche chaque fenêtre de Windows (miniatures
-DWM ou Windows Graphics Capture) dans un cadre KDX dessiné par nous, et réexpédie la souris et le clavier. Ce serait la
+DWM ou Windows Graphics Capture) dans un cadre CDX dessiné par nous, et réexpédie la souris et le clavier. Ce serait la
 fidélité totale pour toutes les applications, mais c'est un gestionnaire de fenêtres complet à écrire. À ne tenter que
 si les voies ci-dessus ne suffisent pas.
 

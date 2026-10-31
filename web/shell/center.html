@@ -2,11 +2,11 @@
 <html lang="fr" data-theme="rouge">
 <head>
 <meta charset="utf-8">
-<title>KDX — centre rapide</title>
-<link rel="stylesheet" href="/kdx/fonts.css">
-<link rel="stylesheet" href="/kdx/kdx-ui.css">
-<link rel="stylesheet" href="/kdx/themes.css">
-<link rel="stylesheet" href="/kdx/page.css">
+<title>CDX — centre rapide</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/page.css">
 <style>
   /* Le centre rapide de windows-ui.html (écran 6) : le son, le réseau, le calendrier. */
   .blk { display: block !important; }
@@ -35,9 +35,9 @@
   .nt.err .orb, .nt.error .orb { }
   .lgd { display: flex; align-items: center; justify-content: space-between; }
 </style>
-<script src="/kdx/icons.js"></script>
-<script src="/kdx/kdx-bridge.js"></script>
-<script src="/kdx/host.js"></script>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/host.js"></script>
 <script src="/shell/shell.js"></script>
 </head>
 <body>
@@ -59,7 +59,7 @@
       <div class="caltop"><button class="btn" id="prev">←</button><b id="month"></b><button class="btn" id="next">→</button></div>
       <div class="calg" id="cal"></div>
     </fieldset>
-    <div class="btns"><button class="btn row2 push" id="quit" title="Quitter le shell KDX et rendre la barre de Windows"><span class="pix" data-ic="quitter"></span>Quitter KDX</button></div>
+    <div class="btns"><button class="btn row2 push" id="quit" title="Quitter le shell CDX et rendre la barre de Windows"><span class="pix" data-ic="quitter"></span>Quitter CDX</button></div>
   </div>
 </div>
 <script>
@@ -82,7 +82,7 @@
   $('mute').onclick = () => post({ cmd: 'vol.mute', on: !st.muted });
   $('quit').onclick = () => post({ cmd: 'quit' });
 
-  // ---- notifications : envoyées par les autres applications de la suite (kdx.shell, message « notify ») ----
+  // ---- notifications : envoyées par les autres applications de la suite (cdx.shell, message « notify ») ----
   handlers.notify = m => {
     const box = $('notifs'); box.textContent = '';
     const items = (m.items || []).slice().reverse();
@@ -125,7 +125,7 @@
 
   drawCal();
   handlers.notify({ items: [] });
-  if (!hasHost) { handlers.notify({ items: [{ title: 'Téléchargement terminé', text: 'photo-vacances.zip', level: 'info', from: 'browser', at: Date.now() / 1000 - 60 }, { title: 'Sortie audio perdue', text: 'Casque (Arctis 7)', level: 'warn', from: 'audiolinker', at: Date.now() / 1000 - 600 }, { title: 'Mention dans #kdx', text: '<alice> kirc: tu es là ?', level: 'info', from: 'kirc', at: Date.now() / 1000 - 3000 }] }); }
+  if (!hasHost) { handlers.notify({ items: [{ title: 'Téléchargement terminé', text: 'photo-vacances.zip', level: 'info', from: 'browser', at: Date.now() / 1000 - 60 }, { title: 'Sortie audio perdue', text: 'Casque (Arctis 7)', level: 'warn', from: 'audiolinker', at: Date.now() / 1000 - 600 }, { title: 'Mention dans #cdx', text: '<alice> kirc: tu es là ?', level: 'info', from: 'kirc', at: Date.now() / 1000 - 3000 }] }); }
   if (!hasHost) handlers.center({ volume: 64, muted: false, device: 'Haut-parleurs (Realtek)', net: { up: true, type: 'Ethernet', speed: 1000, ip: '192.168.1.158' } });
   post({ cmd: 'ready', page: 'center' });
 </script>

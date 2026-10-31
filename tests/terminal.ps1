@@ -1,8 +1,8 @@
-# Essai isolé du terminal (kdx-terminal.exe) dans sa vraie fenêtre : de vrais PowerShell derrière de vraies pseudo-consoles, affichés par la page (xterm.js, WebGL).
+# Essai isolé du terminal (cdx-terminal.exe) dans sa vraie fenêtre : de vrais PowerShell derrière de vraies pseudo-consoles, affichés par la page (xterm.js, WebGL).
 # On commande le terminal par le canal de test (écrire dans l'entrée d'un shell, lire l'écran de la page, agir sur les onglets et les volets) : aucune entrée simulée sur
 # le bureau (les raccourcis clavier sont des événements envoyés dans la page, pas des touches), et le presse-papiers n'est pas touché (copier/coller ne sont pas essayés ici).
 # Le terminal tourne avec son propre bus, son propre dossier de données et son propre suite.json.
-#   pwsh -File tests\terminal.ps1 [-Bin <dossier de kdx-terminal.exe>] [-ExplorerBin <dossier de kdx-explorer.exe>]
+#   pwsh -File tests\terminal.ps1 [-Bin <dossier de cdx-terminal.exe>] [-ExplorerBin <dossier de cdx-explorer.exe>]
 # Avec l'Explorateur (s'il est là) : « Ouvrir dans un terminal » ouvre un onglet du terminal déjà ouvert, puis relance le terminal s'il est fermé (chemin de apps.json).
 param([string]$Bin, [string]$ExplorerBin)
 $ErrorActionPreference = 'Continue'
@@ -10,11 +10,11 @@ $root = Split-Path $PSScriptRoot
 if (-not $Bin) { $Bin = "$root\bin" }
 if (-not $ExplorerBin) { $ExplorerBin = $Bin }
 $id = "$PID"
-$suite = Join-Path $env:TEMP "kdx-tm-suite-$id"; $data = Join-Path $env:TEMP "kdx-tm-data-$id"
+$suite = Join-Path $env:TEMP "cdx-tm-suite-$id"; $data = Join-Path $env:TEMP "cdx-tm-data-$id"
 New-Item -ItemType Directory $suite, $data -Force | Out-Null
 New-Item "$data\debug.txt" -ItemType File | Out-Null
-$prefix = "kdxtm$id."
-$env:KDX_PIPE_PREFIX = $prefix; $env:KDX_SUITE_DIR = $suite; $env:KDX_DATA_DIR = $data
+$prefix = "cdxtm$id."
+$env:CDX_PIPE_PREFIX = $prefix; $env:CDX_SUITE_DIR = $suite; $env:CDX_DATA_DIR = $data
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 function Ctl([string]$line, [string]$who = 'terminal') {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', "${prefix}$who.ctl", [System.IO.Pipes.PipeDirection]::InOut)
@@ -30,15 +30,15 @@ function Key([string]$init) { Js "document.dispatchEvent(new KeyboardEvent('keyd
 
 $started = @()
 try {
-  $app = Start-Process "$Bin\kdx-terminal.exe" -PassThru; $started += $app
+  $app = Start-Process "$Bin\cdx-terminal.exe" -PassThru; $started += $app
   Check "la fenêtre s'ouvre et le canal de test répond" (Until { (Ctl 'state') -like 'fenêtre ouverte*' } 20000)
   Check "xterm.js est chargé dans la page" (Until { (Js "typeof Terminal + '/' + typeof FitAddon + '/' + typeof WebglAddon") -eq 'function/object/object' } 15000)
   Check "le premier shell démarre : une session existe" (Until { (Sessions) -eq 1 } 20000)
   Check "l'invite de PowerShell s'affiche dans la page" (Until { (Screen) -match 'PS [A-Z]:\\' } 20000)
 
   # --- ce qu'on écrit dans l'entrée arrive au shell, et sa réponse à la page ---
-  Ctl "write Write-Output ('KDX'+'TEST'+(1+2))\r" | Out-Null
-  Check "une commande écrite dans l'entrée s'exécute et son résultat est affiché" (Until { (Screen) -match 'KDXTEST3' } 15000)
+  Ctl "write Write-Output ('CDX'+'TEST'+(1+2))\r" | Out-Null
+  Check "une commande écrite dans l'entrée s'exécute et son résultat est affiché" (Until { (Screen) -match 'CDXTEST3' } 15000)
   Ctl "write Write-Output ('é€ß'+'-ACC')\r" | Out-Null
   Check "les accents et le signe euro font l'aller-retour (UTF-8)" (Until { (Screen) -match 'é€ß-ACC' } 15000)
   Ctl "write `$Host.UI.RawUI.WindowSize.Width\r" | Out-Null
@@ -56,7 +56,7 @@ try {
   Check "la couleur ANSI rouge est celle de la charte (#ff5a4a)" ((Js "window.__panes.get(1).term.options.theme.red") -eq '#ff5a4a')
   Check "pas de gras : la police normale est aussi celle du « gras »" ((Js "window.__panes.get(1).term.options.fontWeightBold") -eq 'normal')
   Check "aucun coin arrondi dans le cadre, les onglets ni les volets" ((Js "[...document.querySelectorAll('.win, .tb, .tb-btn, .tabs, .tab, .termbox, .cb')].every(e => getComputedStyle(e).borderRadius === '0px')") -eq $true)
-  Js "kdx.emit('theme', 'bleu')" | Out-Null
+  Js "cdx.emit('theme', 'bleu')" | Out-Null
   Check "un changement d'accent recolore le terminal (bleu : texte #8fd0ff, sélection #001177 / #ff00ff)" (Until { (Js "(() => { const o = window.__panes.get(1).term.options.theme; return o.foreground + ' ' + o.selectionBackground + ' ' + o.selectionForeground; })()") -eq '#8fd0ff #001177 #ff00ff' } 3000)
 
   # --- onglets ---
@@ -93,18 +93,18 @@ try {
 
   # --- un shell qui se termine ferme son volet ---
   Js "window.__api.activate(window.__tabs[1]); 'ok'" | Out-Null
-  Check "le titre de la fenêtre suit le terminal (séquence OSC)" ((Ctl "write Write-Host -NoNewline ([char]27+']0;Titre KDX'+[char]7)\r") -eq 'ok' -and (Until { (Js "document.getElementById('ttl').textContent") -eq 'Titre KDX' } 8000))
+  Check "le titre de la fenêtre suit le terminal (séquence OSC)" ((Ctl "write Write-Host -NoNewline ([char]27+']0;Titre CDX'+[char]7)\r") -eq 'ok' -and (Until { (Js "document.getElementById('ttl').textContent") -eq 'Titre CDX' } 8000))
   Ctl "write exit\r" | Out-Null
   Check "« exit » dans le dernier volet d'un onglet ferme l'onglet (1 onglet, 1 session) sans fermer la fenêtre" ((Until { (Js "window.__tabs.length") -eq 1 -and (Sessions) -eq 1 } 15000) -and -not $app.HasExited)
 
   # --- fenêtre ---
-  $second = Start-Process "$Bin\kdx-terminal.exe" -PassThru; $started += $second
+  $second = Start-Process "$Bin\cdx-terminal.exe" -PassThru; $started += $second
   Check "un second lancement passe la main à la première instance et s'arrête" ($second.WaitForExit(10000))
 
   # --- un dossier de départ : second lancement, puis Explorateur ---
-  $dirA = Join-Path $env:TEMP "kdx tm dossier é $id"; $dirB = Join-Path $env:TEMP "kdx tm autre $id"
+  $dirA = Join-Path $env:TEMP "cdx tm dossier é $id"; $dirB = Join-Path $env:TEMP "cdx tm autre $id"
   New-Item -ItemType Directory $dirA, $dirB -Force | Out-Null
-  $third = Start-Process "$Bin\kdx-terminal.exe" -ArgumentList "`"$dirA`"" -PassThru; $started += $third
+  $third = Start-Process "$Bin\cdx-terminal.exe" -ArgumentList "`"$dirA`"" -PassThru; $started += $third
   Check "un second lancement avec un dossier s'arrête et ouvre un onglet dans le terminal déjà ouvert (2 sessions)" ($third.WaitForExit(10000) -and (Until { (Sessions) -eq 2 } 20000))
   $sidA = Js "window.__tabs[window.__tabs.length - 1].focus.sid"
   Check "l'onglet ouvert est actif et son shell démarre" (Until { (Screen $sidA) -match 'PS [A-Z]:\\' } 20000)
@@ -113,19 +113,19 @@ try {
   Ctl "write exit\r" | Out-Null
   Check "« exit » ferme cet onglet (1 session)" (Until { (Sessions) -eq 1 } 15000)
 
-  $exe = Join-Path $ExplorerBin 'kdx-explorer.exe'
+  $exe = Join-Path $ExplorerBin 'cdx-explorer.exe'
   $fromExplorer = { param($dir) Ctl ("eval post({ cmd: 'fs.terminal', path: '" + $dir.Replace('\', '/') + "' })") 'explorer' | Out-Null }
   if (Test-Path $exe) {
     $explorer = Start-Process $exe -ArgumentList "`"$dirB`"" -PassThru; $started += $explorer
     Check "l'Explorateur s'ouvre (canal de test, page prête)" (Until { (Ctl 'state' 'explorer') -eq '1 fenêtre(s)' -and (Ctl 'eval typeof post' 'explorer') -like '*function*' } 30000)
     & $fromExplorer $dirB
-    Check "« Ouvrir dans un terminal » (Explorateur) ouvre un onglet du terminal KDX déjà ouvert (2 sessions)" (Until { (Sessions) -eq 2 } 20000)
+    Check "« Ouvrir dans un terminal » (Explorateur) ouvre un onglet du terminal CDX déjà ouvert (2 sessions)" (Until { (Sessions) -eq 2 } 20000)
     $sidB = Js "window.__tabs[window.__tabs.length - 1].focus.sid"
     Ctl "write (Get-Location).Path\r" | Out-Null
     Check "son shell est dans le dossier de l'Explorateur" (Until { (Screen $sidB) -match [regex]::Escape($dirB) } 20000)
     Ctl "write exit\r" | Out-Null
     Check "« exit » ferme cet onglet (1 session)" (Until { (Sessions) -eq 1 } 15000)
-  } else { "SAUTÉ   kdx-explorer.exe est introuvable dans $ExplorerBin : l'essai avec l'Explorateur n'est pas fait" }
+  } else { "SAUTÉ   cdx-explorer.exe est introuvable dans $ExplorerBin : l'essai avec l'Explorateur n'est pas fait" }
 
   Ctl "write exit\r" | Out-Null
   Check "« exit » dans le dernier volet ferme la fenêtre et le programme s'arrête" ($app.WaitForExit(15000))

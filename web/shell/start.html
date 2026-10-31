@@ -2,13 +2,13 @@
 <html lang="fr" data-theme="rouge">
 <head>
 <meta charset="utf-8">
-<title>KDX — menu Démarrer</title>
-<link rel="stylesheet" href="/kdx/fonts.css">
-<link rel="stylesheet" href="/kdx/kdx-ui.css">
-<link rel="stylesheet" href="/kdx/themes.css">
-<link rel="stylesheet" href="/kdx/page.css">
+<title>CDX — menu Démarrer</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/page.css">
 <style>
-  /* Le menu Démarrer de windows-ui.html : une fenêtre KDX active, remplie par la page. */
+  /* Le menu Démarrer de windows-ui.html : une fenêtre CDX active, remplie par la page. */
   .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
   .tile { display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 84px; cursor: default; }
   .blk { display: block !important; }
@@ -27,9 +27,9 @@
   .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .5); }
   .veil .win { position: relative; inset: auto; width: 420px; }
 </style>
-<script src="/kdx/icons.js"></script>
-<script src="/kdx/kdx-bridge.js"></script>
-<script src="/kdx/host.js"></script>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/host.js"></script>
 <script src="/shell/shell.js"></script>
 </head>
 <body>
@@ -89,7 +89,7 @@
     if (tile) { const p = pins.find(q => q.target === tile.dataset.t); if (p) it = { k: 'app', name: p.name, t: p.target }; }
     else if (row) { const a = shown[+row.dataset.i]; if (a) it = { k: 'app', name: a.name, t: a.path }; }
     if (!it) { e.preventDefault(); return; }
-    closeCtx(); e.dataTransfer.setData('application/x-kdx-pin', JSON.stringify(it)); e.dataTransfer.effectAllowed = 'copy';
+    closeCtx(); e.dataTransfer.setData('application/x-cdx-pin', JSON.stringify(it)); e.dataTransfer.effectAllowed = 'copy';
     log('glisser commencé : ' + it.name);
   });
   document.addEventListener('mousedown', e => { if (ctx && !ctx.contains(e.target)) closeCtx(); });
@@ -116,7 +116,7 @@
   document.onkeydown = e => { if (e.key === 'Escape') post({ cmd: 'hideStart' }); };
   $('x').onclick = () => post({ cmd: 'hideStart' });
   $('lock').onclick = () => { post({ cmd: 'hideStart' }); post({ cmd: 'lock' }); };
-  // Veille, redémarrage et arrêt demandent une confirmation (une KDX-boîte de dialogue, Oui est le bouton par défaut).
+  // Veille, redémarrage et arrêt demandent une confirmation (une CDX-boîte de dialogue, Oui est le bouton par défaut).
   function confirmPower(action, title, text, icon) {
     const layer = document.createElement('div'); layer.className = 'veil';
     layer.innerHTML = `<div class="win active"><div class="tb"><span class="tb-title">${title}</span></div><div class="cb"><div class="row" style="gap:14px;padding:10px 4px">${pix(icon, 32)}<div style="line-height:1.5">${text}</div></div><div class="btns"><button class="primary" id="py">Oui</button><button class="btn" id="pn">Non</button></div></div></div>`;

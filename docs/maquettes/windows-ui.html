@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KDX-UI pour Windows — maquettes</title>
-<link rel="stylesheet" href="../../web/kdx/fonts.css">
-<link rel="stylesheet" href="../../web/kdx/kdx-ui.css">
-<link rel="stylesheet" href="../../web/kdx/themes.css">
+<title>CDX-UI pour Windows — maquettes</title>
+<link rel="stylesheet" href="../../web/cdx/fonts.css">
+<link rel="stylesheet" href="../../web/cdx/cdx-ui.css">
+<link rel="stylesheet" href="../../web/cdx/themes.css">
 <style>
-  /* Maquette de « KDX-UI pour Windows » : douze écrans de 1600 x 900. Seule la mise en page des écrans est ici ;
-     les composants viennent de kdx-ui.css. Les quelques composants propres à un système (barre des tâches, jauge,
+  /* Maquette de « CDX-UI pour Windows » : douze écrans de 1600 x 900. Seule la mise en page des écrans est ici ;
+     les composants viennent de cdx-ui.css. Les quelques composants propres à un système (barre des tâches, jauge,
      bouton radio, infobulle) sont regroupés sous « Extensions Windows » et décrits dans CHARTE-WINDOWS.md. */
 
   /* ---------- visionneuse ---------- */
@@ -140,14 +140,14 @@
 </style>
 </head>
 <body>
-<script src="../../web/kdx/icons.js"></script>
+<script src="../../web/cdx/icons.js"></script>
 
 <div id="nav">
   <div class="tabs" id="tabs"></div>
   <span class="grow"></span>
   <label for="theme" class="faint">Accent :</label>
   <select id="theme" class="btn">
-    <option value="rouge">Rouge KDX</option><option value="bleu">Bleu électrique</option><option value="vert">Vert électrique</option>
+    <option value="rouge">Rouge CDX</option><option value="bleu">Bleu électrique</option><option value="vert">Vert électrique</option>
     <option value="violet">Violet électrique</option><option value="ambre">Ambre CRT</option><option value="sarcelle">Sarcelle</option><option value="charbon">Charbon</option>
   </select>
   <button class="btn" id="zoom">Taille réelle</button>
@@ -162,7 +162,7 @@ const GL = {
   minus: '<svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg>',
   plus: '<svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg>'
 };
-// Une fenêtre : cadre KDX, barre de titre à quatre boutons (fermer, menu, agrandir, réduire), onglets facultatifs.
+// Une fenêtre : cadre CDX, barre de titre à quatre boutons (fermer, menu, agrandir, réduire), onglets facultatifs.
 const W = ({ x = 0, y = 0, w = 300, h = 200, t = '', on = false, body = '', cls = '', tabs = '', z = '', rel = false, noctl = false, shaded = false }) => {
   const pos = rel ? `width:${w}px;height:${h}px;` : `left:${x}px;top:${y}px;width:${w}px;height:${h}px;`;
   const ctl = noctl ? ['', ''] : [`<button class="tb-btn tb-l">${GL.x}</button><button class="tb-btn tb-m"></button>`, `<button class="tb-btn tb-r2">${GL.plus}</button><button class="tb-btn tb-r">${GL.minus}</button>`];
@@ -216,8 +216,8 @@ ${W({ x: 1262, y: 24, w: 314, h: 168, t: 'Système', body: `
   <div class="gr"><span>GPU</span><div class="gauge"><i style="width:3%"></i></div><span class="v">3 %</span></div>
   <div class="gr"><span>C:</span><div class="gauge warn"><i style="width:87%"></i></div><span class="v">87 %</span></div>
   <div class="status">${orb('green')}<span>Ryzen 7 3700X — 52 °C</span></div>` })}
-${W({ x: 420, y: 150, w: 660, h: 390, t: 'notes-kdx.txt — Bloc-notes', on: true, body: `${mbar(['Fichier', 'Édition', 'Format', 'Affichage'])}
-  <div class="text-input pad">Charte KDX pour Windows
+${W({ x: 420, y: 150, w: 660, h: 390, t: 'notes-cdx.txt — Bloc-notes', on: true, body: `${mbar(['Fichier', 'Édition', 'Format', 'Affichage'])}
+  <div class="text-input pad">Charte CDX pour Windows
 
 - des fenêtres sans bordure système
 - un relief éclairé en haut à gauche
@@ -226,7 +226,7 @@ ${W({ x: 420, y: 150, w: 660, h: 390, t: 'notes-kdx.txt — Bloc-notes', on: tru
 à faire : essayer le thème bleu_</div>
   <div class="status"><span>Ln 7, Col 29</span><span class="faint">UTF-8</span></div>` })}
 <div class="toastbox">${toast(true, 'disque', 'Sauvegarde terminée', '2,3 Go copiés vers E:\\Sauvegardes')}</div>
-${taskbar({ tasks: [{ i: 'journal', t: 'notes-kdx.txt', s: 'on' }, { i: 'console', t: 'Terminal' }] })}`;
+${taskbar({ tasks: [{ i: 'journal', t: 'notes-cdx.txt', s: 'on' }, { i: 'console', t: 'Terminal' }] })}`;
 
 /* ---------- 2. Démarrer ---------- */
 SCENES.demarrer = () => `${wall}${desk()}
@@ -236,7 +236,7 @@ ${W({ x: 6, y: 372, w: 600, h: 486, t: 'Démarrer', on: true, body: `
     ${[['dossier', 'Explorateur'], ['reglages', 'Paramètres'], ['console', 'Terminal'], ['serveur', 'Navigateur'], ['message', 'Courrier'], ['carnet', 'Contacts'], ['musique', 'Musique'], ['image', 'Images']]
       .map(([i, n]) => `<button class="btn tile">${I(i, 32)}<span>${n}</span></button>`).join('')}</div></fieldset>
   <fieldset class="grp blk"><legend>Récents</legend>
-    ${[['liste', 'Charte graphique', 'il y a 2 h'], ['image', 'capture-kdx.png', 'hier'], ['journal', 'notes-kdx.txt', 'hier']]
+    ${[['liste', 'Charte graphique', 'il y a 2 h'], ['image', 'capture-cdx.png', 'hier'], ['journal', 'notes-cdx.txt', 'hier']]
       .map(([i, n, d]) => `<div class="row-item">${I(i)}<span class="grow">${n}</span><span class="faint">${d}</span></div>`).join('')}</fieldset>
   <div class="btns"><div class="row push">${I('utilisateur', 32)}<span>Valentin</span></div>
     <button class="btn row">${I('cadenas')}Verrouiller</button><button class="btn row">${I('absent')}Veille</button><button class="btn row">${I('quitter')}Éteindre</button></div>` })}
@@ -246,8 +246,8 @@ ${taskbar({ start: true })}`;
 SCENES.explorateur = () => {
   const files = [['dossier', 'Charte graphique', '29/10/2026 18:30', 'Dossier de fichiers', ''], ['dossier', 'Factures 2026', '02/10/2026 09:12', 'Dossier de fichiers', ''],
     ['dossier', 'KIRC', '29/10/2026 20:41', 'Dossier de fichiers', ''], ['dossier', 'Projets Godot', '14/09/2026 22:03', 'Dossier de fichiers', ''],
-    ['image', 'capture-kdx.png', '28/10/2026 08:20', 'Image PNG', '2,3 Mo'], ['fichier', 'CV-2026.pdf', '12/10/2026 16:44', 'Document PDF', '214 Ko'],
-    ['journal', 'notes-kdx.txt', '27/10/2026 14:55', 'Document texte', '4 Ko'], ['fichier', 'budget.xlsx', '03/10/2026 10:01', 'Feuille de calcul', '38 Ko'],
+    ['image', 'capture-cdx.png', '28/10/2026 08:20', 'Image PNG', '2,3 Mo'], ['fichier', 'CV-2026.pdf', '12/10/2026 16:44', 'Document PDF', '214 Ko'],
+    ['journal', 'notes-cdx.txt', '27/10/2026 14:55', 'Document texte', '4 Ko'], ['fichier', 'budget.xlsx', '03/10/2026 10:01', 'Feuille de calcul', '38 Ko'],
     ['image', 'logo-kirc.svg', '21/10/2026 19:12', 'Image SVG', '12 Ko'], ['fichier', 'themes.css', '29/10/2026 18:46', 'Feuille de style', '3 Ko'],
     ['musique', 'ambiance.mp3', '18/09/2026 21:30', 'Fichier MP3', '6,1 Mo'], ['video', 'demo-kirc.mp4', '25/10/2026 23:08', 'Vidéo MP4', '48 Mo'],
     ['fichier', 'notes-reunion.docx', '09/10/2026 11:20', 'Document Word', '27 Ko'], ['image', 'fond-ecran.png', '30/10/2026 09:03', 'Image PNG', '1,1 Mo'],
@@ -280,7 +280,7 @@ SCENES.explorateur = () => {
 SCENES.parametres = () => {
   const nav = [['pc', 'Système'], ['volume', 'Appareils'], ['wifi', 'Réseau et Internet'], ['palette', 'Personnalisation', 1], ['apps', 'Applications'], ['utilisateur', 'Comptes'],
     ['horloge', 'Heure et langue'], ['membres', 'Jeux'], ['info', 'Accessibilité'], ['cadenas', 'Confidentialité'], ['maj', 'Windows Update', 0, 1]];
-  const themes = [['rouge', '#cc0000', 'Rouge KDX'], ['bleu', '#0000ff', 'Bleu électrique'], ['vert', '#00cc00', 'Vert électrique'], ['violet', '#e000e0', 'Violet électrique'],
+  const themes = [['rouge', '#cc0000', 'Rouge CDX'], ['bleu', '#0000ff', 'Bleu électrique'], ['vert', '#00cc00', 'Vert électrique'], ['violet', '#e000e0', 'Violet électrique'],
     ['ambre', '#cc4704', 'Ambre CRT'], ['sarcelle', '#75ebeb', 'Sarcelle'], ['charbon', '#cccccc', 'Charbon']];
   const cur = document.documentElement.dataset.theme;
   return `${wall}${W({ x: 220, y: 70, w: 1160, h: 720, t: 'Paramètres', on: true, body: `
@@ -362,7 +362,7 @@ SCENES.alttab = () => {
   const card = (i, t, sub, on) => W({ rel: true, w: 280, h: 220, t, on, noctl: true, body: `<div class="cardbody">${I(i, 64)}<span class="faint">${sub}</span></div>` });
   return `${wall}${desk()}<div class="dim"></div>
   <div class="abs" style="left:50%;top:230px;transform:translateX(-50%)">${tabs(['Bureau 1', 'Bureau 2', 'Bureau 3', 'Bureau 4', '+'], 0)}</div>
-  <div class="strip">${card('dossier', 'Documents', 'Explorateur', 1)}${card('reglages', 'Paramètres', 'Personnalisation', 0)}${card('console', 'Terminal', 'PowerShell', 0)}${card('journal', 'notes-kdx.txt', 'Bloc-notes', 0)}</div>
+  <div class="strip">${card('dossier', 'Documents', 'Explorateur', 1)}${card('reglages', 'Paramètres', 'Personnalisation', 0)}${card('console', 'Terminal', 'PowerShell', 0)}${card('journal', 'notes-cdx.txt', 'Bloc-notes', 0)}</div>
   <div class="abs status" style="left:50%;top:606px;transform:translateX(-50%);width:640px">${orb('green')}<span>Documents — Explorateur</span><span style="margin-left:auto" class="faint">Tab : suivant · Maj+Tab : précédent · Échap : annuler</span></div>`;
 };
 
@@ -383,9 +383,9 @@ ${W({ x: 60, y: 406, w: 520, h: 194, t: 'Copie de 1 342 éléments', on: false, 
   <div class="status"><span>63 %</span><span class="faint">412 Mo/s</span><span style="margin-left:auto">reste 1 min 12 s</span></div>
   <div class="btns" style="margin-top:auto"><button class="btn">Pause</button><button class="btn">Annuler</button></div>` })}
 ${W({ x: 640, y: 462, w: 560, h: 168, t: 'Explorateur', on: false, body: `
-  <div class="row" style="gap:14px;align-items:flex-start">${I('erreur', 32)}<div style="line-height:1.5">Impossible de copier « capture-kdx.png ».<div class="faint">Le fichier est utilisé par un autre processus.</div></div></div>
+  <div class="row" style="gap:14px;align-items:flex-start">${I('erreur', 32)}<div style="line-height:1.5">Impossible de copier « capture-cdx.png ».<div class="faint">Le fichier est utilisé par un autre processus.</div></div></div>
   <div class="btns" style="margin-top:auto"><button class="primary">Réessayer</button><button class="btn">Ignorer</button><button class="btn">Annuler</button></div>` })}
-<div class="menu" style="left:1260px;top:440px;width:280px"><div class="menu-title">capture-kdx.png</div>
+<div class="menu" style="left:1260px;top:440px;width:280px"><div class="menu-title">capture-cdx.png</div>
   ${[['dossier', 'Ouvrir', 'Entrée'], ['image', 'Ouvrir avec…', ''], ['', 'Copier', 'Ctrl+C'], ['', 'Couper', 'Ctrl+X'], ['editer', 'Renommer', 'F2']].map(([i, n, k]) => `<div class="menu-item">${i ? I(i) : '<span style="width:16px"></span>'}<span>${n}</span><span class="k">${k}</span></div>`).join('')}
   <div class="menu-sep"></div><div class="menu-item">${I('supprimer')}<span>Supprimer</span><span class="k">Suppr</span></div><div class="menu-item off"><span style="width:16px"></span><span>Propriétés</span></div></div>
 <div class="tip" style="left:430px;top:612px">Pause la copie (Espace)</div>
@@ -422,7 +422,7 @@ SCENES.apps = () => {
 <div class="ln error">error: could not find \`Cargo.toml\` in \`C:\\Users\\Valentin\` or any parent directory</div>
 <div class="ln own">PS C:\\Users\\Valentin\\Dev\\KIRC&gt; _</div></div>` })}
   ${W({ x: 920, y: 50, w: 620, h: 380, t: 'CHARTE-WINDOWS.md — Bloc-notes', on: true, body: `${mbar(['Fichier', 'Édition', 'Format', 'Affichage'])}
-    <div class="text-input pad"># KDX-UI pour Windows
+    <div class="text-input pad"># CDX-UI pour Windows
 
 1. relief éclairé en haut à gauche
 2. gris neutres, jamais de teinte

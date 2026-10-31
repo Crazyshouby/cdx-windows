@@ -1,4 +1,0 @@
-/* Le socle de toutes les pages de la suite (barre, Démarrer, centre, Alt+Tab, Explorateur, navigateur) : la fenêtre remplit la page,
-   rien ne défile, le fond est celui du cadre. Après kdx-ui.css ; une page qui s'en écarte le dit dans son <style>. */
-html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--a-mid); }
-.win { position: absolute; inset: 0; }

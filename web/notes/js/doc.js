@@ -165,7 +165,7 @@
   }
   async function createFromLink(target) {
     const name = target.split('/').map(cleanName).filter(Boolean).join('/'); if (!name) return;
-    if (await KdxFrame.dialog({ title: 'Créer la note', text: `La note « ${name} » n'existe pas encore.\nLa créer à la racine du coffre ?`, icon: 'editer', yes: 'Créer', no: 'Annuler' })) post({ cmd: 'n.create', path: name + '.md', text: '# ' + name.split('/').pop() + '\n\n' });
+    if (await CdxFrame.dialog({ title: 'Créer la note', text: `La note « ${name} » n'existe pas encore.\nLa créer à la racine du coffre ?`, icon: 'editer', yes: 'Créer', no: 'Annuler' })) post({ cmd: 'n.create', path: name + '.md', text: '# ' + name.split('/').pop() + '\n\n' });
   }
   function toggleTask(line) {
     const d = docs.get(cur); if (!d) return;

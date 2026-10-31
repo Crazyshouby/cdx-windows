@@ -2,9 +2,9 @@
 <html lang="fr" data-theme="rouge">
 <head>
 <meta charset="utf-8">
-<title>Maquette : la charte KDX sur Windows</title>
-<link rel="stylesheet" href="../../web/kdx/fonts.css">
-<link rel="stylesheet" href="../../web/kdx/kdx-ui.css">
+<title>Maquette : la charte CDX sur Windows</title>
+<link rel="stylesheet" href="../../web/cdx/fonts.css">
+<link rel="stylesheet" href="../../web/cdx/cdx-ui.css">
 <style>
   /* Une maquette, pas une application : deux bureaux de 1600 x 900 (?mode=reel ou ?mode=ideal). */
   html, body { width: 1600px; height: 900px; overflow: hidden; }
@@ -56,14 +56,14 @@
   .mem i { width: 16px; height: 16px; flex: none; display: grid; place-items: center; font-style: normal; color: #fff; background: color-mix(in srgb, var(--nc) 42%, #000); }
   .mem span { color: var(--nc); }
 
-  /* ---- les fenêtres dans le mode idéal : le cadre KDX partout ---- */
+  /* ---- les fenêtres dans le mode idéal : le cadre CDX partout ---- */
   .ideal-only { display: none; }
   body.ideal .ideal-only { display: block; }
   body.ideal .real-only { display: none; }
-  .kdxwin { position: absolute; }
-  .kdxwin .win { position: absolute; inset: 0; }
-  .kdxwin .cb { gap: 5px; }
-  .term-kdx { flex: 1; background: #000; color: var(--field-ink); font: 14px/13px var(--font-log); padding: 6px 8px; white-space: pre; border: 1px solid; border-color: #111 #666 #666 #111; }
+  .cdxwin { position: absolute; }
+  .cdxwin .win { position: absolute; inset: 0; }
+  .cdxwin .cb { gap: 5px; }
+  .term-cdx { flex: 1; background: #000; color: var(--field-ink); font: 14px/13px var(--font-log); padding: 6px 8px; white-space: pre; border: 1px solid; border-color: #111 #666 #666 #111; }
   .ix { display: flex; align-items: center; gap: 8px; height: 22px; padding: 0 6px; border-bottom: 1px solid var(--line); }
   .ix.sel { background: var(--row-sel); box-shadow: inset 0 0 0 1px var(--row-sel-ring); }
   .ix .d { margin-left: auto; color: var(--faint); }
@@ -73,7 +73,7 @@
 </style>
 </head>
 <body>
-<script src="../../web/kdx/icons.js"></script>
+<script src="../../web/cdx/icons.js"></script>
 
 <!-- la barre du haut : Zebar habillé avec la charte (identique dans les deux modes) -->
 <div id="bar" class="abs">
@@ -99,7 +99,7 @@ test result: <span class="g">ok. 135 passed</span>; 0 failed
 <span class="g">PS C:\Users\Valentin\Dev\KIRC&gt;</span> _</div>
   </div>
 
-  <!-- KIRC : sa fenêtre est déjà à la KDX -->
+  <!-- KIRC : sa fenêtre est déjà à la CDX -->
   <div class="kwin dwm" style="left: 760px; top: 70px; width: 780px; height: 500px;" id="k1"></div>
 
   <!-- l'explorateur, au premier plan -->
@@ -113,18 +113,18 @@ test result: <span class="g">ok. 135 passed</span>; 0 failed
         <div class="sel"><span>Charte graphique</span><span class="d">29/10/2026 18:30</span></div>
         <div><span>Factures 2026</span><span class="d">02/10/2026 09:12</span></div>
         <div><span>Projets Godot</span><span class="d">14/09/2026 22:03</span></div>
-        <div><span>notes-kdx.txt</span><span class="d">27/10/2026 14:55</span></div>
-        <div><span>capture-kdx.png</span><span class="d">28/10/2026 08:20</span></div>
+        <div><span>notes-cdx.txt</span><span class="d">27/10/2026 14:55</span></div>
+        <div><span>capture-cdx.png</span><span class="d">28/10/2026 08:20</span></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- ================= MODE IDÉAL : le cadre KDX sur toutes les fenêtres ================= -->
+<!-- ================= MODE IDÉAL : le cadre CDX sur toutes les fenêtres ================= -->
 <div class="ideal-only">
-  <div class="kdxwin" style="left: 40px; top: 470px; width: 560px; height: 330px;">
+  <div class="cdxwin" style="left: 40px; top: 470px; width: 560px; height: 330px;">
     <div class="win"><div class="tb"><button class="tb-btn tb-l" id="gx1"></button><button class="tb-btn tb-m"></button><span class="tb-title">Terminal</span><button class="tb-btn tb-r2" id="gp1"></button><button class="tb-btn tb-r" id="gm1"></button></div>
-      <div class="cb"><div class="term-kdx">PS C:\Users\Valentin\Dev\KIRC&gt; cargo test
+      <div class="cb"><div class="term-cdx">PS C:\Users\Valentin\Dev\KIRC&gt; cargo test
    Compiling kirc v0.4.0
     Finished `test` profile in 14.2s
      Running unittests (kirc_lib)
@@ -134,7 +134,7 @@ PS C:\Users\Valentin\Dev\KIRC&gt; _</div></div></div>
 
   <div class="kwin" style="left: 760px; top: 70px; width: 780px; height: 500px;" id="k2"></div>
 
-  <div class="kdxwin" style="left: 330px; top: 300px; width: 720px; height: 470px; z-index: 5;">
+  <div class="cdxwin" style="left: 330px; top: 300px; width: 720px; height: 470px; z-index: 5;">
     <div class="win active"><div class="tb"><button class="tb-btn tb-l" id="gx2"></button><button class="tb-btn tb-m"></button><span class="tb-title">Documents</span><button class="tb-btn tb-r2" id="gp2"></button><button class="tb-btn tb-r" id="gm2"></button></div>
       <div class="tabs"><button class="tab on">Documents</button><button class="tab">Images</button><button class="tab">Dev</button></div>
       <div class="cb">
@@ -144,8 +144,8 @@ PS C:\Users\Valentin\Dev\KIRC&gt; _</div></div></div>
           <div class="ix sel"><span class="pix" data-ic="kirc" data-size="16"></span>Charte graphique<span class="d">29/10/2026 18:30</span></div>
           <div class="ix"><span class="pix" data-ic="carnet" data-size="16"></span>Factures 2026<span class="d">02/10/2026 09:12</span></div>
           <div class="ix"><span class="pix" data-ic="carnet" data-size="16"></span>Projets Godot<span class="d">14/09/2026 22:03</span></div>
-          <div class="ix"><span class="pix" data-ic="journal" data-size="16"></span>notes-kdx.txt<span class="d">27/10/2026 14:55</span></div>
-          <div class="ix"><span class="pix" data-ic="message" data-size="16"></span>capture-kdx.png<span class="d">28/10/2026 08:20</span></div>
+          <div class="ix"><span class="pix" data-ic="journal" data-size="16"></span>notes-cdx.txt<span class="d">27/10/2026 14:55</span></div>
+          <div class="ix"><span class="pix" data-ic="message" data-size="16"></span>capture-cdx.png<span class="d">28/10/2026 08:20</span></div>
         </div>
         <div class="btns"><button class="btn">Nouveau dossier</button><button class="primary">Ouvrir</button></div>
       </div></div>
@@ -163,15 +163,15 @@ PS C:\Users\Valentin\Dev\KIRC&gt; _</div></div></div>
   // la fenêtre de KIRC (le vrai style), identique dans les deux modes
   const nick = (n, c) => `<span class="nk" style="--nc:${c}">&lt;${n}&gt;</span>`;
   const chat = focusClass => `
-    <div class="win ${focusClass}"><div class="tb"><button class="tb-btn tb-l">${glyph.x}</button><button class="tb-btn tb-m"></button><span class="tb-title">#kdx — Libera.Chat</span><button class="tb-btn tb-r2">${glyph.plus}</button><button class="tb-btn tb-r">${glyph.minus}</button></div>
+    <div class="win ${focusClass}"><div class="tb"><button class="tb-btn tb-l">${glyph.x}</button><button class="tb-btn tb-m"></button><span class="tb-title">#cdx — Libera.Chat</span><button class="tb-btn tb-r2">${glyph.plus}</button><button class="tb-btn tb-r">${glyph.minus}</button></div>
       <div class="cb chat" style="gap:5px;">
         <div class="chatrow"><div class="log">
 <div class="ln"><span class="nk" style="--nc:#5cf0ff">&lt;alice&gt;</span> bonjour, la charte est prête ?</div>
 <div class="ln own"><span class="nk">&lt;kirc&gt;</span> oui : couleurs, polices, composants</div>
 <div class="ln"><span class="nk" style="--nc:#ffcc66">&lt;bob&gt;</span> et le thème bleu ?</div>
 <div class="ln action">* bob s'étire</div>
-<div class="ln join">+++ carol arrive dans #kdx</div>
-<div class="ln topic">*** Sujet : l'interface KDX, partout</div>
+<div class="ln join">+++ carol arrive dans #cdx</div>
+<div class="ln topic">*** Sujet : l'interface CDX, partout</div>
 <div class="ln notice">-Service- Votre pseudo est protégé</div>
 <div class="ln hl"><span class="nk" style="--nc:#fff">&lt;bob&gt;</span> kirc : regarde la maquette</div>
         </div>
@@ -182,13 +182,13 @@ PS C:\Users\Valentin\Dev\KIRC&gt; _</div></div></div>
           <div class="mem" style="--nc:#ffb0ff"><i>K</i><span>kirc</span></div>
         </div></div>
         <div class="text-input" style="height:44px;flex:none;color:var(--field-ink)"></div>
-        <div class="row" style="gap:8px"><button class="btn">Topic:</button><span style="flex:1">l'interface KDX, partout</span><span>kirc</span></div>
+        <div class="row" style="gap:8px"><button class="btn">Topic:</button><span style="flex:1">l'interface CDX, partout</span><span>kirc</span></div>
       </div></div>`;
   document.getElementById("k1").innerHTML = chat("");
   document.getElementById("k2").innerHTML = chat("");
-  document.getElementById("midtitle").textContent = "Documents — " + (ideal ? "Explorateur (cadre KDX)" : "Explorateur de fichiers");
+  document.getElementById("midtitle").textContent = "Documents — " + (ideal ? "Explorateur (cadre CDX)" : "Explorateur de fichiers");
   document.getElementById("legend").innerHTML = ideal
-    ? "<b>Idéal</b> : le cadre KDX sur toutes les fenêtres, polices pixel, barres de défilement KDX — il faudrait un moteur de thèmes (WindowBlinds, ou correctifs du système)."
+    ? "<b>Idéal</b> : le cadre CDX sur toutes les fenêtres, polices pixel, barres de défilement CDX — il faudrait un moteur de thèmes (WindowBlinds, ou correctifs du système)."
     : "<b>Réaliste</b> : ce que Windows 11 permet tel quel — bordure rouge/grise, coins droits, barre de titre colorée, barre du haut Zebar, fond d'écran. Les applications gardent leur dessin.";
   document.querySelectorAll("[data-ic]").forEach(el => { el.innerHTML = pix(el.dataset.ic, +el.dataset.size || 16); });
 </script>

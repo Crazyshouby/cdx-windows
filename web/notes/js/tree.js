@@ -77,10 +77,10 @@
     post({ cmd: 'n.movefolder', path, to: (folderOf(path) ? folderOf(path) + '/' : '') + clean });
   }
   async function trashNote(path) {
-    if (await KdxFrame.dialog({ title: 'Retirer la note', text: `Retirer « ${baseName(path)} » ?\nElle est déplacée dans le dossier .trash du coffre : rien n'est supprimé.`, icon: 'supprimer', yes: 'Retirer', no: 'Annuler' })) post({ cmd: 'n.trash', path });
+    if (await CdxFrame.dialog({ title: 'Retirer la note', text: `Retirer « ${baseName(path)} » ?\nElle est déplacée dans le dossier .trash du coffre : rien n'est supprimé.`, icon: 'supprimer', yes: 'Retirer', no: 'Annuler' })) post({ cmd: 'n.trash', path });
   }
   async function trashFolder(path) {
-    if (await KdxFrame.dialog({ title: 'Retirer le dossier', text: `Retirer le dossier « ${path} » et ses notes ?\nLes notes sont déplacées dans .trash : rien n'est supprimé.`, icon: 'supprimer', yes: 'Retirer', no: 'Annuler' })) post({ cmd: 'n.trashfolder', path });
+    if (await CdxFrame.dialog({ title: 'Retirer le dossier', text: `Retirer le dossier « ${path} » et ses notes ?\nLes notes sont déplacées dans .trash : rien n'est supprimé.`, icon: 'supprimer', yes: 'Retirer', no: 'Annuler' })) post({ cmd: 'n.trashfolder', path });
   }
 
   // ---------- souris ----------
@@ -95,17 +95,17 @@
     const f = e.target.closest('.fld, .root'), n = e.target.closest('.nt');
     if (n) {
       const p = n.dataset.p;
-      KdxFrame.menu([['Ouvrir', () => openNote(p)], null, ['Renommer…', () => renameNote(p)], ['Retirer…', () => trashNote(p), { icon: 'supprimer' }]], e.clientX, e.clientY, baseName(p));
+      CdxFrame.menu([['Ouvrir', () => openNote(p)], null, ['Renommer…', () => renameNote(p)], ['Retirer…', () => trashNote(p), { icon: 'supprimer' }]], e.clientX, e.clientY, baseName(p));
     } else {
       const p = f ? f.dataset.f : '';
       const items = [['Nouvelle note ici…', () => newNote(p)], ['Nouveau dossier ici…', () => newFolder(p)]];
       if (f && p) items.push(null, ['Renommer le dossier…', () => renameFolder(p)], ['Retirer le dossier…', () => trashFolder(p), { icon: 'supprimer' }]);
-      KdxFrame.menu(items, e.clientX, e.clientY, p ? p.slice(p.lastIndexOf('/') + 1) : (hello ? hello.name : 'Coffre'));
+      CdxFrame.menu(items, e.clientX, e.clientY, p ? p.slice(p.lastIndexOf('/') + 1) : (hello ? hello.name : 'Coffre'));
     }
   };
 
   // ---------- glisser-déposer : ranger une note ou un dossier dans un dossier ----------
-  const NOTE_KIND = 'application/x-kdx-note';
+  const NOTE_KIND = 'application/x-cdx-note';
   let dragging = null;
   const clearOver = () => $('tree').querySelectorAll('.dnd-over').forEach(x => x.classList.remove('dnd-over'));
   $('tree').addEventListener('dragstart', e => {

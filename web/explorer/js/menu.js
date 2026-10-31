@@ -95,7 +95,7 @@
     if (r && !t.sel.has(t.rows[+r.dataset.i].n)) { t.sel = new Set([t.rows[+r.dataset.i].n]); t.anchor = +r.dataset.i; t.cursor = +r.dataset.i; show(true); }   // clic droit sur un élément non sélectionné : il le devient
     const s = selected(), on = r && s.length;
     const title = on ? (s.length === 1 ? dispName(s[0]) : `${s.length} éléments`) : baseOf(t.path);
-    KdxFrame.menu(on ? itemMenu(s, t) : backgroundMenu(t), e.clientX, e.clientY, title);
+    CdxFrame.menu(on ? itemMenu(s, t) : backgroundMenu(t), e.clientX, e.clientY, title);
   };
 
   // Les réglages de la fenêtre, derrière le bouton hachuré de la barre de titre (host.js : windowSettings) : « Affichage » (ce que montre la liste, réglages partagés

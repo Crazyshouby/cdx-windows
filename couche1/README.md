@@ -4,15 +4,15 @@ Premier pas de `CHARTE-WINDOWS.md` §4. Aucun outil tiers, aucun réglage systè
 
 | Fichier | Rôle |
 |---|---|
-| `kdx-frame.cs` | programme résident (icône dans la zone de notification) : pose sur chaque fenêtre la bordure et le titre à l'accent (active) ou gris (inactive), le texte du titre, les coins droits, le cadre sombre |
+| `cdx-frame.cs` | programme résident (icône dans la zone de notification) : pose sur chaque fenêtre la bordure et le titre à l'accent (active) ou gris (inactive), le texte du titre, les coins droits, le cadre sombre |
 | `fond.html` | le fond d'écran de `windows-ui.html`, rendu à la taille de l'écran |
-| `appliquer.ps1` | sauvegarde le fond actuel, compile `kdx-frame.exe`, pose le fond, lance le programme |
+| `appliquer.ps1` | sauvegarde le fond actuel, compile `cdx-frame.exe`, pose le fond, lance le programme |
 | `restaurer.ps1` | arrête le programme, rend leur cadre aux fenêtres ouvertes, remet le fond d'avant |
 
 ```
 pwsh -File appliquer.ps1 -Theme rouge      # rouge bleu vert violet ambre sarcelle charbon ; -SansFond pour garder le fond
 pwsh -File restaurer.ps1
-kdx-frame.exe --status                     # échantillonne les pixels réels de la bordure et du titre de chaque fenêtre
+cdx-frame.exe --status                     # échantillonne les pixels réels de la bordure et du titre de chaque fenêtre
 ```
 
 Le programme ne démarre pas avec la session : relancer `appliquer.ps1 -SansFond` après un redémarrage.

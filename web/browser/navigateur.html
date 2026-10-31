@@ -2,12 +2,12 @@
 <html lang="fr" data-theme="rouge">
 <head>
 <meta charset="utf-8">
-<title>KDX — Navigateur</title>
-<link rel="stylesheet" href="/kdx/fonts.css">
-<link rel="stylesheet" href="/kdx/kdx-ui.css">
-<link rel="stylesheet" href="/kdx/themes.css">
-<link rel="stylesheet" href="/kdx/kdx-frame.css">
-<link rel="stylesheet" href="/kdx/page.css">
+<title>CDX — Navigateur</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/cdx/page.css">
 <style>
   /* Le cadre du navigateur : tout ce qui entoure la page web. Les pages sont des WebView2 posés par le programme sur le rectangle #viewport. */
   .tabs { cursor: default; gap: 0; overflow: hidden; }
@@ -29,10 +29,10 @@
   .badge { color: var(--warn); }
   .status .z { margin-left: auto; cursor: default; }
 </style>
-<script src="/kdx/icons.js"></script>
-<script src="/kdx/kdx-bridge.js"></script>
-<script src="/kdx/kdx-frame.js"></script>
-<script src="/kdx/host.js"></script>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/cdx-frame.js"></script>
+<script src="/cdx/host.js"></script>
 </head>
 <body>
 <div class="win active" id="win">
@@ -128,7 +128,7 @@
   });
 
   // ---- cadre de la fenêtre ----
-  KdxFrame.init();   // barre de titre, boutons et bords : kdx-frame.js (la barre se double-clique pour agrandir)
+  CdxFrame.init();   // barre de titre, boutons et bords : cdx-frame.js (la barre se double-clique pour agrandir)
 
   // ---- le rectangle des pages : le programme y pose les WebView2 des onglets ----
   const layout = () => { const r = $('viewport').getBoundingClientRect(); post({ cmd: 'br.layout', x: Math.round(r.left) + 1, y: Math.round(r.top) + 1, w: Math.round(r.width) - 2, h: Math.round(r.height) - 2 }); };

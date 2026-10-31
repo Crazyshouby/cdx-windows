@@ -8,13 +8,13 @@ $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot
 if (-not $Bin) { $Bin = "$root\bin" }
 $id = "$PID"
-$suite = Join-Path $env:TEMP "kdx-tr-suite-$id"; $data = Join-Path $env:TEMP "kdx-tr-data-$id"; $work = Join-Path $env:TEMP "kdx-tr-work-$id"
+$suite = Join-Path $env:TEMP "cdx-tr-suite-$id"; $data = Join-Path $env:TEMP "cdx-tr-data-$id"; $work = Join-Path $env:TEMP "cdx-tr-work-$id"
 New-Item -ItemType Directory $suite, $data, $work -Force | Out-Null
 New-Item "$data\debug.txt" -ItemType File | Out-Null
-$prefix = "kdxtr$id."
-$env:KDX_PIPE_PREFIX = $prefix; $env:KDX_SUITE_DIR = $suite; $env:KDX_DATA_DIR = $data
+$prefix = "cdxtr$id."
+$env:CDX_PIPE_PREFIX = $prefix; $env:CDX_SUITE_DIR = $suite; $env:CDX_DATA_DIR = $data
 # apps.json : où lancer chaque programme (la fenêtre vient d'elle-même à un transfert qui dure)
-([ordered]@{ transfers = "$Bin\kdx-transfers.exe"; explorer = "$Bin\kdx-explorer.exe"; browser = "$Bin\kdx-browser.exe" } | ConvertTo-Json -Compress) | Set-Content "$suite\apps.json" -Encoding utf8
+([ordered]@{ transfers = "$Bin\cdx-transfers.exe"; explorer = "$Bin\cdx-explorer.exe"; browser = "$Bin\cdx-browser.exe" } | ConvertTo-Json -Compress) | Set-Content "$suite\apps.json" -Encoding utf8
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 function Ctl([string]$app, [string]$line) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', "$prefix$app.ctl", [System.IO.Pipes.PipeDirection]::InOut)
@@ -46,7 +46,7 @@ $started = @(); $t0Run = Get-Date; $fakeExplorer = $null
 try {
   # ======================= A. la fenêtre seule =======================
   "A. la fenêtre seule"
-  $tr = Start-Process "$Bin\kdx-transfers.exe" -PassThru; $started += $tr
+  $tr = Start-Process "$Bin\cdx-transfers.exe" -PassThru; $started += $tr
   Check "la fenêtre s'ouvre et la page est prête (liste vide)" ((Until { (Ctl 'transfers' 'state') -like '*fenêtre ouverte*' -and (Js 'transfers' "document.getElementById('rows').textContent") -like '*Aucun transfert*' } 25000))
   Start-Sleep -Milliseconds 1500   # (la page a eu le temps de dire « ready » : la fenêtre a déjà demandé l'état aux producteurs)
   # un producteur « explorer » simulé : il écoute pour recevoir les ordres de la fenêtre
@@ -91,7 +91,7 @@ try {
   Xfer 5 'running' 1 100
   Until { (Entry 'explorer#5') -ne $null } 4000 | Out-Null
   $tr.Kill(); Start-Sleep -Seconds 1
-  $tr = Start-Process "$Bin\kdx-transfers.exe" -PassThru; $started += $tr
+  $tr = Start-Process "$Bin\cdx-transfers.exe" -PassThru; $started += $tr
   Check "après un redémarrage de la fenêtre, l'historique des terminés revient (marqué « historique »), pas le transfert resté en cours" ((Until { (Ctl 'transfers' 'state') -like '*fenêtre ouverte*' } 25000) -and (Until { (Entries | Where-Object { $_.Hist -and $_.State -eq 'done' }).Count -ge 1 } 8000) -and -not (Entries | Where-Object { $_.State -eq 'running' }))
   Check "la page affiche l'historique relu (au moins une ligne)" (Until { (Js 'transfers' "document.querySelectorAll('.tx').length") -match '^[1-9]' } 8000)
   Js 'transfers' "document.querySelector('.tb-m').click(); const it = [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Effacer les terminés')); if (it) it.click(); return !!it" | Out-Null
@@ -104,14 +104,14 @@ try {
   $buf = [byte[]](1..600 | ForEach-Object { $_ % 251 })
   for ($d = 1; $d -le 30; $d++) { $dd = "$work\src\many\d$d"; New-Item -ItemType Directory $dd | Out-Null; for ($f = 1; $f -le 1000; $f++) { [IO.File]::WriteAllBytes("$dd\f$f.bin", $buf) } }
   $wj = $work.Replace('\', '\\')
-  $ex = Start-Process "$Bin\kdx-explorer.exe" -ArgumentList "`"$work`"" -PassThru; $started += $ex
+  $ex = Start-Process "$Bin\cdx-explorer.exe" -ArgumentList "`"$work`"" -PassThru; $started += $ex
   Check "l'Explorateur isolé s'ouvre" (Until { (Js 'explorer' "T().items.length") -ge 3 } 25000)
   Js 'explorer' "post({ cmd: 'fs.drop', paths: ['$wj\\src\\many'], dir: '$wj\\dst', move: false, tab: T().id })" | Out-Null
   # on met aussitôt en pause (par le bus, comme le ferait la fenêtre) : la tâche reste en cours, donc la fenêtre vient d'elle-même au bout de 1,5 s
   PauseJob 1
-  Check "la fenêtre « Transferts » se lance toute seule quand un transfert dure (programme kdx-transfers démarré par l'Explorateur)" (Until { (Ctl 'transfers' 'state') -like '*fenêtre ouverte*' } 30000)
-  $started += Get-Process kdx-transfers -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run }
-  if (-not (Get-Process kdx-transfers -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run })) { '   (journal de l''Explorateur :)'; Get-Content "$data\journal-explorer.log" -ErrorAction SilentlyContinue | Select-Object -Last 15 | ForEach-Object { '   ' + $_ } }
+  Check "la fenêtre « Transferts » se lance toute seule quand un transfert dure (programme cdx-transfers démarré par l'Explorateur)" (Until { (Ctl 'transfers' 'state') -like '*fenêtre ouverte*' } 30000)
+  $started += Get-Process cdx-transfers -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run }
+  if (-not (Get-Process cdx-transfers -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run })) { '   (journal de l''Explorateur :)'; Get-Content "$data\journal-explorer.log" -ErrorAction SilentlyContinue | Select-Object -Last 15 | ForEach-Object { '   ' + $_ } }
   Check "elle montre la copie « many » de l'Explorateur, en pause, avec son dossier d'origine et de destination" ((Until { (Entry 'explorer#1').State -eq 'paused' } 15000) -and ((Js 'transfers' "document.querySelector('.tx .l2').textContent") -like 'src → dst*'))
   $n1 = (Get-ChildItem "$work\dst\many" -Recurse -File -ErrorAction SilentlyContinue).Count; Start-Sleep -Milliseconds 1200; $n2 = (Get-ChildItem "$work\dst\many" -Recurse -File -ErrorAction SilentlyContinue).Count
   Check "en pause, la copie n'avance plus (le nombre de fichiers copiés est figé : $n1 / $n2)" ($n1 -eq $n2 -and $n2 -lt 30000)
@@ -152,7 +152,7 @@ class H(http.server.BaseHTTPRequestHandler):
             start = int(rng[6:].split('-')[0])
         self.send_response(206 if start else 200)
         self.send_header('Content-Type', 'application/octet-stream')
-        self.send_header('Content-Disposition', 'attachment; filename="kdx-xfer-test.bin"')
+        self.send_header('Content-Disposition', 'attachment; filename="cdx-xfer-test.bin"')
         self.send_header('Accept-Ranges', 'bytes')
         self.send_header('Content-Length', str(SIZE - start))
         if start: self.send_header('Content-Range', 'bytes %d-%d/%d' % (start, SIZE - 1, SIZE))
@@ -164,13 +164,13 @@ class H(http.server.BaseHTTPRequestHandler):
         except Exception: pass
 http.server.ThreadingHTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()
 '@ | Set-Content $py -Encoding utf8
-  $dest = Join-Path "$env:USERPROFILE\Downloads" 'kdx-xfer-test.bin'; Remove-Item $dest -Force -ErrorAction SilentlyContinue
+  $dest = Join-Path "$env:USERPROFILE\Downloads" 'cdx-xfer-test.bin'; Remove-Item $dest -Force -ErrorAction SilentlyContinue
   $srv = Start-Process python -ArgumentList '-I', $py, '8767' -PassThru -WindowStyle Hidden; $started += $srv
   Start-Sleep -Seconds 2
-  $br = Start-Process "$Bin\kdx-browser.exe" -ArgumentList '--theme', 'rouge' -PassThru; $started += $br
+  $br = Start-Process "$Bin\cdx-browser.exe" -ArgumentList '--theme', 'rouge' -PassThru; $started += $br
   Check "le navigateur isolé s'ouvre" (Until { (Ctl 'browser' 'state') -like '{*' } 30000)
-  Ctl 'browser' 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/kdx-xfer-test.bin"}' | Out-Null
-  Check "le téléchargement apparaît dans la fenêtre « Transferts » (elle se lance d'elle-même), avec le site et le dossier" ((Until { (Ctl 'transfers' 'state') -like '*fenêtre ouverte*' } 40000) -and (Until { (Entries | Where-Object { $_.Kind -eq 'download' -and $_.Title -eq 'kdx-xfer-test.bin' }).Count -eq 1 } 20000) -and ((Js 'transfers' "document.querySelector('.tx[data-key^=\""browser#\""] .l2').textContent") -like '127.0.0.1 → Téléchargements*'))
+  Ctl 'browser' 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/cdx-xfer-test.bin"}' | Out-Null
+  Check "le téléchargement apparaît dans la fenêtre « Transferts » (elle se lance d'elle-même), avec le site et le dossier" ((Until { (Ctl 'transfers' 'state') -like '*fenêtre ouverte*' } 40000) -and (Until { (Entries | Where-Object { $_.Kind -eq 'download' -and $_.Title -eq 'cdx-xfer-test.bin' }).Count -eq 1 } 20000) -and ((Js 'transfers' "document.querySelector('.tx[data-key^=\""browser#\""] .l2').textContent") -like '127.0.0.1 → Téléchargements*'))
   $key = (Entries | Where-Object { $_.Kind -eq 'download' } | Select-Object -First 1).Key
   Check "il avance : des octets reçus, un total de 24 Mo, une vitesse" (Until { $e = Entry $key; $e.Done -gt 0 -and $e.Total -eq 25165824 } 20000)
   Click ".tx[data-key=`"$key`"] [data-a=pause]" | Out-Null
@@ -181,7 +181,7 @@ http.server.ThreadingHTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_foreve
   Check "« Reprendre » : le téléchargement repart et se termine (24 Mo écrits dans Téléchargements)" ((Until { (Entry $key).State -eq 'done' } 60000) -and (Test-Path $dest) -and ((Get-Item $dest).Length -eq 25165824))
   Remove-Item $dest -Force -ErrorAction SilentlyContinue
   # un second téléchargement, annulé
-  Ctl 'browser' 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/kdx-xfer-test.bin"}' | Out-Null
+  Ctl 'browser' 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/cdx-xfer-test.bin"}' | Out-Null
   Check "un second téléchargement apparaît" (Until { (Entries | Where-Object { $_.Kind -eq 'download' -and $_.State -eq 'running' }).Count -eq 1 } 20000)
   $key2 = (Entries | Where-Object { $_.Kind -eq 'download' -and $_.State -eq 'running' } | Select-Object -First 1).Key
   Click ".tx[data-key=`"$key2`"] [data-a=cancel]" | Out-Null
@@ -190,9 +190,9 @@ http.server.ThreadingHTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_foreve
 finally {
   if ($fakeExplorer) { $fakeExplorer.Dispose() }
   $started | ForEach-Object { try { if ($_ -and -not $_.HasExited) { $_.Kill() } } catch { } }
-  Get-Process kdx-transfers -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force -ErrorAction SilentlyContinue   # (le programme est lancé par les producteurs : pas dans $started)
+  Get-Process cdx-transfers -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force -ErrorAction SilentlyContinue   # (le programme est lancé par les producteurs : pas dans $started)
   Start-Sleep -Seconds 1
-  Remove-Item (Join-Path "$env:USERPROFILE\Downloads" 'kdx-xfer-test.bin') -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path "$env:USERPROFILE\Downloads" 'cdx-xfer-test.bin') -Force -ErrorAction SilentlyContinue
   Remove-Item $suite, $data, $work -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item Env:KDX_PIPE_PREFIX, Env:KDX_SUITE_DIR, Env:KDX_DATA_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:CDX_PIPE_PREFIX, Env:CDX_SUITE_DIR, Env:CDX_DATA_DIR -ErrorAction SilentlyContinue
 }

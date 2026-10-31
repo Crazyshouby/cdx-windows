@@ -4,7 +4,7 @@ const Md = createRequire(import.meta.url)('../web/notes/js/md.js');
 let bad = 0;
 const check = (what, ok, extra = '') => { console.log((ok ? 'OK     ' : 'ÉCHEC  ') + what + (ok ? '' : '  ' + extra)); if (!ok) bad++; };
 const notes = { Alpha: 'Alpha.md', Beta: 'Projets/Beta.md', 'Projets/Beta': 'Projets/Beta.md' };
-const ctx = { resolve: t => notes[t] || null, imageUrl: (t) => (t === 'photo.png' || t === 'img/a.png') ? 'https://vault.kdx.notes/' + t : null };
+const ctx = { resolve: t => notes[t] || null, imageUrl: (t) => (t === 'photo.png' || t === 'img/a.png') ? 'https://vault.cdx.notes/' + t : null };
 const r = (t, c = ctx) => Md.render(t, c).html;
 const has = (h, s) => h.includes(s);
 
@@ -46,11 +46,11 @@ check('[[lien]] résolu : cible, chemin', has(w, '<a class="wl" data-target="Alp
 check('[[lien|alias]] : le texte est l\'alias, le chemin est celui de la note', has(w, '<a class="wl" data-target="Beta" data-path="Projets/Beta.md">le projet</a>'));
 check('[[lien#section]] : la section est gardée, le libellé la montre', has(w, 'data-heading="Titre">Alpha &gt; Titre</a>'));
 check('[[lien]] sans note : marqué « miss » (à créer)', has(w, '<a class="wl miss" data-target="Inconnue">Inconnue</a>'));
-check('![[image]] : l\'image est affichée depuis le coffre ; introuvable : un message', has(w, '<img class="emb" src="https://vault.kdx.notes/photo.png" alt="photo.png">') && has(w, 'image introuvable : absente.png'));
+check('![[image]] : l\'image est affichée depuis le coffre ; introuvable : un message', has(w, '<img class="emb" src="https://vault.cdx.notes/photo.png" alt="photo.png">') && has(w, 'image introuvable : absente.png'));
 check('![[note]] : un lien d\'incrustation, pas de transclusion', has(w, 'class="wl emb-note"') && has(w, '↪ Alpha'));
 check('lien Markdown vers une note du coffre : devient un lien interne', has(r('[ici](Alpha.md#Titre) et [là](Projets/Beta)'), 'data-path="Alpha.md" data-heading="Titre">ici</a>') && has(r('[là](Projets/Beta)'), 'data-path="Projets/Beta.md"'));
 check('lien Markdown vers rien : le texte seul, marqué « miss »', r('[x](Nulle.md)') === '<p><span class="miss">x</span></p>');
-check('image Markdown du coffre (chemin relatif encodé)', has(r('![une photo](img/a.png)'), '<img src="https://vault.kdx.notes/img/a.png" alt="une photo">'));
+check('image Markdown du coffre (chemin relatif encodé)', has(r('![une photo](img/a.png)'), '<img src="https://vault.cdx.notes/img/a.png" alt="une photo">'));
 const tg = r('Du #projet et #a/b/c, pas #123 ni a#b ni http://x.org/#ancre ni `#code`.');
 check('étiquettes : #projet et #a/b/c ; pas #123, ni a#b, ni l\'ancre d\'une adresse, ni le code', has(tg, 'data-tag="projet">#projet</a>') && has(tg, 'data-tag="a/b/c">#a/b/c</a>') && !has(tg, 'data-tag="123"') && !has(tg, 'data-tag="b"') && !has(tg, 'data-tag="ancre"') && !has(tg, 'data-tag="code"'));
 check('étiquette avec accents', has(r('#idée'), 'data-tag="idée"'));

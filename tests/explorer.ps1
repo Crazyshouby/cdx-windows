@@ -6,11 +6,11 @@ $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot
 if (-not $Bin) { $Bin = "$root\bin" }
 $id = "$PID"
-$suite = Join-Path $env:TEMP "kdx-ex-suite-$id"; $data = Join-Path $env:TEMP "kdx-ex-data-$id"; $work = Join-Path $env:TEMP "kdx-ex-work-$id"
+$suite = Join-Path $env:TEMP "cdx-ex-suite-$id"; $data = Join-Path $env:TEMP "cdx-ex-data-$id"; $work = Join-Path $env:TEMP "cdx-ex-work-$id"
 New-Item -ItemType Directory $suite, $data, $work -Force | Out-Null
 New-Item "$data\debug.txt" -ItemType File | Out-Null
-$prefix = "kdxex$id."
-$env:KDX_PIPE_PREFIX = $prefix; $env:KDX_SUITE_DIR = $suite; $env:KDX_DATA_DIR = $data
+$prefix = "cdxex$id."
+$env:CDX_PIPE_PREFIX = $prefix; $env:CDX_SUITE_DIR = $suite; $env:CDX_DATA_DIR = $data
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 function Ctl([string]$line) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', "${prefix}explorer.ctl", [System.IO.Pipes.PipeDirection]::InOut)
@@ -21,7 +21,7 @@ function Ctl([string]$line) {
 function Js([string]$code) { if ($code -match 'const') { $code = "(() => { $code })()" }   # un const global resterait déclaré pour les essais suivants
   $r = Ctl "eval $code"; if ($r -and $r.StartsWith('"')) { $r | ConvertFrom-Json } else { $r } }
 function Until([scriptblock]$f, [int]$ms) { $t = [Diagnostics.Stopwatch]::StartNew(); while ($t.ElapsedMilliseconds -lt $ms) { if (& $f) { return $true }; Start-Sleep -Milliseconds 150 }; return [bool](& $f) }
-function Start-Explorer([string]$dir) { Start-Process "$Bin\kdx-explorer.exe" -ArgumentList "`"$dir`"" -PassThru }
+function Start-Explorer([string]$dir) { Start-Process "$Bin\cdx-explorer.exe" -ArgumentList "`"$dir`"" -PassThru }
 
 $started = @(); $t0Run = Get-Date
 try {
@@ -74,7 +74,7 @@ try {
   Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Bleu').click()" | Out-Null
   Check "choisir « Bleu » écrit l'accent de la suite (suite.json, isolé pour l'essai)" (Until { (Test-Path "$suite\suite.json") -and ((Get-Content "$suite\suite.json" -Raw) -match '"accent"\s*:\s*"bleu"') } 6000)
   Check "la fenêtre prend la couleur : accent bleu reçu de la suite" (Until { (Js "document.documentElement.dataset.theme") -eq 'bleu' } 6000)
-  Check "le menu se ferme après le choix" ((Js "document.querySelectorAll('.menu[data-kdx]').length") -eq '0')
+  Check "le menu se ferme après le choix" ((Js "document.querySelectorAll('.menu[data-cdx]').length") -eq '0')
   Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('accent')).click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Rouge').click()" | Out-Null
   Check "retour au rouge (état d'origine de l'essai)" (Until { (Get-Content "$suite\suite.json" -Raw) -match '"accent"\s*:\s*"rouge"' } 6000)
   Check "les boutons « Sélection » et « Affichage » ont quitté la barre d'outils (déchargée)" ((Js "!document.getElementById('cSel') && !document.getElementById('cView')") -eq 'true')
@@ -462,10 +462,10 @@ try {
 }
 finally {
   $started | ForEach-Object { try { if (-not $_.HasExited) { $_.Kill() } } catch { } }
-  Get-Process kdx-explorer -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
+  Get-Process cdx-explorer -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
   Start-Sleep -Seconds 1
   Remove-Item $suite, $data, $work -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item Env:KDX_PIPE_PREFIX, Env:KDX_SUITE_DIR, Env:KDX_DATA_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:CDX_PIPE_PREFIX, Env:CDX_SUITE_DIR, Env:CDX_DATA_DIR -ErrorAction SilentlyContinue
 }
 
 

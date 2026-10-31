@@ -2,12 +2,12 @@
 <html lang="fr" data-theme="rouge">
 <head>
 <meta charset="utf-8">
-<title>KDX — Transferts</title>
-<link rel="stylesheet" href="/kdx/fonts.css">
-<link rel="stylesheet" href="/kdx/kdx-ui.css">
-<link rel="stylesheet" href="/kdx/themes.css">
-<link rel="stylesheet" href="/kdx/kdx-frame.css">
-<link rel="stylesheet" href="/kdx/page.css">
+<title>CDX — Transferts</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/cdx/page.css">
 <style>
   /* « Transferts » : tout ce qui se copie, se déplace, se télécharge, en une liste. Les programmes qui font le travail l'annoncent ; cette page ne fait que montrer et transmettre les ordres. */
   .top { display: flex; gap: 8px; align-items: center; flex: none; }
@@ -43,10 +43,10 @@
   .tx .l3row .l3 { flex: 1; min-width: 0; }
   .empty { padding: 40px 30px; text-align: center; color: var(--faint); line-height: 1.7; }
 </style>
-<script src="/kdx/icons.js"></script>
-<script src="/kdx/kdx-bridge.js"></script>
-<script src="/kdx/kdx-frame.js"></script>
-<script src="/kdx/host.js"></script>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/cdx-frame.js"></script>
+<script src="/cdx/host.js"></script>
 </head>
 <body>
 <div class="win active" id="win">
@@ -200,7 +200,7 @@
   handlers['xf.items'] = m => { for (const e of m.items || []) items.set(e.key, e); render(); };
   handlers['xf.removed'] = m => { for (const k of m.keys || []) items.delete(k); render(); };
 
-  KdxFrame.init();
+  CdxFrame.init();
   draw();
   setInterval(() => { for (const e of items.values()) if (!live(e)) { const el = els.get(e.key); if (el) patch(el, e); } }, 30000);   // « il y a 5 min » se met à jour
 

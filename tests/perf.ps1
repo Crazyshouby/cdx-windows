@@ -7,11 +7,11 @@ $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot
 if (-not $Bin) { $Bin = "$root\bin" }
 $id = "$PID"
-$suite = Join-Path $env:TEMP "kdx-pf-suite-$id"; $data = Join-Path $env:TEMP "kdx-pf-data-$id"; $work = Join-Path $env:TEMP "kdx-pf-work-$id"
+$suite = Join-Path $env:TEMP "cdx-pf-suite-$id"; $data = Join-Path $env:TEMP "cdx-pf-data-$id"; $work = Join-Path $env:TEMP "cdx-pf-work-$id"
 New-Item -ItemType Directory $suite, $data, $work -Force | Out-Null
 New-Item "$data\debug.txt" -ItemType File | Out-Null
-$prefix = "kdxpf$id."
-$env:KDX_PIPE_PREFIX = $prefix; $env:KDX_SUITE_DIR = $suite; $env:KDX_DATA_DIR = $data
+$prefix = "cdxpf$id."
+$env:CDX_PIPE_PREFIX = $prefix; $env:CDX_SUITE_DIR = $suite; $env:CDX_DATA_DIR = $data
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 function Ctl([string]$line) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', "${prefix}explorer.ctl", [System.IO.Pipes.PipeDirection]::InOut)
@@ -31,7 +31,7 @@ try {
   $bytes = [byte[]](1..8)
   for ($i = 0; $i -lt $N; $i++) { [IO.File]::WriteAllBytes("$work\gros\fichier-$i.dat", $bytes) }
   "(création de $N fichiers : $([int]$sw.Elapsed.TotalSeconds) s)"
-  $app = Start-Process "$Bin\kdx-explorer.exe" -ArgumentList "`"$work\petit`"" -PassThru; $started += $app
+  $app = Start-Process "$Bin\cdx-explorer.exe" -ArgumentList "`"$work\petit`"" -PassThru; $started += $app
   Check "la fenêtre s'ouvre" (Until { (Js "T().items.length") -eq '1' } 20000)
   $wj = $work.Replace([string][char]92, [string][char]92 + [string][char]92)
   $bs = [string][char]92
@@ -87,8 +87,8 @@ try {
 }
 finally {
   $started | ForEach-Object { try { if (-not $_.HasExited) { $_.Kill() } } catch { } }
-  Get-Process kdx-explorer -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
+  Get-Process cdx-explorer -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
   Start-Sleep -Seconds 1
   Remove-Item $suite, $data, $work -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item Env:KDX_PIPE_PREFIX, Env:KDX_SUITE_DIR, Env:KDX_DATA_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:CDX_PIPE_PREFIX, Env:CDX_SUITE_DIR, Env:CDX_DATA_DIR -ErrorAction SilentlyContinue
 }

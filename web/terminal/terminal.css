@@ -1,6 +1,6 @@
 /* Le terminal : les onglets et le cadre sont ceux de la charte ; xterm.js dessine seulement la grille de texte dans chaque volet. */
 
-/* La police pixel à chasse fixe de la charte (kdx-ui/gen/gen_font_mono.py) : une case de 7 pixels à 14 px. Sans repli sur du gras synthétique (la charte n'a pas de gras). */
+/* La police pixel à chasse fixe de la charte (cdx-ui/gen/gen_font_mono.py) : une case de 7 pixels à 14 px. Sans repli sur du gras synthétique (la charte n'a pas de gras). */
 @font-face { font-family: 'KIRC Pixel Mono'; font-style: normal; font-weight: 100 900; src: url(/terminal/fonts/kirc-pixel-mono.ttf) format('truetype'); }
 @font-face { font-family: 'KIRC Pixel Mono'; font-style: italic; font-weight: 100 900; src: url(/terminal/fonts/kirc-pixel-mono-italic.ttf) format('truetype'); }
 

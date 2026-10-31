@@ -7,11 +7,11 @@ $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot
 if (-not $Bin) { $Bin = "$root\bin" }
 $id = "$PID"
-$suite = Join-Path $env:TEMP "kdx-dd-suite-$id"; $data = Join-Path $env:TEMP "kdx-dd-data-$id"; $work = Join-Path $env:TEMP "kdx-dd-work-$id"
+$suite = Join-Path $env:TEMP "cdx-dd-suite-$id"; $data = Join-Path $env:TEMP "cdx-dd-data-$id"; $work = Join-Path $env:TEMP "cdx-dd-work-$id"
 New-Item -ItemType Directory $suite, $data, $work -Force | Out-Null
 New-Item "$data\debug.txt" -ItemType File | Out-Null
-$prefix = "kdxdd$id."
-$env:KDX_PIPE_PREFIX = $prefix; $env:KDX_SUITE_DIR = $suite; $env:KDX_DATA_DIR = $data
+$prefix = "cdxdd$id."
+$env:CDX_PIPE_PREFIX = $prefix; $env:CDX_SUITE_DIR = $suite; $env:CDX_DATA_DIR = $data
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 function Ctl([string]$line) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', "${prefix}explorer.ctl", [System.IO.Pipes.PipeDirection]::InOut)
@@ -39,7 +39,7 @@ $started = @(); $t0Run = Get-Date
 try {
   New-Item -ItemType Directory "$work\dossierA", "$work\dossierB", "$work\dossierA\profond" | Out-Null
   foreach ($n in 'a', 'b', 'c', 'd', 'e') { Set-Content "$work\$n.txt" $n }
-  $app = Start-Process "$Bin\kdx-explorer.exe" -ArgumentList "`"$work`"" -PassThru; $started += $app
+  $app = Start-Process "$Bin\cdx-explorer.exe" -ArgumentList "`"$work`"" -PassThru; $started += $app
   Check "la fenêtre s'ouvre sur le dossier de l'essai" (Until { (Js "document.getElementById('addr').value") -eq $work } 20000)
   Check "la liste affiche les 5 fichiers et les 2 dossiers" (Until { (Js "document.querySelectorAll('#files .fr').length") -eq '7' } 8000)
   Js ($helpers -replace "`r?`n", ' ') | Out-Null
@@ -124,8 +124,8 @@ try {
 }
 finally {
   $started | ForEach-Object { try { if (-not $_.HasExited) { $_.Kill() } } catch { } }
-  Get-Process kdx-explorer -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
+  Get-Process cdx-explorer -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
   Start-Sleep -Seconds 1
   Remove-Item $suite, $data, $work -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item Env:KDX_PIPE_PREFIX, Env:KDX_SUITE_DIR, Env:KDX_DATA_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:CDX_PIPE_PREFIX, Env:CDX_SUITE_DIR, Env:CDX_DATA_DIR -ErrorAction SilentlyContinue
 }

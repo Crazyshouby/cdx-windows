@@ -1,17 +1,17 @@
 ﻿# Essai de bout en bout du bus et des réglages communs, ISOLÉ : l'Explorateur et le navigateur sont lancés avec un préfixe de tube, un dossier de
-# réglages et un dossier de données de test (KDX_PIPE_PREFIX, KDX_SUITE_DIR, KDX_DATA_DIR) : ni le vrai bus, ni le vrai suite.json, ni le vrai profil du
+# réglages et un dossier de données de test (CDX_PIPE_PREFIX, CDX_SUITE_DIR, CDX_DATA_DIR) : ni le vrai bus, ni le vrai suite.json, ni le vrai profil du
 # navigateur ne sont touchés, et les programmes en cours ne sont pas dérangés. Aucune entrée simulée.
 #   pwsh -File tests\bus.ps1 [-Bin <dossier des .exe>]      (défaut : ..\bin-next, sinon ..\bin)
 param([string]$Bin)
 $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot
-if (-not $Bin) { $Bin = if (Test-Path "$root\bin-next\kdx-browser.exe") { "$root\bin-next" } else { "$root\bin" } }
+if (-not $Bin) { $Bin = if (Test-Path "$root\bin-next\cdx-browser.exe") { "$root\bin-next" } else { "$root\bin" } }
 $id = "$PID"
-$suite = Join-Path $env:TEMP "kdx-it-suite-$id"; $data = Join-Path $env:TEMP "kdx-it-data-$id"
+$suite = Join-Path $env:TEMP "cdx-it-suite-$id"; $data = Join-Path $env:TEMP "cdx-it-data-$id"
 New-Item -ItemType Directory $suite, $data -Force | Out-Null
 New-Item "$data\debug.txt" -ItemType File | Out-Null
-$prefix = "kdxit$id."
-$env:KDX_PIPE_PREFIX = $prefix; $env:KDX_SUITE_DIR = $suite; $env:KDX_DATA_DIR = $data
+$prefix = "cdxit$id."
+$env:CDX_PIPE_PREFIX = $prefix; $env:CDX_SUITE_DIR = $suite; $env:CDX_DATA_DIR = $data
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 function Ctl([string]$pipe, [string]$line) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipe, [System.IO.Pipes.PipeDirection]::InOut)
@@ -27,8 +27,8 @@ function Until([scriptblock]$f, [int]$ms) { $t = [Diagnostics.Stopwatch]::StartN
 $started = @(); $t0Run = Get-Date
 try {
   '{"version":1,"accent":"rouge"}' | Set-Content "$suite\suite.json" -Encoding ascii
-  $started += Start-Process "$Bin\kdx-explorer.exe" -ArgumentList $env:USERPROFILE -PassThru
-  $started += Start-Process "$Bin\kdx-browser.exe" -PassThru
+  $started += Start-Process "$Bin\cdx-explorer.exe" -ArgumentList $env:USERPROFILE -PassThru
+  $started += Start-Process "$Bin\cdx-browser.exe" -PassThru
   Start-Sleep 7
 
   "1. réglages communs : l'accent se propage en moins d'une seconde"
@@ -71,16 +71,16 @@ try {
   Check "javascript:, file:, ftp:, adresse de plus de 2000 caractères, type d'un autre programme : refusés, aucun onglet de plus" ((& $tabs) -eq $t0)
 
   "4. seconde instance : relais par le bus"
-  $p = Start-Process "$Bin\kdx-browser.exe" -ArgumentList 'https://example.com/' -PassThru; Start-Sleep 6
+  $p = Start-Process "$Bin\cdx-browser.exe" -ArgumentList 'https://example.com/' -PassThru; Start-Sleep 6
   Check "la seconde instance s'arrête et l'adresse arrive dans le premier navigateur" ($p.HasExited -and ((Ctl "${prefix}browser.ctl" 'state') -match 'example.com'))
-  $p = Start-Process "$Bin\kdx-explorer.exe" -ArgumentList $env:TEMP -PassThru; Start-Sleep 5
+  $p = Start-Process "$Bin\cdx-explorer.exe" -ArgumentList $env:TEMP -PassThru; Start-Sleep 5
   Check "idem pour l'Explorateur (4 fenêtres)" ($p.HasExited -and (Ctl "${prefix}explorer.ctl" 'state') -eq '4 fenêtre(s)')
 
   "6. synergies : fichiers locaux dans le navigateur"
-  $page = Join-Path $env:TEMP "kdx-it-page-$id.html"; "<!doctype html><title>Page locale KDX</title><p>bonjour</p>" | Set-Content $page -Encoding utf8
-  $exe = Join-Path $env:TEMP "kdx-it-$id.exe"; "x" | Set-Content $exe
+  $page = Join-Path $env:TEMP "cdx-it-page-$id.html"; "<!doctype html><title>Page locale CDX</title><p>bonjour</p>" | Set-Content $page -Encoding utf8
+  $exe = Join-Path $env:TEMP "cdx-it-$id.exe"; "x" | Set-Content $exe
   $t0 = & $tabs
-  Check "open-file (page HTML locale) : un onglet file:///, titre de la page" ((BusSend 'browser' ('{"type":"open-file","from":"essai","data":{"path":"' + ($page -replace '\\', '\\\\') + '"}}')) -and (Until { (Ctl "${prefix}browser.ctl" 'state') -match 'Page locale KDX' } 8000))
+  Check "open-file (page HTML locale) : un onglet file:///, titre de la page" ((BusSend 'browser' ('{"type":"open-file","from":"essai","data":{"path":"' + ($page -replace '\\', '\\\\') + '"}}')) -and (Until { (Ctl "${prefix}browser.ctl" 'state') -match 'Page locale CDX' } 8000))
   $t1 = & $tabs
   BusSend 'browser' ('{"type":"open-file","from":"essai","data":{"path":"' + ($exe -replace '\\', '\\\\') + '"}}') | Out-Null
   BusSend 'browser' '{"type":"open-file","from":"essai","data":{"path":"..\\relatif.html"}}' | Out-Null
@@ -92,23 +92,23 @@ try {
   Remove-Item $page, $exe -Force -ErrorAction SilentlyContinue
 
   "7. synergies : le destinataire absent est lancé (apps.json)"
-  Get-Process kdx-browser -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force; Start-Sleep 2
-  $page2 = Join-Path $env:TEMP "kdx-it-page2-$id.html"; "<!doctype html><title>Page lancee par l'Explorateur</title>" | Set-Content $page2 -Encoding utf8
-  Check "navigateur arrêté : plus de processus" (-not (Get-Process kdx-browser -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run }))
+  Get-Process cdx-browser -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force; Start-Sleep 2
+  $page2 = Join-Path $env:TEMP "cdx-it-page2-$id.html"; "<!doctype html><title>Page lancee par l'Explorateur</title>" | Set-Content $page2 -Encoding utf8
+  Check "navigateur arrêté : plus de processus" (-not (Get-Process cdx-browser -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run }))
   Ctl "${prefix}explorer.ctl" ('eval post({cmd:"fs.open", path:' + ($page2 | ConvertTo-Json) + '})') | Out-Null
-  Check "double-clic sur la page : l'Explorateur lance kdx-browser.exe (chemin lu dans apps.json) et la page s'y ouvre" (Until { (Ctl "${prefix}browser.ctl" 'state') -match 'lancee par' } 15000)
+  Check "double-clic sur la page : l'Explorateur lance cdx-browser.exe (chemin lu dans apps.json) et la page s'y ouvre" (Until { (Ctl "${prefix}browser.ctl" 'state') -match 'lancee par' } 15000)
   Remove-Item $page2 -Force -ErrorAction SilentlyContinue
 
   "5. sécurité du tube"
-  # les droits du tube (utilisateur courant seulement) sont vérifiés par kdx-shell --selftest-bus, sur un tube créé de la même façon
+  # les droits du tube (utilisateur courant seulement) sont vérifiés par cdx-shell --selftest-bus, sur un tube créé de la même façon
   # le refus des connexions distantes (PIPE_REJECT_REMOTE_CLIENTS, par défaut avec .NET) ne se teste pas depuis la même machine : par le nom d'hôte, Windows reste en local
 }
 finally {
   $started | ForEach-Object { try { if (-not $_.HasExited) { $_.Kill() } } catch { } }
-  Get-Process kdx-browser, kdx-explorer -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
-  Get-Process kdx-explorer, kdx-browser -ErrorAction SilentlyContinue | Where-Object { $_.Id -in $started.Id } | Stop-Process -Force
+  Get-Process cdx-browser, cdx-explorer -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt $t0Run } | Stop-Process -Force
+  Get-Process cdx-explorer, cdx-browser -ErrorAction SilentlyContinue | Where-Object { $_.Id -in $started.Id } | Stop-Process -Force
   Start-Sleep 1
   Remove-Item $suite, $data -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item Env:KDX_PIPE_PREFIX, Env:KDX_SUITE_DIR, Env:KDX_DATA_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:CDX_PIPE_PREFIX, Env:CDX_SUITE_DIR, Env:CDX_DATA_DIR -ErrorAction SilentlyContinue
 }
 

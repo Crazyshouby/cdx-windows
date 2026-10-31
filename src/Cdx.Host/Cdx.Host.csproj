@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Ce que partagent les programmes de la suite (cdx-shell, cdx-explorer, cdx-browser, cdx-repos, cdx-transfers) : fenêtre hôte d'une page WebView2, appels Windows,
+       journal, instance unique, canal de test, boutons latéraux de la souris. Les types restent internes : seuls les programmes de la suite les voient. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>Cdx.Host</AssemblyName>
+    <RootNamespace>Cdx</RootNamespace>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+    <InternalsVisibleTo Include="cdx-shell" />
+    <InternalsVisibleTo Include="cdx-explorer" />
+    <InternalsVisibleTo Include="cdx-browser" />
+    <InternalsVisibleTo Include="cdx-repos" />
+    <InternalsVisibleTo Include="cdx-transfers" />
+    <InternalsVisibleTo Include="cdx-notes" />
+    <InternalsVisibleTo Include="cdx-terminal" />
+  </ItemGroup>
+
+</Project>
+

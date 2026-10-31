@@ -1,9 +1,9 @@
 <!doctype html><meta charset="utf-8"><title>test navigateur</title>
-<!-- Chargée par « kdx-shell.exe --selftest-browser » dans un WebView2 caché : mesure ce que le moteur offre à un navigateur construit dessus
+<!-- Chargée par « cdx-shell.exe --selftest-browser » dans un WebView2 caché : mesure ce que le moteur offre à un navigateur construit dessus
      (extension non empaquetée active, DRM, codecs). Envoie le résultat au programme. -->
 <script>
 (async () => {
-  const out = { extension: document.documentElement.getAttribute('data-kdx-ext') || 'NON appliquée', userAgent: navigator.userAgent, drm: {}, codecs: {} };
+  const out = { extension: document.documentElement.getAttribute('data-cdx-ext') || 'NON appliquée', userAgent: navigator.userAgent, drm: {}, codecs: {} };
   const cfg = (robust) => [{ initDataTypes: ['cenc'], videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"', robustness: robust }], audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }] }];
   const tests = [
     ['Widevine (logiciel)', 'com.widevine.alpha', 'SW_SECURE_CRYPTO'], ['Widevine (matériel, niveau L1)', 'com.widevine.alpha', 'HW_SECURE_ALL'],

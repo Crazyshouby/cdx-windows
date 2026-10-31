@@ -1,4 +1,4 @@
-// Le terminal KDX : des onglets, chacun un arbre de volets ; chaque volet est un shell (une session du programme) affiché par xterm.js.
+// Le terminal CDX : des onglets, chacun un arbre de volets ; chaque volet est un shell (une session du programme) affiché par xterm.js.
 //   page → programme   ready · term.new {sid,cols,rows,cwd?} · term.in {sid,data} · term.resize {sid,cols,rows} · term.close {sid} · term.copy {text} · term.paste {sid}
 //   programme → page   hello {build,cwd?} · out {sid,b64} · exit {sid,code} · paste {sid,text} · open-tab {cwd} · theme (par host.js)
 'use strict';
@@ -10,7 +10,7 @@ const $ = id => document.getElementById(id);
 // le moteur WebGL de xterm place chaque caractère dans sa case, un repli plus large ou plus étroit ne décale donc rien.
 const FONT = '"KIRC Pixel Mono", "Cascadia Mono", Consolas, "Lucida Console", monospace';
 
-// Les seize couleurs ANSI viennent de la charte (kdx-ui.css, « genres de lignes d'une console ») : rouge = problème, ambre = annonce, vert sombre = présence,
+// Les seize couleurs ANSI viennent de la charte (cdx-ui.css, « genres de lignes d'une console ») : rouge = problème, ambre = annonce, vert sombre = présence,
 // bleu = sujet, rose = action, cyan = lien, gris = voix du serveur. La charte n'a qu'une teinte par sens : les variantes vives reprennent la même quand elle n'en a pas d'autre.
 const ANSI = {
   black: '#000000', red: '#ff5a4a', green: '#00a000', yellow: '#faa320', blue: '#6a8aff', magenta: '#ff5cf0', cyan: '#5cf0ff', white: '#c8c8c8',
@@ -153,7 +153,7 @@ function dropTab(tab) {
   const i = tabs.indexOf(tab); if (i < 0) return;
   for (const p of panesOf(tab.root)) { bySid.delete(p.sid); p.dispose(); }
   tab.view.remove(); tabs.splice(i, 1);
-  if (!tabs.length) { active = null; kdx.win.close(); return; }
+  if (!tabs.length) { active = null; cdx.win.close(); return; }
   if (tab === active) activate(tabs[Math.min(i, tabs.length - 1)]);
   else renderTabs();
 }
@@ -199,7 +199,7 @@ function renderTabs() {
   $('tabs').innerHTML = tabs.map(t => `<button class="tab ${t === active ? 'on' : ''}" data-id="${t.id}" title="${esc(tabTitle(t))}"><span class="tt">${esc(tabTitle(t))}</span><span class="x" data-x="${t.id}" title="Fermer l’onglet">×</span></button>`).join('')
     + '<button class="tab new" data-new title="Nouvel onglet (Ctrl+Maj+T)">+</button>';
   const title = active ? tabTitle(active) : 'Terminal';
-  $('ttl').textContent = title; kdx.win.title(title);
+  $('ttl').textContent = title; cdx.win.title(title);
 }
 $('tabs').addEventListener('click', e => {
   if (e.target.closest('[data-new]')) { newTab(); return; }
@@ -247,7 +247,7 @@ function onKey(p, e) {
 
 function paneMenu(p, x, y) {
   const back = f => () => { f(); setTimeout(() => (bySid.has(p.sid) ? p : active?.focus)?.term?.focus(), 0); };
-  KdxFrame.menu([
+  CdxFrame.menu([
     ['Copier', back(() => copyOf(p)), { key: 'Ctrl+C', disabled: !p.term.hasSelection() }],
     ['Coller', back(() => pasteInto(p)), { key: 'Ctrl+V' }],
     null,
@@ -266,7 +266,7 @@ handlers.out = m => bySid.get(m.sid)?.term?.write(bytes(m.b64));
 handlers.exit = m => { const p = bySid.get(m.sid); if (p) removePane(p); };   // le shell s'est terminé : le volet se ferme avec lui, comme dans Windows Terminal
 handlers.paste = m => bySid.get(m.sid)?.term?.paste(m.text);
 handlers['open-tab'] = m => { newTab(m.cwd); };   // « Ouvrir dans un terminal » (Explorateur) : un onglet dans ce dossier
-kdx.on('theme', () => { const t = palette(); for (const p of bySid.values()) if (p.term) p.term.options.theme = t; });   // host.js a déjà posé le nouvel accent sur <html>
+cdx.on('theme', () => { const t = palette(); for (const p of bySid.values()) if (p.term) p.term.options.theme = t; });   // host.js a déjà posé le nouvel accent sur <html>
 window.addEventListener('focus', () => active?.focus?.term?.focus());
 
 // Pour les pages de test.
@@ -283,8 +283,8 @@ function demo() {
     'PS C:\\Users\\Valentin> ' + E + '93mdir' + E + '0m\r\n',
     E + '36m    Répertoire : C:\\Users\\Valentin\\Dev' + E + '0m\r\n',
     'Mode                 LastWriteTime         Length Name\r\n',
-    'd-----        31/10/2026     16:25                kdx-ui\r\n',
-    'd-----        31/10/2026     16:50                kdx-windows\r\n\r\n',
+    'd-----        31/10/2026     16:25                cdx-ui\r\n',
+    'd-----        31/10/2026     16:50                cdx-windows\r\n\r\n',
     fg.map(c => E + c + 'm' + String(c).padStart(3) + E + '0m').join(' ') + '\r\n',
     E + '31merreur : exemple' + E + '0m  ' + E + '33mattention : exemple' + E + '0m  ' + E + '92mok : exemple' + E + '0m  ' + E + '3mitalique' + E + '0m  é€ß\r\n',
     '┌────────────────────┐\r\n│ encadré  ░▒▓█ ▀▄ │\r\n├──────┬─────────────┤\r\n└──────┴─────────────┘  ╭─╮ ╰─╯ ━ ┃ ═ ║\r\n',
@@ -300,7 +300,7 @@ function demo() {
   }
 }
 
-KdxFrame.init();
+CdxFrame.init();
 Promise.race([
   Promise.all([document.fonts.load('14px "KIRC Pixel Mono"'), document.fonts.load('italic 14px "KIRC Pixel Mono"')]),
   new Promise(r => setTimeout(r, 2000)),

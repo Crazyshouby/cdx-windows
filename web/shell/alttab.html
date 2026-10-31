@@ -2,12 +2,12 @@
 <html lang="fr" data-theme="rouge">
 <head>
 <meta charset="utf-8">
-<title>KDX — sélecteur de fenêtres</title>
-<link rel="stylesheet" href="/kdx/fonts.css">
-<link rel="stylesheet" href="/kdx/kdx-ui.css">
-<link rel="stylesheet" href="/kdx/themes.css">
-<link rel="stylesheet" href="/kdx/kdx-frame.css">
-<link rel="stylesheet" href="/kdx/page.css">
+<title>CDX — sélecteur de fenêtres</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/cdx/page.css">
 <style>
   /* Le sélecteur Alt+Tab de windows-ui.html : une grille de petites fenêtres, celle qui est choisie est la fenêtre active (cadre à l'accent). */
   .grid { flex: 1; min-height: 0; display: grid; gap: 16px; justify-content: center; align-content: start; padding: 11px 0; overflow: hidden; }
@@ -22,9 +22,9 @@
   .status span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .status .hint { margin-left: auto; color: var(--faint); white-space: nowrap; padding-left: 14px; }
 </style>
-<script src="/kdx/icons.js"></script>
-<script src="/kdx/kdx-bridge.js"></script>
-<script src="/kdx/host.js"></script>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/host.js"></script>
 <script src="/shell/shell.js"></script>
 </head>
 <body>
@@ -55,7 +55,7 @@
   handlers.sel = m => { sel = m.index; mark(); };
   $('grid').onclick = e => { const c = e.target.closest('[data-i]'); if (c) post({ cmd: 'alttab.pick', h: items[+c.dataset.i].h }); };
 
-  if (!hasHost) draw({ cols: 4, sel: 1, items: [['Documents — Explorateur', 'C:\\kdx-shell.exe', false], ['Paramètres', 'C:\\x\\systemsettings.exe', false], ['Terminal', 'C:\\x\\windowsterminal.exe', false], ['notes-kdx.txt — Bloc-notes', 'C:\\x\\notepad.exe', true]].map((a, i) => ({ h: String(i), title: a[0], exe: a[1], min: a[2] })) });
+  if (!hasHost) draw({ cols: 4, sel: 1, items: [['Documents — Explorateur', 'C:\\cdx-shell.exe', false], ['Paramètres', 'C:\\x\\systemsettings.exe', false], ['Terminal', 'C:\\x\\windowsterminal.exe', false], ['notes-cdx.txt — Bloc-notes', 'C:\\x\\notepad.exe', true]].map((a, i) => ({ h: String(i), title: a[0], exe: a[1], min: a[2] })) });
   post({ cmd: 'ready', page: 'alttab' });
 </script>
 </body>

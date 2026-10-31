@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Le coffre de notes : un dossier de fichiers Markdown (liens [[comme Obsidian]], propriétés en tête de note, #étiquettes, tâches « - [ ] »).
+       Partagé par l'application Notes (cdx-notes) et par le serveur MCP de Claude (cdx-notes-mcp) : une seule définition de ce qu'est une note,
+       d'un lien, d'un projet, et de ce qu'on a le droit d'écrire. Aucune dépendance. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>Cdx.Vault</AssemblyName>
+    <RootNamespace>Cdx.Coffre</RootNamespace>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+</Project>
+

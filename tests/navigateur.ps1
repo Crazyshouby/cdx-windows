@@ -1,11 +1,11 @@
-﻿# Série de tests du navigateur KDX par le canal de contrôle (aucune entrée simulée). Prérequis : un fichier %LOCALAPPDATA%\KdxShell\debug.txt, puis
-# (re)lancer kdx-browser.exe : il ouvre alors le canal « KdxBrowserCtl » (utilisateur courant seulement). Le test ouvre le navigateur, navigue sur example.org et
+﻿# Série de tests du navigateur CDX par le canal de contrôle (aucune entrée simulée). Prérequis : un fichier %LOCALAPPDATA%\CdxShell\debug.txt, puis
+# (re)lancer cdx-browser.exe : il ouvre alors le canal « CdxBrowserCtl » (utilisateur courant seulement). Le test ouvre le navigateur, navigue sur example.org et
 # example.com (accès réseau), télécharge un fichier depuis un serveur Python local temporaire, et nettoie derrière lui. Supprimer debug.txt ensuite.
 param([string]$Bin)
 $ErrorActionPreference = 'Continue'
-# Isolé si KDX_DATA_DIR / KDX_PIPE_PREFIX sont posés (comme bus.ps1) : ni le vrai profil du navigateur ni le vrai bus ne sont touchés.
-$data = if ($env:KDX_DATA_DIR) { $env:KDX_DATA_DIR } else { "$env:LOCALAPPDATA\KdxShell" }
-$pipe = $(if ($env:KDX_PIPE_PREFIX) { $env:KDX_PIPE_PREFIX } else { 'kdx.' }) + 'browser.ctl'
+# Isolé si CDX_DATA_DIR / CDX_PIPE_PREFIX sont posés (comme bus.ps1) : ni le vrai profil du navigateur ni le vrai bus ne sont touchés.
+$data = if ($env:CDX_DATA_DIR) { $env:CDX_DATA_DIR } else { "$env:LOCALAPPDATA\CdxShell" }
+$pipe = $(if ($env:CDX_PIPE_PREFIX) { $env:CDX_PIPE_PREFIX } else { 'cdx.' }) + 'browser.ctl'
 if (-not $Bin) { $Bin = Join-Path $PSScriptRoot '..\bin' }
 function Ctl([string]$line) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipe, [System.IO.Pipes.PipeDirection]::InOut)
@@ -18,13 +18,13 @@ function Show-Tabs($s) { foreach ($t in $s.tabs) { "   onglet $($t.Id)$(if ($t.I
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 
 # --- le navigateur est (re)lancé par le test, après le dépôt de l'extension de test (chargée à l'ouverture)
-Get-Process kdx-browser -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 1
-$ext = "$data\extensions\kdx-test"; New-Item -ItemType Directory $ext -Force | Out-Null
-'{"manifest_version":3,"name":"kdx-test","version":"1.0","content_scripts":[{"matches":["https://example.org/*"],"js":["c.js"],"run_at":"document_start"}]}' | Set-Content "$ext\manifest.json" -Encoding ascii
-"document.documentElement.setAttribute('data-kdx-ext','ok');" | Set-Content "$ext\c.js" -Encoding ascii
+Get-Process cdx-browser -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 1
+$ext = "$data\extensions\cdx-test"; New-Item -ItemType Directory $ext -Force | Out-Null
+'{"manifest_version":3,"name":"cdx-test","version":"1.0","content_scripts":[{"matches":["https://example.org/*"],"js":["c.js"],"run_at":"document_start"}]}' | Set-Content "$ext\manifest.json" -Encoding ascii
+"document.documentElement.setAttribute('data-cdx-ext','ok');" | Set-Content "$ext\c.js" -Encoding ascii
 
 "1. ouverture"
-Start-Process (Join-Path $Bin 'kdx-browser.exe') -ArgumentList '--theme', 'rouge'; Start-Sleep 7
+Start-Process (Join-Path $Bin 'cdx-browser.exe') -ArgumentList '--theme', 'rouge'; Start-Sleep 7
 $s = St; Show-Tabs $s
 Check "un onglet, page « Nouvel onglet » interne" (@($s.tabs).Count -eq 1 -and $s.tabs[0].Url -like '*interne.html?p=newtab*')
 
@@ -32,7 +32,7 @@ Check "un onglet, page « Nouvel onglet » interne" (@($s.tabs).Count -eq 1 -and
 Ctl 'cmd {"cmd":"br.go","url":"example.org"}' | Out-Null; Start-Sleep 5
 $s = St; Show-Tabs $s
 Check "l'adresse est résolue en https://example.org/ et le titre est celui de la page" ($s.tabs[0].Url -eq 'https://example.org/' -and $s.tabs[0].Title -eq 'Example Domain')
-$ev = Ctl 'eval document.documentElement.getAttribute("data-kdx-ext")'
+$ev = Ctl 'eval document.documentElement.getAttribute("data-cdx-ext")'
 Check "extension non empaquetée : script de contenu appliqué à la page (valeur lue : $ev)" ($ev -eq '"ok"')
 
 "3. nouvel onglet, historique, retour"
@@ -72,15 +72,15 @@ Check "favoris : liste example.org" ((Ctl 'eval document.body.innerText') -match
 $s = St; Show-Tabs $s
 
 "7. téléchargement (serveur local temporaire)"
-$srvdir = Join-Path $env:TEMP 'kdx-dl-test'; New-Item -ItemType Directory $srvdir -Force | Out-Null
-[IO.File]::WriteAllBytes("$srvdir\kdx-test.bin", (1..200000 | ForEach-Object { [byte]($_ % 251) }))
+$srvdir = Join-Path $env:TEMP 'cdx-dl-test'; New-Item -ItemType Directory $srvdir -Force | Out-Null
+[IO.File]::WriteAllBytes("$srvdir\cdx-test.bin", (1..200000 | ForEach-Object { [byte]($_ % 251) }))
 $srv = Start-Process python -ArgumentList '-m', 'http.server', '8766', '--bind', '127.0.0.1', '--directory', $srvdir -PassThru -WindowStyle Hidden
 Start-Sleep 2
-Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8766/kdx-test.bin"}' | Out-Null; Start-Sleep 5
+Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8766/cdx-test.bin"}' | Out-Null; Start-Sleep 5
 $s = St
 $d = @($s.downloads)[0]
-Check "téléchargement suivi par la page « kdx://telechargements » (état : $($d.state), $($d.received) o)" ($d -and $d.state -eq 'done' -and $d.received -ge 200000)
-$dest = Join-Path "$env:USERPROFILE\Downloads" 'kdx-test.bin'
+Check "téléchargement suivi par la page « cdx://telechargements » (état : $($d.state), $($d.received) o)" ($d -and $d.state -eq 'done' -and $d.received -ge 200000)
+$dest = Join-Path "$env:USERPROFILE\Downloads" 'cdx-test.bin'
 Check "fichier écrit dans Téléchargements (sans la fenêtre d'Edge)" (Test-Path $dest)
 Remove-Item $dest -Force -ErrorAction SilentlyContinue
 Stop-Process -Id $srv.Id -Force; Remove-Item $srvdir -Recurse -Force -ErrorAction SilentlyContinue
@@ -92,7 +92,7 @@ Check "le cadre liste les onglets ($((Ctl 'evalui document.querySelectorAll("#ta
 Ctl 'cmd {"cmd":"br.close","id":1}' | Out-Null; Start-Sleep 1
 $s = St; Check "onglet 1 fermé" (@($s.tabs | Where-Object { $_.Id -eq 1 }).Count -eq 0)
 Ctl 'cmd {"cmd":"win.close"}' | Out-Null; Start-Sleep 2
-Check "fenêtre fermée : le programme s'arrête avec sa dernière fenêtre" (-not (Get-Process kdx-browser -ErrorAction SilentlyContinue))
+Check "fenêtre fermée : le programme s'arrête avec sa dernière fenêtre" (-not (Get-Process cdx-browser -ErrorAction SilentlyContinue))
 Check "session enregistrée (session.json)" (Test-Path "$data\session.json")
 Remove-Item $ext -Recurse -Force -ErrorAction SilentlyContinue
 Get-Content "$data\journal-browser.log" | Where-Object { $_ -match 'extension|navigateur|refus|exception|échou' } | Select-Object -Last 8

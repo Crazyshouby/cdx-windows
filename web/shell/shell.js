@@ -1,4 +1,4 @@
-// Ce que seules les pages du shell (barre, menu Démarrer) utilisent, en plus du pont /kdx/host.js.
+// Ce que seules les pages du shell (barre, menu Démarrer) utilisent, en plus du pont /cdx/host.js.
 // Les applications épinglées viennent du programme (message « pins », fichier epingles.json) : bar = affichée dans la barre, tile = tuile du menu Démarrer.
 // Une icône : ic = icône pixel de la charte (repli), path = fichier dont on extrait l'icône réelle quand la cible en est un.
 function pinIcon(p, size) {
@@ -10,8 +10,8 @@ function fillPinIcons(root, size) { root.querySelectorAll('img[data-p]').forEach
 if (!hasHost) window.addEventListener('load', () => {
   const f = (h, t, exe, active, min, count = 1, g = null) => ({ h, title: t, exe, active, min, count, g });
   let rank = 0;
-  const pin = (name, ic, bar, tile) => ({ name, ic, target: 'kdx:' + name, bar, tile, barIndex: bar ? rank++ : -1 });
-  if (handlers.pins) handlers.pins({ items: [pin('Explorateur', 'dossier', true, true), pin('Paramètres', 'reglages', true, true), pin('Terminal', 'console', true, true), pin('Chrome', 'serveur', true, true), pin('Navigateur KDX', 'kirc', true, true), pin('Dépôts', 'liste', false, true), pin('Calculatrice', 'apps', false, true), pin('Bloc-notes', 'journal', false, true), pin('Images', 'image', false, true)] });
+  const pin = (name, ic, bar, tile) => ({ name, ic, target: 'cdx:' + name, bar, tile, barIndex: bar ? rank++ : -1 });
+  if (handlers.pins) handlers.pins({ items: [pin('Explorateur', 'dossier', true, true), pin('Paramètres', 'reglages', true, true), pin('Terminal', 'console', true, true), pin('Chrome', 'serveur', true, true), pin('Navigateur CDX', 'kirc', true, true), pin('Dépôts', 'liste', false, true), pin('Calculatrice', 'apps', false, true), pin('Bloc-notes', 'journal', false, true), pin('Images', 'image', false, true)] });
   if (handlers.tasks) handlers.tasks({ items: [f('1', 'Documents — Explorateur', '', true, false), f('2', 'Paramètres', '', false, false), f('3', 'Terminal', '', false, false), f('4', 'Bloc-notes', '', false, true, 3, 'c:\\windows\\notepad.exe')] });
   if (handlers.stats) handlers.stats({ cpu: 12, ram: '5,1' });
   if (handlers.apps) handlers.apps({ items: ['7-Zip', 'Bloc-notes', 'Calculatrice', 'Chrome', 'Discord', 'Explorateur', 'Godot', 'OBS Studio', 'Paramètres', 'Terminal'].map(n => ({ name: n, path: n })) });
