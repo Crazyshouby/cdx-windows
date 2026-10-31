@@ -158,6 +158,14 @@ static class Host
         switch (cmd)
         {
             case "log": Log($"[{from.Name}] {(r.TryGetProperty("msg", out var m) ? m.GetString() : "")}"); return true;
+            // Le menu « Réglages » (bouton hachuré de la barre de titre) change la couleur d'accent de toute la suite : suite.json, que chaque programme surveille.
+            case "suite.accent":
+            {
+                string a = r.TryGetProperty("value", out var av) && av.ValueKind == JsonValueKind.String ? av.GetString() : null;
+                if (Suite.IsAccent(a)) { try { Suite.WriteAccent(a); Log("accent choisi depuis " + from.Name + " : " + a); } catch (Exception ex) { Log("accent refusé : " + ex.Message); } }
+                else Log("accent inconnu refusé : " + a);
+                return true;
+            }
             case "icon":
             {
                 string p = r.TryGetProperty("path", out var pv) ? pv.GetString() : null;

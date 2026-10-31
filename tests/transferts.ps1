@@ -94,7 +94,7 @@ try {
   $tr = Start-Process "$Bin\kdx-transfers.exe" -PassThru; $started += $tr
   Check "après un redémarrage de la fenêtre, l'historique des terminés revient (marqué « historique »), pas le transfert resté en cours" ((Until { (Ctl 'transfers' 'state') -like '*fenêtre ouverte*' } 25000) -and (Until { (Entries | Where-Object { $_.Hist -and $_.State -eq 'done' }).Count -ge 1 } 8000) -and -not (Entries | Where-Object { $_.State -eq 'running' }))
   Check "la page affiche l'historique relu (au moins une ligne)" (Until { (Js 'transfers' "document.querySelectorAll('.tx').length") -match '^[1-9]' } 8000)
-  Click '#bClear' | Out-Null
+  Js 'transfers' "document.querySelector('.tb-m').click(); const it = [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Effacer les terminés')); if (it) it.click(); return !!it" | Out-Null
   Check "« Effacer les terminés » vide la liste" ((Until { (Entries).Count -eq 0 } 5000) -and ((Js 'transfers' "document.getElementById('rows').textContent") -like '*Aucun transfert*'))
   $tr.Kill(); Start-Sleep -Seconds 1
 

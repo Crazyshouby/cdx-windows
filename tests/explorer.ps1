@@ -65,16 +65,30 @@ try {
   Remove-Item "$work\petit\pendant.txt"
   Until { (Js "T().items.length") -eq '3' } 6000 | Out-Null
 
+  # --- le menu « Réglages » du bouton hachuré de la barre de titre (Affichage, Sélection, couleur d'accent) ---
+  Js "document.querySelector('.tb-m').click()" | Out-Null
+  Check "le bouton hachuré ouvre le menu « Réglages » : Affichage, Sélection, Couleur d'accent" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent.trim()).join('|')") -match '^Affichage\|Sélection\|Couleur d.accent$' } 4000)
+  Check "le menu porte le titre « Réglages »" ((Js "document.querySelector('.menu .menu-title')?.textContent") -eq 'Réglages')
+  Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('accent')).click()" | Out-Null
+  Check "« Couleur d'accent » : les sept couleurs de la suite, la couleur actuelle cochée" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].filter(e => ['Rouge','Bleu','Vert','Violet','Ambre','Sarcelle','Charbon'].includes(e.textContent.trim())).length") -eq '7' -and (Js "document.querySelectorAll('.menu .chk.on').length") -eq '1' } 4000)
+  Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Bleu').click()" | Out-Null
+  Check "choisir « Bleu » écrit l'accent de la suite (suite.json, isolé pour l'essai)" (Until { (Test-Path "$suite\suite.json") -and ((Get-Content "$suite\suite.json" -Raw) -match '"accent"\s*:\s*"bleu"') } 6000)
+  Check "la fenêtre prend la couleur : accent bleu reçu de la suite" (Until { (Js "document.documentElement.dataset.theme") -eq 'bleu' } 6000)
+  Check "le menu se ferme après le choix" ((Js "document.querySelectorAll('.menu[data-kdx]').length") -eq '0')
+  Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('accent')).click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Rouge').click()" | Out-Null
+  Check "retour au rouge (état d'origine de l'essai)" (Until { (Get-Content "$suite\suite.json" -Raw) -match '"accent"\s*:\s*"rouge"' } 6000)
+  Check "les boutons « Sélection » et « Affichage » ont quitté la barre d'outils (déchargée)" ((Js "!document.getElementById('cSel') && !document.getElementById('cView')") -eq 'true')
+
   # --- éléments cachés et extensions (menu Affichage) ---
   Set-Content "$work\petit\secret.txt" 's'; (Get-Item "$work\petit\secret.txt").Attributes = 'Hidden'
   Start-Sleep -Milliseconds 800
   Check "un fichier caché n'est pas listé par défaut" ((Js "T().rows.map(r => r.n).join(',')") -notlike '*secret.txt*')
-  Js "document.getElementById('cView').click()" | Out-Null
-  Check "le bouton Affichage ouvre un menu avec « Éléments cachés » et « Extensions des fichiers »" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent).join('|')") -match 'Éléments cachés.*Extensions des fichiers' } 4000)
+  Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim().startsWith('Affichage')).click()" | Out-Null
+  Check "Réglages > Affichage ouvre un sous-menu avec « Éléments cachés » et « Extensions des fichiers »" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent).join('|')") -match 'Éléments cachés.*Extensions des fichiers' } 4000)
   Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Éléments cachés')).click()" | Out-Null
   Check "cocher « Éléments cachés » relit le dossier : secret.txt apparaît, estompé" (Until { (Js "T().rows.map(r => r.n).join(',')") -like '*secret.txt*' -and (Js "!!document.querySelector('#files .fr.hid')") -eq 'true' } 8000)
   Check "le réglage est enregistré (show.hidden)" (Until { (Get-Content "$data\explorer.json" -Raw) -match '"show.hidden":true' } 4000)
-  Js "document.getElementById('cView').click()" | Out-Null
+  Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim().startsWith('Affichage')).click()" | Out-Null
   Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Extensions')).click()" | Out-Null
   Check "décocher « Extensions des fichiers » : a.txt s'affiche « a »" (Until { (Js "document.querySelector('#files .fr .nm span:last-child').textContent") -eq 'a' } 4000)
   Check "le nom réel ne change pas (a.txt, pour les opérations)" ((Js "T().rows[0].n") -eq 'a.txt')
@@ -82,8 +96,8 @@ try {
   Check "le renommage d'un fichier sans extension affichée édite « a » (sans .txt)" ((Js "document.querySelector('#files input').value") -eq 'a')
   Js "const i = document.querySelector('#files input'); i.value = 'z'; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" | Out-Null
   Check "valider « z » renomme en z.txt (l'extension masquée est conservée)" (Until { Test-Path "$work\petit\z.txt" } 6000)
-  Js "document.getElementById('cView').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Extensions')).click()" | Out-Null
-  Js "document.getElementById('cView').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('cachés')).click()" | Out-Null
+  Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim().startsWith('Affichage')).click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Extensions')).click()" | Out-Null
+  Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim().startsWith('Affichage')).click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('cachés')).click()" | Out-Null
   Check "tout remis par défaut : extensions affichées, caché masqué" (Until { (Js "T().rows.map(r => r.n).join(',')") -like '*z.txt*' -and (Js "T().rows.map(r => r.n).join(',')") -notlike '*secret.txt*' } 8000)
   Rename-Item "$work\petit\z.txt" 'a.txt'
   Until { (Js "T().rows.map(r => r.n).join(',')") -like '*a.txt*' } 6000 | Out-Null
@@ -122,8 +136,8 @@ try {
   Js "T().sel = new Set(['alpha.txt']); show(true)" | Out-Null
   Key 'I' '{ctrlKey:true, shiftKey:true}'
   Check "Ctrl+Maj+I inverse la sélection (42 éléments, sans alpha.txt)" (((Js "T().sel.size") -eq '42') -and ((Js "T().sel.has('alpha.txt')") -eq 'false'))
-  Js "document.getElementById('cSel').click()" | Out-Null
-  Check "le bouton Sélection ouvre un menu (tout, rien, inverser)" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent).join('|')") -match 'Tout sélectionner.*Ne rien sélectionner.*Inverser' } 4000)
+  Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim().startsWith('Sélection')).click()" | Out-Null
+  Check "Réglages > Sélection ouvre un sous-menu (tout, rien, inverser)" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent).join('|')") -match 'Tout sélectionner.*Ne rien sélectionner.*Inverser' } 4000)
   Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Inverser')).click()" | Out-Null
   Check "« Inverser la sélection » du menu : seul alpha.txt est de nouveau sélectionné" ((Sel) -eq 'alpha.txt')
   # saisie pour sauter
@@ -453,3 +467,5 @@ finally {
   Remove-Item $suite, $data, $work -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item Env:KDX_PIPE_PREFIX, Env:KDX_SUITE_DIR, Env:KDX_DATA_DIR -ErrorAction SilentlyContinue
 }
+
+

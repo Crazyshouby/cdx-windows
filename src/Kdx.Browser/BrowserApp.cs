@@ -64,6 +64,7 @@ sealed class BrowserApp : ApplicationContext, IHostApp
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
             string cmd = r.GetProperty("cmd").GetString();
+            if (cmd == "win.overlay") { (from as BrowserForm)?.SetOverlay(r.TryGetProperty("on", out var on) && on.ValueKind == JsonValueKind.True); return; }   // un menu de la barre de titre : les pages web posées dessous sont masquées le temps qu'il est ouvert
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             if (cmd.StartsWith("br.")) { (from as BrowserForm)?.Command(cmd, r); return; }
             Host.CommonMessage(from, cmd, r);

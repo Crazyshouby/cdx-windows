@@ -98,18 +98,13 @@
     KdxFrame.menu(on ? itemMenu(s, t) : backgroundMenu(t), e.clientX, e.clientY, title);
   };
 
-  // Le menu « Sélection » : les mêmes actions que le clavier.
-  $('cSel').onclick = () => {
-    const r = $('cSel').getBoundingClientRect();
-    KdxFrame.menu([
+  // Les réglages de la fenêtre, derrière le bouton hachuré de la barre de titre (host.js : windowSettings) : « Affichage » (ce que montre la liste, réglages partagés
+  // par toutes les fenêtres, et le tri) et « Sélection » (les mêmes actions que le clavier). La suite y ajoute la couleur d'accent.
+  windowSettings(() => [
+    ['Affichage', null, { sub: () => [...viewItems(), null, ['Trier par', null, { sub: sortItems }]] }],
+    ['Sélection', null, { sub: () => [
       ['Tout sélectionner', selectAll, { key: 'Ctrl+A' }],
       ['Ne rien sélectionner', selectNone, { key: 'Échap' }],
       ['Inverser la sélection', invertSelection, { key: 'Ctrl+Maj+I' }],
-    ], r.left, r.bottom + 2, 'Sélection');
-  };
-
-  // Le menu « Affichage » : ce que montre la liste (réglages partagés par toutes les fenêtres) et le tri.
-  $('cView').onclick = () => {
-    const r = $('cView').getBoundingClientRect();
-    KdxFrame.menu([...viewItems(), null, ['Trier par', null, { sub: sortItems }]], r.left, r.bottom + 2, 'Affichage');
-  };
+    ] }],
+  ]);

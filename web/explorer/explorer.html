@@ -18,7 +18,7 @@
 </head>
 <body>
 <div class="win active" id="win">
-  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m"></button><span class="tb-title" id="ttl">Explorateur</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Explorateur</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
   <div class="tabs" id="tabs"></div>
   <div class="cb">
     <div class="nav">
@@ -29,7 +29,7 @@
     </div>
     <div class="mbar">
       <button class="mb" id="cNew"><span class="pix" data-ic="dossier"></span>Nouveau dossier</button><button class="mb" id="cCut">Couper</button><button class="mb" id="cCopy">Copier</button><button class="mb" id="cPaste">Coller</button>
-      <button class="mb" id="cRen"><span class="pix" data-ic="editer"></span>Renommer</button><button class="mb" id="cDel"><span class="pix" data-ic="supprimer"></span>Supprimer</button><button class="mb" id="cSel"><span class="pix" data-ic="liste"></span>Sélection</button><button class="mb" id="cView"><span class="pix" data-ic="liste"></span>Affichage</button><button class="mb" id="cRef"><span class="pix" data-ic="maj"></span>Actualiser</button><button class="mb" id="cPv" title="Aperçu (Alt+P)"><span class="pix" data-ic="image"></span>Aperçu</button>
+      <button class="mb" id="cRen"><span class="pix" data-ic="editer"></span>Renommer</button><button class="mb" id="cDel"><span class="pix" data-ic="supprimer"></span>Supprimer</button><button class="mb" id="cRef"><span class="pix" data-ic="maj"></span>Actualiser</button><button class="mb" id="cPv" title="Aperçu (Alt+P)"><span class="pix" data-ic="image"></span>Aperçu</button>
     </div>
     <div class="sbar" id="sbar" hidden><span id="sInfo"></span><select class="text-input" id="sKind"></select><select class="text-input" id="sDate"></select><select class="text-input" id="sSize"></select><button class="btn" id="sClose" title="Fermer la recherche (Échap)">Fermer</button></div>
     <div class="split">

@@ -36,7 +36,7 @@
 </head>
 <body>
 <div class="win active" id="win">
-  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m"></button><span class="tb-title" id="ttl">Navigateur</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Navigateur</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
   <div class="tabs" id="tabs"></div>
   <div class="cb">
     <div class="nav">
@@ -96,6 +96,14 @@
   $('reload').onclick = () => post({ cmd: cur() && cur().loading ? 'br.stop' : 'br.reload' });
   $('star').onclick = () => post({ cmd: 'br.star' });
   $('favs').onclick = () => post({ cmd: 'br.internal', p: 'favoris' }); $('hist').onclick = () => post({ cmd: 'br.internal', p: 'historique' }); $('dl').onclick = () => post({ cmd: 'br.internal', p: 'telechargements' });
+  // Les réglages de la fenêtre (bouton hachuré de la barre de titre) : les pages internes du navigateur et la fenêtre des transferts.
+  windowSettings(() => [
+    ['Favoris', () => post({ cmd: 'br.internal', p: 'favoris' })],
+    ['Historique', () => post({ cmd: 'br.internal', p: 'historique' }), { key: 'Ctrl+H' }],
+    ['Téléchargements', () => post({ cmd: 'br.internal', p: 'telechargements' }), { key: 'Ctrl+J' }],
+    null,
+    ['Fenêtre des transferts', () => post({ cmd: 'br.xfers' })],
+  ]);
   $('zoom').onclick = () => post({ cmd: 'br.zoom', d: 0 });
   $('addr').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') { post({ cmd: 'br.go', url: $('addr').value }); } else if (e.key === 'Escape') { const t = cur(); $('addr').value = t ? t.url : ''; $('addr').blur(); post({ cmd: 'br.focus' }); } };
   $('addr').onfocus = () => $('addr').select();

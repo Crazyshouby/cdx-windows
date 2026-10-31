@@ -50,11 +50,10 @@
 </head>
 <body>
 <div class="win active" id="win">
-  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m"></button><span class="tb-title" id="ttl">Transferts</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Transferts</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
   <div class="cb">
     <div class="top">
       <div class="mbar" id="chips"></div>
-      <button class="btn" id="bClear" title="Retire de la liste tout ce qui est terminé">Effacer les terminés</button>
     </div>
     <div class="list" id="rows" tabindex="0"></div>
     <div class="status"><span class="orb" id="orb"></span><span id="st1"></span></div>
@@ -179,12 +178,13 @@
     const act = [...items.values()].filter(e => e.state === 'running'), n = [...items.values()].filter(live).length, sp = act.reduce((s, e) => s + (bytes(e) ? e.speed || 0 : 0), 0);
     $('orb').className = 'orb ' + (act.length ? 'amber pulse' : [...items.values()].some(e => e.state === 'failed' && !e.hist) ? 'red' : 'green');
     $('st1').textContent = n ? n + ' en cours' + (sp > 0 ? ' · ' + size(sp) + '/s' : '') : 'Rien en cours';
-    $('bClear').disabled = ![...items.values()].some(e => !live(e));
   }
 
   // ---------- clics ----------
   $('chips').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; render(); } });
-  $('bClear').onclick = () => { for (const [k, e] of items) if (!live(e)) items.delete(k); post({ cmd: 'xf.clear' }); render(); };
+  // Les réglages de la fenêtre (bouton hachuré de la barre de titre) : vider la liste de ce qui est terminé (réglable ici dès qu'il y en aura d'autres : durée de l'historique…).
+  const clearDone = () => { for (const [k, e] of items) if (!live(e)) items.delete(k); post({ cmd: 'xf.clear' }); render(); };
+  windowSettings(() => [['Effacer les terminés', clearDone, { disabled: ![...items.values()].some(e => !live(e)) }]]);
   $('rows').addEventListener('click', ev => {
     const b = ev.target.closest('[data-a]'), row = ev.target.closest('.tx'); if (!b || !row) return;
     const key = row.dataset.key, a = b.dataset.a;

@@ -66,13 +66,11 @@
 </head>
 <body>
 <div class="win active" id="win">
-  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m"></button><span class="tb-title" id="ttl">Dépôts</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Dépôts</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
   <div class="cb">
     <div class="nav">
       <input id="find" class="text-input" type="text" placeholder="Rechercher un projet…" spellcheck="false" autocomplete="off" style="flex:1">
       <button class="btn" id="bScan" title="Relire tous les projets"><span class="pix" data-ic="maj"></span> Actualiser</button>
-      <button class="btn" id="bRoots" title="Les dossiers dans lesquels chercher des projets">Dossiers…</button>
-      <button class="btn" id="bHelp" title="Comprendre ces mots">?</button>
     </div>
     <div class="mbar" id="chips"></div>
     <div class="split">
@@ -266,8 +264,11 @@
   // ---------- gestes ----------
   $('find').addEventListener('input', e => { query = e.target.value; render(); });
   $('bScan').onclick = () => post({ cmd: 'repos.scan' });
-  $('bRoots').onclick = rootsDialog;
-  $('bHelp').onclick = () => KdxFrame.dialog({ title: 'Comprendre git et GitHub', text: HELP, yes: 'Compris', no: '' });
+  // Les réglages de la fenêtre (bouton hachuré de la barre de titre) : les dossiers où chercher des projets, et l'aide sur les mots de git.
+  windowSettings(() => [
+    ['Dossiers où chercher des projets…', rootsDialog],
+    ['Comprendre git et GitHub…', () => KdxFrame.dialog({ title: 'Comprendre git et GitHub', text: HELP, yes: 'Compris', no: '' })],
+  ]);
   $('chips').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b) { filter = b.dataset.f; render(); } });
   $('lhead').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; if (sortKey === b.dataset.k) sortRev = !sortRev; else { sortKey = b.dataset.k; sortRev = false; } render(); });
   $('rows').addEventListener('click', e => { const r = e.target.closest('[data-p]'); if (r) select(r.dataset.p); });

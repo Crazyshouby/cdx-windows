@@ -32,3 +32,23 @@ kdx.on('icon', (value, m) => gotIcon((m.size || 16) + '|' + m.path, m.png));
 // L'accent de la suite a changé (%APPDATA%\KDX\suite.json) : le programme le pousse à toutes ses pages.
 kdx.on('theme', v => { if (v) document.documentElement.dataset.theme = v; });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Le bouton hachuré de la barre de titre (.tb-m avec data-act="menu") ouvre le menu « Réglages » de la fenêtre. Chaque page y met ses propres réglages avec
+//   windowSettings(() => [ ['Libellé', action, { check, key, sub, disabled }], null, … ])      (même forme que KdxFrame.menu ; la fonction est appelée à chaque ouverture)
+// et la suite y ajoute les siens, communs à tous les programmes (couleur d'accent). Sans réglage propre, le menu ne montre que les réglages communs.
+const ACCENTS = [['rouge', 'Rouge'], ['bleu', 'Bleu'], ['vert', 'Vert'], ['violet', 'Violet'], ['ambre', 'Ambre'], ['sarcelle', 'Sarcelle'], ['charbon', 'Charbon']];
+let settingsBuilder = () => [];
+const windowSettings = build => { settingsBuilder = build; };
+const commonSettings = () => {
+  const cur = document.documentElement.dataset.theme || 'rouge';
+  return [['Couleur d’accent', null, { sub: ACCENTS.map(([k, n]) => [n, () => post({ cmd: 'suite.accent', value: k }), { check: cur === k }]) }]];
+};
+document.addEventListener('kdx:menu', e => {
+  const r = (e.target.closest('.tb-btn') || e.target).getBoundingClientRect();
+  let own = []; try { own = settingsBuilder() || []; } catch (err) { log('réglages : ' + err.message); }
+  KdxFrame.menu([...own, ...(own.length ? [null] : []), ...commonSettings()], r.left, r.bottom + 2, 'Réglages');
+  // Une fenêtre dont la page est recouverte par d'autres vues natives (le navigateur) masque la vue le temps du menu : « win.overlay » l'annonce, l'hôte qui n'en a pas l'usage l'ignore.
+  post({ cmd: 'win.overlay', on: true });
+  const watch = new MutationObserver(() => { if (!document.querySelector('.menu[data-kdx]')) { watch.disconnect(); post({ cmd: 'win.overlay', on: false }); } });
+  watch.observe(document.body, { childList: true });
+});

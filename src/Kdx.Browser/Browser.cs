@@ -160,10 +160,14 @@ class BrowserForm : HostForm
         }
     }
 
+    // Les pages web sont des vues natives posées sur la page du cadre : un menu qui descend de la barre de titre passerait dessous. Elles sont masquées le temps du menu.
+    bool overlayOn;
+    public void SetOverlay(bool on) { overlayOn = on; if (active != null) active.Web.Visible = !on; }
+
     void Select(BrowserTab t)
     {
         active = t;
-        foreach (var x in tabs) x.Web.Visible = x == t;
+        foreach (var x in tabs) x.Web.Visible = x == t && !overlayOn;
         t.Web.Bounds = fullscreen ? ClientRectangle : view; t.Web.BringToFront();
         Push();
         if (IsBlank(t)) Send(new { type = "focusAddr" });
@@ -431,7 +435,7 @@ class BrowserForm : HostForm
             case "br.devtools": c?.OpenDevToolsWindow(); break;
             case "br.fullscreen": SetFullscreen(!fullscreen); break;
             case "br.internal": OpenInternal(Str("p")); break;
-            case "in.xfers": Xfer.Show(); break;
+            case "in.xfers": case "br.xfers": Xfer.Show(); break;
             case "br.focus": active?.Web.Focus(); break;
             case "br.findOpen": findOpen = true; break;
             case "br.findClose": CloseFind(); break;
