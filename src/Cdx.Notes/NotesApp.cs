@@ -185,6 +185,21 @@ sealed class NotesApp : ApplicationContext, IHostApp
                 case "n.openext": OpenExternal(Str("url")); break;
                 case "n.choosevault": ChooseVault(from); break;
                 case "n.mcpinfo": from.Send(new { type = "n.mcpinfo", exe = Path.Combine(AppContext.BaseDirectory, "cdx-notes-mcp.exe"), root = vault.Root }); break;
+                // ---- navigation (lot 4), projets (lot 5), graphe (lot 6)
+                case "n.backlinks": from.Send(new { type = "n.backlinks", path = Vault.NormalizePath(path), backlinks = vault.Backlinks(path).Select(b => new { p = b.Path, t = b.Title, line = b.Line, ctx = b.Context }).ToList() }); break;
+                case "n.search":
+                    {
+                        string q = Str("q") ?? "";
+                        from.Send(new { type = "n.results", q, hits = vault.Search(q, 50).Select(h => new { p = h.Path, t = h.Title, s = h.Snippet, line = h.Line, g = h.Tags }).ToList() });
+                        break;
+                    }
+                case "n.projects": SendProjects(from); break;
+                case "n.newproject": { var n = vault.CreateProject(Str("name"), Str("repo"), Str("summary")); from.Send(new { type = "n.created", path = n.Path }); SendIndex(); break; }
+                case "n.toggletask": ToggleTask(from, path, r.TryGetProperty("line", out var lv) && lv.TryGetInt32(out var ln) ? ln : -1); break;
+                case "n.setprop": { var n = vault.SetProperty(path, Str("key"), Str("value")); SendIndex(); if (known.ContainsKey(n.Path)) Read(from, n.Path); SendProjects(from); break; }
+                case "n.openfolder": OpenFolder(Str("path")); break;
+                case "n.repos": _ = Task.Run(() => { if (!Bus.Send("repos", "show", new { }, "notes", launch: true)) Host.Log("Dépôts introuvable"); }); break;
+                case "n.graph": { var (nodes, edges) = vault.Graph(); from.Send(new { type = "n.graph", nodes, edges }); break; }
             }
         }
         catch (VaultException ex) { from.Send(new { type = "n.error", op = cmd, path, code = ex.Code, message = ex.Message }); }
@@ -192,6 +207,42 @@ sealed class NotesApp : ApplicationContext, IHostApp
     }
 
     static string SafePath(string p) { try { return Vault.NormalizePath(p); } catch (VaultException) { return p; } }
+
+    // Les fiches de projet et les tâches ouvertes de tout le coffre (vue « Projets »).
+    void SendProjects(HostForm to)
+    {
+        to.Send(new
+        {
+            type = "n.projects",
+            projects = vault.Projects().Select(p => new { p = p.Path, name = p.Name, status = p.Status, repo = p.Repo, priority = p.Priority, summary = p.Summary, open = p.OpenTasks, done = p.DoneTasks, m = Ms(p.Modified), due = p.NextDue }).ToList(),
+            tasks = vault.Tasks().Select(t => new { p = t.Path, text = t.Text, due = t.Due, line = t.Line }).ToList(),
+        });
+    }
+
+    // Coche ou décoche la tâche d'une ligne (1 = première) d'une note : la note est réécrite, la page la verra changer par la surveillance du dossier.
+    void ToggleTask(HostForm to, string path, int line)
+    {
+        string text = vault.Read(path, out string hash); var lines = text.Split('\n');
+        if (line < 1 || line > lines.Length) throw new VaultException("ligne", "Cette ligne n'existe pas dans la note.");
+        var m = System.Text.RegularExpressions.Regex.Match(lines[line - 1], @"^(\s*[-*+]\s+\[)( |x|X)(\])");
+        if (!m.Success) throw new VaultException("tâche", "Cette ligne n'est pas une tâche.");
+        lines[line - 1] = m.Groups[1].Value + (m.Groups[2].Value == " " ? "x" : " ") + m.Groups[3].Value + lines[line - 1][m.Length..];
+        var n = vault.Overwrite(path, string.Join('\n', lines), hash);
+        vault.Read(n.Path, out string h); if (known.ContainsKey(n.Path)) known[n.Path] = h;
+        SendIndex(); SendProjects(to);
+        if (known.ContainsKey(n.Path)) to.Send(new { type = "n.changed", path = n.Path, text = vault.Read(n.Path, out _), hash = h, modified = Ms(n.Modified) });
+    }
+
+    // Le dossier du dépôt d'un projet : dans l'Explorateur CDX (lancé au besoin), sinon celui de Windows.
+    void OpenFolder(string dir)
+    {
+        if (string.IsNullOrWhiteSpace(dir) || !Path.IsPathFullyQualified(dir) || !Directory.Exists(dir)) { form?.Send(new { type = "n.error", op = "n.openfolder", code = "dossier", message = "Le dossier du dépôt n'existe pas : " + dir }); return; }
+        _ = Task.Run(() =>
+        {
+            if (!Bus.Send("explorer", "open-path", new { path = dir }, "notes", launch: true))
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe") { ArgumentList = { dir }, UseShellExecute = false }); } catch (Exception ex) { Host.Log("dossier : " + ex.Message); }
+        });
+    }
 
     void Read(HostForm to, string path)
     {

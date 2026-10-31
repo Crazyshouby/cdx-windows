@@ -7,7 +7,11 @@
       ['Aperçu seul', () => setMode('view'), { check: mode === 'view' }],
       null,
       ['Retour à la ligne', () => setWrap(!wrap), { check: wrap }],
+      null,
+      ['Volet d’information (plan, liens, étiquettes)', () => setInfo(!infoOpen), { check: infoOpen }],
     ] }],
+    ['Projets et tâches', () => openProjects(), { check: view === 'projects' }],
+    ['Graphe des liens', () => openGraph(), { check: view === 'graph' }],
     ['Coffre', null, { sub: () => [
       ['Ouvrir le dossier dans l\u2019Explorateur', () => post({ cmd: 'n.reveal' })],
       ['Changer de dossier de notes\u2026', () => post({ cmd: 'n.choosevault' }), { disabled: !!(hello && hello.pinnedRoot) }],

@@ -150,7 +150,7 @@ try {
 
   # ---------- réglages ----------
   Js "document.querySelector('.tb-m').click()" | Out-Null
-  Check "le bouton hachuré ouvre « Réglages » : Affichage, Coffre, Claude et tes notes, Couleur d'accent" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent.trim()).join('|')") -match '^Affichage\|Coffre\|Claude et tes notes…\|Couleur d.accent$' } 4000)
+  Check "le bouton hachuré ouvre « Réglages » : Affichage, Coffre, Claude et tes notes, Couleur d'accent" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent.trim()).join('|')") -match '^Affichage\|Projets et tâches\|Graphe des liens\|Coffre\|Claude et tes notes…\|Couleur d.accent$' } 4000)
   Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Affichage').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Aperçu seul').click()" | Out-Null
   Check "Affichage > Aperçu seul : l'éditeur disparaît" ((Js "document.getElementById('pane').className") -like '*mode-view*' -and ((Js "getComputedStyle(document.getElementById('ed')).display") -eq 'none'))
   Js "setMode('split')" | Out-Null
@@ -159,6 +159,59 @@ try {
   Js "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('Claude et tes notes')).click()" | Out-Null
   Check "« Claude et tes notes… » montre la commande de déclaration du serveur MCP" (Until { (Js "document.querySelector('.dlg-code')?.textContent") -like 'claude mcp add --scope user cdx-notes -- "*cdx-notes-mcp.exe"' } 5000)
   Js "document.querySelector('.veil [data-y]').click()" | Out-Null
+
+  # ---------- lot 4 : volet d'information, recherche, sélecteur, autocomplétion (sur des notes à part : Nav/) ----------
+  W 'Nav/Soleil.md' "---`ntype: projet`nstatut: actif`n---`n# Soleil`n`n## Objectif`n`nTexte avec #soleil.`n`n- [ ] chauffer`n- [x] briller`n"
+  W 'Nav/Lune.md' "# Lune`nLa lune est pâle ce soir. Voir [[Soleil]].`n`n## Phases`n`n### Pleine`n`nTexte.`n`n## Marées`n"
+  W 'Nav/Comète.md' "# Comète`nPasse près de [[Soleil]] et de [[Lune]].`n"
+  Check "trois notes de plus sur le disque entrent dans l'index" (Until { (Js "!!noteAt('Nav/Lune.md') && !!noteAt('Nav/Comète.md') && !!noteAt('Nav/Soleil.md')") -eq $true } 8000)
+  Js "openNote('Nav/Lune.md')" | Out-Null
+  Check "volet « Plan » : les titres de la note, dans l'ordre et en retrait" ((Until { (Js "[...document.querySelectorAll('#infobox .hd')].map(h => h.dataset.h).join('|')") -eq 'Lune|Phases|Pleine|Marées' } 6000) -and ((Js "document.querySelector('#infobox .hd[data-h=Pleine]').style.paddingLeft") -eq '32px'))
+  Js "document.querySelector('#infobox .hd[data-h=Marées]').click()" | Out-Null
+  Check "un clic sur un titre du plan place le curseur sur sa ligne dans l'éditeur (ligne 10)" (Until { (Js "ed.value.slice(0, ed.selectionStart).split('\n').length") -eq '10' } 4000)
+  Js "document.querySelector('#info [data-i=liens]').click()" | Out-Null
+  Check "volet « Liens » : le lien sortant [[Soleil]] est résolu" (Until { (Js "[...document.querySelectorAll('#infobox .lk')].map(l => l.dataset.path).join('|')") -eq 'Nav/Soleil.md' } 4000)
+  Js "openNote('Nav/Soleil.md')" | Out-Null
+  Check "volet « Liens » de Soleil : rétroliens depuis Lune et Comète, avec la ligne" (Until { $t = Js "[...document.querySelectorAll('#infobox .bl')].map(b => b.dataset.path + ':' + b.dataset.line).join('|')"; $t -like '*Nav/Lune.md:2*' -and $t -like '*Nav/Comète.md:2*' } 8000)
+  Js "document.querySelector('#infobox .bl[data-path=`"Nav/Lune.md`"]').click()" | Out-Null
+  Check "un rétrolien ouvre la note sur la ligne du lien" ((Until { (Js "cur") -eq 'Nav/Lune.md' } 6000) -and (Until { (Js "ed.value.slice(0, ed.selectionStart).split('\n').length") -eq '2' } 4000))
+  Js "document.querySelector('#info [data-i=tags]').click()" | Out-Null
+  Check "volet « Étiquettes » : #soleil compté une fois ; un clic filtre l'arborescence" ((Until { (Js "document.querySelector('#infobox .tgr[data-tag=soleil] .n')?.textContent") -eq '1' } 4000) -and ((Js "document.querySelector('#infobox .tgr[data-tag=soleil]').click(); document.getElementById('filter').value") -eq '#soleil'))
+  Js "runSearch('pâle')" | Out-Null
+  Check "recherche dans le texte (« pâle ») : un résultat, Lune, avec l'extrait surligné" (Until { (Js "[...document.querySelectorAll('#tree .hit')].map(h => h.dataset.p).join('|')") -eq 'Nav/Lune.md' -and (Js "document.querySelector('#tree .hit mark')?.textContent") -eq 'pâle' } 8000)
+  Check "la recherche accepte les filtres : « type:projet in:Nav » rend Soleil seul" ((Js "runSearch('type:projet in:Nav'); 'ok'") -eq 'ok' -and (Until { (Js "[...document.querySelectorAll('#tree .hit')].map(h => h.dataset.p).join('|')") -eq 'Nav/Soleil.md' } 8000))
+  Js "document.getElementById('filter').value = ''; renderTree(); openSwitcher()" | Out-Null
+  Check "Ctrl+P : le sélecteur s'ouvre, « comè » propose Comète en premier" ((Until { (Js "!!document.querySelector('.veil.swv')") -eq $true } 4000) -and ((Js "var i = document.querySelector('.swv input'); i.value = 'comè'; i.dispatchEvent(new Event('input')); document.querySelector('.swv #swl .row-item.sel .grow')?.textContent") -eq 'Comète'))
+  Js "document.querySelector('.swv').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" | Out-Null
+  Check "Entrée ouvre la note choisie et ferme le sélecteur" ((Until { (Js "cur") -eq 'Nav/Comète.md' } 6000) -and ((Js "!!document.querySelector('.veil.swv')") -eq $false))
+  Js "openSwitcher(); var i = document.querySelector('.swv input'); i.value = 'Toute neuve'; i.dispatchEvent(new Event('input')); document.querySelector('.swv').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))" | Out-Null
+  Check "un nom qui n'existe pas : Entrée crée la note et l'ouvre" ((Until { Test-Path "$vault\Toute neuve.md" } 8000) -and (Until { (Js "cur") -eq 'Toute neuve.md' } 6000))
+  Type-Text "# Toute neuve`n`nVoir [[Com"
+  Js "ed.setSelectionRange(ed.value.length, ed.value.length); ed.dispatchEvent(new Event('input', { bubbles: true }))" | Out-Null
+  Check "taper [[Com dans l'éditeur ouvre l'autocomplétion avec Comète" (Until { (Js "!document.getElementById('ac').hidden && document.querySelector('#ac .it.on')?.firstChild.textContent") -eq 'Comète' } 4000)
+  Js "ed.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))" | Out-Null
+  Check "Entrée complète le lien : [[Comète]] dans le texte, liste fermée, note enregistrée" ((Until { (Js "ed.value.endsWith('[[Comète]]')") -eq $true } 4000) -and ((Js "document.getElementById('ac').hidden") -eq $true) -and (Until { Has (ReadV 'Toute neuve.md') '[[Comète]]' } 6000))
+
+  # ---------- lot 5 : projets et tâches ----------
+  Js "openProjects()" | Out-Null
+  Check "vue Projets : la fiche Soleil (actif, 1 tâche ouverte) ; l'éditeur est masqué" ((Until { (Js "document.querySelector('#prlist .fr[data-p=`"Nav/Soleil.md`"]')?.textContent") -like '*actif*1 ouverte*' } 8000) -and ((Js "getComputedStyle(document.getElementById('pane')).display") -eq 'none'))
+  Check "les tâches ouvertes du coffre sont listées (« chauffer »), pas les faites (« briller »)" ((Js "[...document.querySelectorAll('#tklist .tk1 .txt')].map(x => x.textContent).join('|')") -like '*chauffer*' -and (Js "[...document.querySelectorAll('#tklist .tk1 .txt')].map(x => x.textContent).join('|')") -notlike '*briller*')
+  Js "document.querySelector('#tklist .tk1[data-p=`"Nav/Soleil.md`"] input').click()" | Out-Null
+  Check "cocher une tâche écrit [x] dans la note sur le disque, et elle quitte la liste" ((Until { Has (ReadV 'Nav/Soleil.md') '- [x] chauffer' } 8000) -and (Until { (Js "[...document.querySelectorAll('#tklist .tk1 .txt')].map(x => x.textContent).join('|')") -notlike '*chauffer*' } 8000))
+  Js "createProject('Zêta')" | Out-Null
+  Check "« Nouveau projet » crée Projets/Zêta.md à partir du modèle et l'ouvre" ((Until { Test-Path "$vault\Projets\Zêta.md" } 8000) -and (Until { (Js "cur") -eq 'Projets/Zêta.md' } 6000) -and (Has (ReadV 'Projets/Zêta.md') 'type: projet'))
+  Js "openProjects(); document.querySelector('#prchips [data-pf=actif]').click()" | Out-Null
+  Check "le filtre « Actifs » ne garde que des fiches actives, Soleil comprise" (Until { $r = Js "[...document.querySelectorAll('#prlist .fr')].map(r => r.dataset.p + '=' + r.querySelector('.st').textContent.trim()).join('|')"; $r -like '*Nav/Soleil.md=actif*' -and ($r -split '\|' | Where-Object { $_ -notlike '*=actif' }).Count -eq 0 } 6000)
+  Js "document.querySelector('#prchips [data-pf=tous]').click()" | Out-Null
+
+  # ---------- lot 6 : graphe ----------
+  Js "openGraph()" | Out-Null
+  Check "vue Graphe : autant de nœuds que de notes, et les liens résolus" ((Until { (Js "__graph.nodes.length") -eq (Js "notes.length") -and ([int](Js "__graph.nodes.length")) -gt 0 } 8000) -and ([int](Js "__graph.edges.length")) -ge 3)
+  Js "graphSettle(200); gFit()" | Out-Null
+  Check "après la disposition, les notes liées sont en moyenne plus proches que les autres" ((Js "var by = new Map(__graph.nodes.map(n => [n.id, n])); var d = (a, b) => Math.hypot(by.get(a).x - by.get(b).x, by.get(a).y - by.get(b).y); var linked = __graph.edges.map(e => d(e.from, e.to)); var all = []; for (var i = 0; i < __graph.nodes.length; i++) for (var j = i + 1; j < __graph.nodes.length; j++) all.push(d(__graph.nodes[i].id, __graph.nodes[j].id)); var m = l => l.reduce((s, x) => s + x, 0) / l.length; m(linked) < m(all) ? 'oui' : 'non'") -eq 'oui')
+  Check "le canevas est dessiné (fond noir, des pixels d'une autre couleur)" ((Js "var c = document.getElementById('gcanvas'); var d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; var n = 0; for (var i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 0) n++; n > 50 ? 'oui' : 'non'") -eq 'oui')
+  Js "graphOpenNode('Nav/Comète.md')" | Out-Null
+  Check "un nœud ouvre sa note et referme le graphe" ((Until { (Js "cur") -eq 'Nav/Comète.md' } 6000) -and ((Js "String(view)") -eq 'null') -and ((Js "getComputedStyle(document.getElementById('pane')).display") -ne 'none'))
 
   # ---------- le bus : une autre application demande d'ouvrir une note ----------
   Check "bus open-note : la note demandée s'ouvre" ((BusSend 'notes' 'open-note' 'repos' @{ path = 'Beta.md' }) -and (Until { (Js "cur") -eq 'Beta.md' } 6000))

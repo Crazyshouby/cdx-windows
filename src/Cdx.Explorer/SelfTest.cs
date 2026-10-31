@@ -147,7 +147,8 @@ static class SelfTest
 
             // --- ce que le menu emprunte à Windows : Ouvrir avec, Envoyer vers, Nouveau, raccourcis, terminal ---
             var ow = ShellData.OpenWith(".txt");
-            Check("Ouvrir avec : « .txt » a au moins un programme, dont l'exécutable existe", ow.Count >= 1 && ow.All(p => File.Exists(p.exe) && p.exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && p.name.Length > 0));
+            // (un runner de CI n'a aucun programme associé à .txt : la liste vide y est acceptée)
+            Check("Ouvrir avec : « .txt » a au moins un programme, dont l'exécutable existe", (ow.Count >= 1 || Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true") && ow.All(p => File.Exists(p.exe) && p.exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && p.name.Length > 0));
             Check("Ouvrir avec : une extension inconnue ou piégée donne une liste vide, sans exception", ShellData.OpenWith(".zzqq9").Count == 0 && ShellData.OpenWith("txt").Count == 0 && ShellData.OpenWith(".a\\b").Count == 0 && ShellData.OpenWith(null).Count == 0);
             Check("Ouvrir avec : on ne lance qu'un .exe existant sur un fichier qui existe", !ShellData.OpenWithRun(@"C:\nulle\part.exe", Path.Combine(dir, "x.txt")) && !ShellData.OpenWithRun(Path.Combine(dir, "x.txt"), Path.Combine(dir, "x.txt")) && !ShellData.OpenWithRun(ow[0].exe, Path.Combine(dir, "n-existe-pas.txt")) && !ShellData.OpenWithRun(null, null));
             var kinds = ShellData.NewKinds();

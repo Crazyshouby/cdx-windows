@@ -23,12 +23,14 @@
     <div class="nav">
       <button class="btn" id="bNew" title="Nouvelle note (Ctrl+N)"><span class="pix" data-ic="editer"></span> Nouvelle note</button>
       <button class="btn" id="bFolder" title="Nouveau dossier"><span class="pix" data-ic="dossier"></span> Nouveau dossier</button>
+      <button class="btn" id="bSwitch" title="Aller à une note (Ctrl+P)"><span class="pix" data-ic="liste"></span> Aller à…</button>
       <span class="grow"></span>
+      <div class="mbar" id="views"><button class="mb" id="bProjects" data-v="projects" title="Les fiches de projet et les tâches ouvertes">Projets</button><button class="mb" id="bGraph" data-v="graph" title="Le graphe des liens entre les notes">Graphe</button></div>
       <div class="mbar" id="modes"><button class="mb" data-m="edit" title="Édition seule">Édition</button><button class="mb" data-m="split" title="Édition et aperçu côte à côte">Double</button><button class="mb" data-m="view" title="Aperçu seul">Aperçu</button></div>
     </div>
     <div class="split">
       <div class="col side" id="side">
-        <input id="filter" class="text-input" type="text" placeholder="Filtrer (#étiquette pour une étiquette)" spellcheck="false" autocomplete="off">
+        <input id="filter" class="text-input" type="text" placeholder="Filtrer · Entrée : chercher dans le texte" spellcheck="false" autocomplete="off">
         <div class="list" id="tree" tabindex="0"></div>
       </div>
       <div class="col main" id="main">
@@ -36,7 +38,14 @@
         <div class="pane" id="pane">
           <textarea id="ed" class="text-input" spellcheck="false" placeholder="Choisis une note à gauche, ou crée-en une (Ctrl+N)."></textarea>
           <div id="pv" class="pv"></div>
+          <div id="ac" class="ac" hidden></div>
         </div>
+        <div class="view" id="projects" hidden></div>
+        <div class="view" id="graph" hidden><div class="gbar"><span id="ginfo" class="faint"></span><span class="grow"></span><button class="btn" id="gFit" title="Tout montrer">Recentrer</button></div><canvas id="gcanvas"></canvas></div>
+      </div>
+      <div class="col info" id="info">
+        <div class="mbar"><button class="mb" data-i="plan" title="Les titres de la note">Plan</button><button class="mb" data-i="liens" title="Liens sortants et rétroliens">Liens</button><button class="mb" data-i="tags" title="Toutes les étiquettes du coffre">Étiquettes</button></div>
+        <div class="list" id="infobox"></div>
       </div>
     </div>
     <div class="status"><span class="orb" id="orb"></span><span id="st1"></span><span class="faint" id="st2"></span><span style="margin-left:auto" id="st3"></span></div>
@@ -48,6 +57,9 @@
 <script src="/notes/js/core.js"></script>
 <script src="/notes/js/tree.js"></script>
 <script src="/notes/js/doc.js"></script>
+<script src="/notes/js/nav.js"></script>
+<script src="/notes/js/projects.js"></script>
+<script src="/notes/js/graph.js"></script>
 <script src="/notes/js/boot.js"></script>
 </body>
 </html>

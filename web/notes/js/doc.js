@@ -43,7 +43,9 @@
     ed.value = d.text; ed.setSelectionRange(Math.min(d.sel[0], d.text.length), Math.min(d.sel[1], d.text.length)); ed.scrollTop = d.scroll;
     renderPreview(); renderTabs(); renderTree(); revealInTree(path); updateStatus();
     lsSet('tabs', tabs); lsSet('cur', path);
+    if (typeof afterActivate === 'function') afterActivate(opts);   // nav.js : volet d'information, vues fermées
     if (opts.heading) gotoHeading(opts.heading);
+    if (opts.line && typeof gotoLine === 'function') gotoLine(opts.line);
     if (!opts.quiet && mode !== 'view') ed.focus();
   }
 
@@ -51,7 +53,7 @@
     ed.disabled = !cur; document.body.classList.toggle('nowrap', !wrap);
     const w = $('pane'); w.classList.remove('mode-edit', 'mode-split', 'mode-view'); w.classList.add('mode-' + mode);
     document.querySelectorAll('#modes .mb').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
-    if (!cur) { ed.value = ''; pv.innerHTML = welcome(); $('st3').textContent = ''; setStatus('Aucune note ouverte', ''); }
+    if (!cur) { ed.value = ''; pv.innerHTML = welcome(); $('st3').textContent = ''; setStatus('Aucune note ouverte', ''); if (typeof renderInfo === 'function') renderInfo(); }
   }
 
   function welcome() {
@@ -97,7 +99,7 @@
     pv.innerHTML = Md.render(d.text, mdCtx).html; pv.scrollTop = top;
   }
   const refreshPreview = () => { if (cur) renderPreview(); else if (!ed.value) pv.innerHTML = welcome(); };
-  function schedulePreview() { clearTimeout(previewTimer); previewTimer = setTimeout(() => { renderPreview(); updateStatus(); }, 150); }
+  function schedulePreview() { clearTimeout(previewTimer); previewTimer = setTimeout(() => { renderPreview(); updateStatus(); if (typeof renderInfo === 'function') renderInfo(); }, 150); }
 
   function updateStatus() {
     const d = docs.get(cur); if (!d) return;

@@ -94,6 +94,12 @@ tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, re
 Le shell se connecte au tube `\\.\pipe\cdx.audiolinker` (voir AudioLinker `src/CdxLink.cpp`) et affiche dans la barre le groupe (voyant, coupure, volume, setups) tant
 qu'AudioLinker tourne sur la machine.
 
+## Notes (`cdx-notes`, lots 1 à 6)
+Le coffre (`Cdx.Vault`, dossier `Documents\Notes CDX` par défaut) est partagé avec le serveur MCP `cdx-notes-mcp` de Claude ; l'application voit tout changement du dossier. Page `web/notes/` :
+`core.js` (index, liens, boîtes), `tree.js` (arborescence, filtre, glisser-déposer), `doc.js` (onglets, éditeur, aperçu, enregistrement, conflits), `nav.js` (**volet d'information** : plan de la note, liens sortants et rétroliens avec ligne et contexte, étiquettes du coffre ; **recherche dans le texte** par Entrée dans le filtre ou `?` devant,
+avec `"phrase"`, `tag:`, `in:`, `type:` ; **sélecteur Ctrl+P** qui crée la note si elle n'existe pas ; **autocomplétion des `[[liens]]`** dans l'éditeur), `projects.js` (**vue Projets** : fiches `type: projet` filtrées par statut, tâches ouvertes de tout le coffre cochables depuis la vue, nouveau projet depuis le modèle, menu statut/priorité, dossier du dépôt dans l'Explorateur, Dépôts),
+`graph.js` (**graphe** des liens sur un canevas : disposition par forces, survol, glisser, molette, clic = ouvrir), `md.js` (moteur Markdown maison, `tests/md.test.mjs`). Essai : `tests\notes.ps1` (72 vérifications, dont Claude qui écrit par le MCP pendant que l'application est ouverte).
+
 ## Installeur (phase 5)
 `pwsh -File installer\build.ps1 [-Bin <dossier des .exe>] [-Sign]` construit `installer\Output\CDX-Setup-<version>.exe` (Inno Setup 6, français) et son `.sha256`. La version vit dans
 `Directory.Build.props` (les huit exécutables la portent). Par utilisateur par défaut (`%LOCALAPPDATA%\Programs\CDX`, aucun droit d'administrateur), ou pour tous ; **un composant par programme**
