@@ -94,6 +94,15 @@ tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, re
 Le shell se connecte au tube `\\.\pipe\cdx.audiolinker` (voir AudioLinker `src/CdxLink.cpp`) et affiche dans la barre le groupe (voyant, coupure, volume, setups) tant
 qu'AudioLinker tourne sur la machine.
 
+## Installeur (phase 5)
+`pwsh -File installer\build.ps1 [-Bin <dossier des .exe>] [-Sign]` construit `installer\Output\CDX-Setup-<version>.exe` (Inno Setup 6, français) et son `.sha256`. La version vit dans
+`Directory.Build.props` (les huit exécutables la portent). Par utilisateur par défaut (`%LOCALAPPDATA%\Programs\CDX`, aucun droit d'administrateur), ou pour tous ; **un composant par programme**
+(barre, Explorateur, navigateur, Dépôts, Notes + MCP, Terminal) ; tâche « lancer la barre à l'ouverture de session » (clé `Run`, décochée par défaut) ; raccourcis dans Démarrer > CDX, dont
+« Rendre la barre de Windows » (`cdx-shell.exe --restore`). Prérequis téléchargés et installés s'ils manquent : .NET 8 Desktop et WebView2. Avant d'installer ou de désinstaller, les programmes
+en cours sont arrêtés et la barre de Windows rendue ; `/NOSTOP=1` (essais) n'y touche pas. La désinstallation propose de supprimer les réglages, jamais le coffre de notes.
+Signature : comme AudioLinker (`-Sign` + `CDX_SIGN_ARGS`, `installer\sign.cmd`), aucun certificat pour l'instant (SmartScreen avertit). La CI construit l'installeur, l'installe en silence,
+réinstalle par-dessus, désinstalle, et le publie en artefact.
+
 ## Pas encore
-Interface des notifications dans le centre rapide, sélecteur d'accent, installeur (phases 4 et 5 du plan de la suite), signature.
+Icône propre de la suite (les fenêtres et l'installeur ont celle par défaut), signature, autostart par défaut (la tâche existe, décochée).
 Les anciens fichiers sous `KIRC\charte\windows\` ne sont pas supprimés.

@@ -1,0 +1,9 @@
+<Project>
+  <!-- La version de la suite vit ici, à un seul endroit : les huit exécutables la portent (propriétés du fichier) et installer\build.ps1 la lit pour nommer l'installeur. -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Company>Valentin Large</Company>
+    <Product>CDX</Product>
+    <Copyright>© Valentin Large</Copyright>
+  </PropertyGroup>
+</Project>

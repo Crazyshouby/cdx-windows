@@ -32,3 +32,42 @@ jobs:
             "$($t[0]) $($t[1]) : code $($p.ExitCode)"
             if ($p.ExitCode -ne 0) { Get-Content "$env:LOCALAPPDATA\CdxShell\selftest*.txt"; throw "$($t[1]) en échec" }
           }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: .\installer\build.ps1 -Bin bin
+
+      # Ce qu'un utilisateur fait : installer en silence, vérifier les fichiers, réinstaller par-dessus, désinstaller. /NOSTOP=1 : rien à arrêter sur le runner.
+      - name: Installer test (install, upgrade, uninstall)
+        shell: pwsh
+        run: |
+          $version = ((Get-Content Directory.Build.props -Raw) | Select-String '<Version>(\d+\.\d+\.\d+)</Version>').Matches[0].Groups[1].Value
+          $setup = (Get-ChildItem installer\Output\CDX-Setup-*.exe).FullName
+          $dir = Join-Path $env:RUNNER_TEMP 'CDXInstalled'
+          $a = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', '/NOSTOP=1', "/DIR=`"$dir`"")
+          foreach ($pass in 1, 2) {
+            $p = Start-Process $setup -ArgumentList $a -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Installation (passage $pass) : code $($p.ExitCode)" }
+            foreach ($exe in 'cdx-shell', 'cdx-explorer', 'cdx-browser', 'cdx-transfers', 'cdx-repos', 'cdx-notes', 'cdx-notes-mcp', 'cdx-terminal') { if (-not (Test-Path "$dir\$exe.exe")) { throw "$exe.exe absent après installation" } }
+            if (-not (Test-Path "$dir\web\cdx\cdx-ui.css")) { throw 'les pages (web\) manquent' }
+            if (Test-Path "$dir\web\explorer\_test-explorer.html") { throw 'une page de test a été installée' }
+          }
+          $ver = (Get-Item "$dir\cdx-shell.exe").VersionInfo.FileVersion
+          if ($ver -ne "$version.0") { throw "Version installée $ver inattendue (attendu $version.0)" }
+          $p = Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOSTOP=1' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Désinstallation : code $($p.ExitCode)" }
+          Start-Sleep -Seconds 2
+          if (Test-Path "$dir\cdx-shell.exe") { throw 'cdx-shell.exe encore présent après désinstallation' }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: CDX-installer
+          path: |
+            installer/Output/CDX-Setup-*.exe
+            installer/Output/CDX-Setup-*.exe.sha256
+          if-no-files-found: error
