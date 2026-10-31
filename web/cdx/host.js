@@ -36,12 +36,12 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 // Le bouton hachuré de la barre de titre (.tb-m avec data-act="menu") ouvre le menu « Réglages » de la fenêtre. Chaque page y met ses propres réglages avec
 //   windowSettings(() => [ ['Libellé', action, { check, key, sub, disabled }], null, … ])      (même forme que CdxFrame.menu ; la fonction est appelée à chaque ouverture)
 // et la suite y ajoute les siens, communs à tous les programmes (couleur d'accent). Sans réglage propre, le menu ne montre que les réglages communs.
-const ACCENTS = [['rouge', 'Rouge'], ['bleu', 'Bleu'], ['vert', 'Vert'], ['violet', 'Violet'], ['ambre', 'Ambre'], ['sarcelle', 'Sarcelle'], ['charbon', 'Charbon']];
+const ACCENTS = [['rouge', 'Clair-obscur rouge'], ['marine', 'Marine et rose'], ['ambre', 'Ambre CRT'], ['jean', 'Bleu jean'], ['tramway', 'Tramway'], ['sarcelle', 'Sarcelle'], ['chocolat', 'Chocolat framboise'], ['lavande', 'Lavande'], ['oxygene', 'Oxygène'], ['couchant', 'Clair-obscur couchant'], ['techno', 'Techno électrique'], ['reve-bleu', 'Rêve bleu'], ['reve-vert', 'Rêve vert'], ['reve-violet', 'Rêve violet'], ['lagon', 'Lagon'], ['turquoise', 'Turquoise']];   // les thèmes de cdx-ui/tokens.json (tools/check-accents.mjs vérifie la liste)
 let settingsBuilder = () => [];
 const windowSettings = build => { settingsBuilder = build; };
 const commonSettings = () => {
   const cur = document.documentElement.dataset.theme || 'rouge';
-  return [['Couleur d’accent', null, { sub: ACCENTS.map(([k, n]) => [n, () => post({ cmd: 'suite.accent', value: k }), { check: cur === k }]) }]];
+  return [['Thème', null, { sub: ACCENTS.map(([k, n]) => [n, () => post({ cmd: 'suite.accent', value: k }), { check: cur === k }]) }]];
 };
 document.addEventListener('cdx:menu', e => {
   const r = (e.target.closest('.tb-btn') || e.target).getBoundingClientRect();

@@ -5,13 +5,16 @@ namespace Cdx;
 // Les réglages communs de la suite : %APPDATA%\CDX\suite.json (voir cdx-ui/docs/SUITE.md). Aujourd'hui : l'accent.
 static class Suite
 {
-    public static readonly string[] Accents = { "rouge", "bleu", "vert", "violet", "ambre", "sarcelle", "charbon" };
+    // Les seize thèmes de cdx-ui/tokens.json (les apparences de KDX 1.6) ; les anciens noms (cdx-ui 1.x) restent lus, et ramenés au nom actuel.
+    public static readonly string[] Accents = { "rouge", "marine", "ambre", "jean", "tramway", "sarcelle", "chocolat", "lavande", "oxygene", "couchant", "techno", "reve-bleu", "reve-vert", "reve-violet", "lagon", "turquoise" };
+    static readonly Dictionary<string, string> Aliases = new() { ["bleu"] = "jean", ["vert"] = "reve-vert", ["violet"] = "reve-violet", ["charbon"] = "techno", ["cdx"] = "rouge" };
+    public static string Canonical(string s) => s == null ? null : Accents.Contains(s) ? s : Aliases.TryGetValue(s, out var c) ? c : null;
     // CDX_SUITE_DIR remplace le dossier (réservé aux essais : ne jamais toucher aux vrais réglages).
     public static string Dir => Environment.GetEnvironmentVariable("CDX_SUITE_DIR") is { Length: > 0 } d ? d : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CDX");
     public static string FilePath => Path.Combine(Dir, "suite.json");
     static string AppsFile => Path.Combine(Dir, "apps.json");
 
-    public static bool IsAccent(string s) => s != null && Accents.Contains(s);
+    public static bool IsAccent(string s) => Canonical(s) != null;
 
     // %APPDATA%\KDX (ancien nom de la suite) devient %APPDATA%\CDX, une fois.
     public static void MigrateOldDir() => Host.MigrateOldDir(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KDX"), Dir, "CDX_SUITE_DIR");
@@ -25,7 +28,7 @@ static class Suite
             var r = doc.RootElement;
             if (r.ValueKind != JsonValueKind.Object) return fallback;
             if (r.TryGetProperty("version", out var v) && (v.ValueKind != JsonValueKind.Number || v.GetInt32() != 1)) return fallback;
-            if (r.TryGetProperty("accent", out var a) && a.ValueKind == JsonValueKind.String && IsAccent(a.GetString())) return a.GetString();
+            if (r.TryGetProperty("accent", out var a) && a.ValueKind == JsonValueKind.String && Canonical(a.GetString()) is { } c) return c;
         }
         catch (Exception) { }
         return fallback;

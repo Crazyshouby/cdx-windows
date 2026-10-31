@@ -12,7 +12,7 @@ using Microsoft.Web.WebView2.WinForms;
 namespace Cdx;
 
 // CDX-Shell : la barre des tâches et le menu Démarrer de la charte CDX-UI, à la place de ceux de Windows.
-//   cdx-shell.exe [thème]    lance le shell (rouge bleu vert violet ambre sarcelle charbon)
+//   cdx-shell.exe [thème]    lance le shell (un des seize thèmes de cdx-ui/tokens.json : rouge, jean, lavande…)
 //   cdx-shell.exe --restore  rend à Windows l'état de sa barre des tâches (après un arrêt brutal du shell)
 // Chaque page est du HTML/CSS de la charte, servi par WebView2 ; ce programme ne fait que le lien avec Windows.
 static class Program

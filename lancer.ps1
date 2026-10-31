@@ -1,7 +1,7 @@
 # Compile (si besoin) et lance le shell CDX : barre des tâches et menu Démarrer de la charte, à la place de ceux de Windows.
-#   pwsh -File lancer.ps1 [rouge|bleu|vert|violet|ambre|sarcelle|charbon]
+#   pwsh -File lancer.ps1 [rouge|marine|ambre|jean|tramway|sarcelle|chocolat|lavande|oxygene|couchant|techno|reve-bleu|reve-vert|reve-violet|lagon|turquoise]
 # Sans argument, le shell suit l'accent de la suite (%APPDATA%\CDX\suite.json) ; un thème donné ici le fixe pour ce lancement.
-param([ValidateSet('', 'rouge', 'bleu', 'vert', 'violet', 'ambre', 'sarcelle', 'charbon')][string]$Theme = '')
+param([ValidateSet('', 'rouge', 'marine', 'ambre', 'jean', 'tramway', 'sarcelle', 'chocolat', 'lavande', 'oxygene', 'couchant', 'techno', 'reve-bleu', 'reve-vert', 'reve-violet', 'lagon', 'turquoise')][string]$Theme = '')
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 $exe = Join-Path $PSScriptRoot 'bin\cdx-shell.exe'

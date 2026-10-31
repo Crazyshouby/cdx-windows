@@ -5,7 +5,7 @@ un navigateur web. Chaque page est du HTML/CSS de la charte servi par WebView2 ;
 
 ```
 pwsh -File build.ps1               # compile les trois programmes dans bin\
-pwsh -File lancer.ps1 [thème]      # compile si besoin, lance le shell (rouge bleu vert violet ambre sarcelle charbon)
+pwsh -File lancer.ps1 [thème]      # compile si besoin, lance le shell (un des seize thèmes de cdx-ui/tokens.json : rouge, couchant, ambre, jean, marine, tramway, sarcelle, chocolat, lavande, oxygene, techno, reve-bleu, reve-vert, reve-violet, lagon, turquoise)
 pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Windows
 ```
 
