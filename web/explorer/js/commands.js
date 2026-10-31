@@ -11,7 +11,8 @@
     const cell = row.querySelector('.nm'); const shown = dispName(it), tail = it.n.slice(shown.length);   // l'extension masquée se retrouve au bout du nom
     cell.innerHTML = pix(iconOf(it), 16) + `<input class="text-input" value="${esc(shown)}" spellcheck="false">`;
     const inp = cell.querySelector('input'); inp.focus(); const dot = it.d ? shown.length : shown.lastIndexOf('.'); inp.setSelectionRange(0, dot > 0 ? dot : shown.length);
-    let done = false; const end = ok => { if (done) return; done = true; if (ok && inp.value && inp.value + tail !== it.n) post({ cmd: 'fs.rename', path: pathOf(it), name: inp.value + tail, tab: t.id }); else show(true); };
+    // Fini (Entrée, Échap, perte du focus) : le champ rend le focus à la liste tout de suite, sinon la relecture qui suit le renommage serait tenue pour « pendant un renommage » et attendrait.
+    let done = false; const end = ok => { if (done) return; done = true; inp.blur(); $('files').focus(); if (ok && inp.value && inp.value + tail !== it.n) post({ cmd: 'fs.rename', path: pathOf(it), name: inp.value + tail, tab: t.id }); else show(true); };
     inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') end(true); else if (e.key === 'Escape') end(false); };
     inp.onblur = () => end(true);
   }

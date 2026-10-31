@@ -68,6 +68,7 @@
     if (ext) out.push(['Ouvrir avec', null, { sub: () => openWithItems(it, ext) }]);
     if (one && it.d) out.push(['Ouvrir dans un nouvel onglet', () => addTab(pathOf(it))], ['Ouvrir dans une nouvelle fenêtre', () => post({ cmd: 'fs.newwindow', path: pathOf(it) })]);
     if (one) out.push(['Ouvrir dans un terminal', () => post({ cmd: 'fs.terminal', path: it.d ? pathOf(it) : (parentOf(pathOf(it)) || t.path) })]);
+    if (one && it.d && !it.drive && !t.search) out.push([isPinned(pathOf(it)) ? 'Retirer de l’accès rapide' : 'Épingler à l’accès rapide', () => togglePin(pathOf(it)), { key: 'Ctrl+Maj+P' }]);
     out.push(null,
       ['Couper', () => copy(true), { key: 'Ctrl+X' }], ['Copier', () => copy(false), { key: 'Ctrl+C' }], ['Copier le chemin', copyPath, { key: 'Ctrl+Maj+C' }], null,
       ['Envoyer vers', null, { sub: () => sendToItems(paths) }], null,
@@ -89,6 +90,7 @@
       ['Afficher', null, { sub: viewItems }],
       ['Actualiser', reload, { icon: 'maj', key: 'F5' }], null,
       ['Ouvrir dans un terminal', () => post({ cmd: 'fs.terminal', path: t.path }), { disabled: no }],
+      [isPinned(t.path) ? 'Retirer ce dossier de l’accès rapide' : 'Épingler ce dossier à l’accès rapide', () => togglePin(t.path), { key: 'Ctrl+Maj+P', disabled: no }],
       ['Propriétés', showProps, { key: 'Alt+Entrée', disabled: no }],
       ["Plus d'options…", () => moreOptions([t.path]), { disabled: no }],
     ];

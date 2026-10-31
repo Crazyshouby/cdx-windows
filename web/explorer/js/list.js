@@ -74,7 +74,12 @@
     const row = (p, extra = '') => `<div class="row-item ${p.path === t.path ? 'sel' : ''}" data-p="${esc(p.path)}"${extra}>${pix(p.ic, 16)}<span class="grow">${esc(p.name)}</span></div>`;
     const local = places.drives.filter(d => d.kind !== 'reseau'), net = places.drives.filter(d => d.kind === 'reseau');
     const servers = (Array.isArray(settings['net.servers']) ? settings['net.servers'] : []).map(s => ({ name: s.replace(/^\\\\/, ''), path: s, ic: 'serveur' }));
-    $('side').innerHTML = places.places.map(p => row(p)).join('')
+    const pins = pinList().map(p => ({ name: baseOf(p), path: p, ic: 'dossier' }));
+    const freq = recentList().filter(r => (r.n | 0) >= 3 && !isPinned(r.p)).sort((a, b) => b.n - a.n).slice(0, 4);
+    const rec = recentList().filter(r => !isPinned(r.p) && !freq.includes(r.p) && !freq.some(f => f.p === r.p) && r.p !== t.path).sort((a, b) => b.at - a.at).slice(0, 6);
+    $('side').innerHTML = (pins.length || freq.length ? `<div class="head">Accès rapide</div>` + pins.map(p => row(p, ' data-pin="1"')).join('') + freq.map(r => row({ name: baseOf(r.p), path: r.p, ic: 'dossier' }, ' data-freq="1"')).join('') : '')
+      + (rec.length ? `<div class="head">Récents</div>` + rec.map(r => row({ name: baseOf(r.p), path: r.p, ic: 'dossier' }, ' data-rec="1"')).join('') : '')
+      + places.places.map(p => row(p)).join('')
       + `<div class="head">Ce PC</div>` + local.map(d => row(d, d.kind === 'amovible' || d.kind === 'cdrom' ? ' data-eject="1"' : '')).join('')
       + `<div class="row-item ${t.path === '' ? 'sel' : ''}" data-p="">${pix('pc', 16)}<span class="grow">Tous les disques</span></div>`
       + `<div class="row-item ${t.path === TRASH ? 'sel' : ''}" data-p="${TRASH}">${pix('supprimer', 16)}<span class="grow">Corbeille</span></div>`
@@ -95,10 +100,19 @@
     const items = [['Ouvrir', () => go(r.dataset.p, 'push')], ['Ouvrir dans un nouvel onglet', () => addTab(r.dataset.p)]];
     if (r.dataset.eject) items.push(null, ['Éjecter', () => ejectDrive(r.dataset.p), { icon: 'disque' }]);
     if (r.dataset.server) items.push(null, ['Oublier ce serveur', () => forgetServer(r.dataset.p)]);
+    if (r.dataset.pin) items.push(null, ['Retirer de l’accès rapide', () => togglePin(r.dataset.p)]);
+    if (r.dataset.freq || r.dataset.rec) items.push(null, ['Épingler à l’accès rapide', () => togglePin(r.dataset.p)], ['Retirer des récents', () => forgetRecent(r.dataset.p)]);
     CdxFrame.menu(items, e.clientX, e.clientY, r.textContent.trim());
   };
 
-  handlers.places = m => { places = m; if (!tabs.length) { const q = new URLSearchParams(location.search); addTab(q.get('path') || m.home); if (q.get('select')) T().pendingSel = q.get('select'); } else drawSide(); };
+  handlers.places = m => {
+    places = m;
+    if (tabs.length) { drawSide(); return; }
+    const q = new URLSearchParams(location.search), sess = settings.session;
+    // Une fenêtre ouverte sans dossier (restore=1) retrouve les onglets de la dernière session ; sinon le dossier demandé (ou Documents).
+    if (q.get('restore') === '1' && sess && Array.isArray(sess.tabs) && sess.tabs.some(p => typeof p === 'string')) { for (const p of sess.tabs) if (typeof p === 'string') addTab(p); selectTab(Math.max(0, Math.min(tabs.length - 1, sess.cur | 0))); }
+    else { addTab(q.get('path') || m.home); if (q.get('select')) T().pendingSel = q.get('select'); }
+  };
   // Le premier paquet d'un dossier (fs.list) remplace la liste ; les suivants (fs.list.more) s'y ajoutent. L'affichage est rafraîchi au plus toutes les 350 ms pendant la lecture, puis une dernière fois.
   let lastShow = 0;
   handlers['fs.list'] = m => {
@@ -113,7 +127,7 @@
     if (t.mode === 'back') t.idx = Math.max(0, t.idx - 1); if (t.mode === 'fwd') t.idx = Math.min(t.hist.length - 1, t.idx + 1);
     Object.assign(t, { path: m.path, items: m.items, free: m.free, ver: (t.ver | 0) + 1, loading: !!m.more, sel: t.pendingSel ? new Set([t.pendingSel]) : keep, anchor: -1, cursor: -1 }); t.pendingSel = null;
     if (!m.more && t.mode === 'reload') pruneSel(t);
-    if (t.mode !== 'reload') applySavedView(t);   // la vue et le groupe gardés pour ce dossier
+    if (t.mode !== 'reload') { applySavedView(t); saveSession(); bumpRecent(m.path); }   // la vue et le groupe gardés pour ce dossier ; la session et les récents suivent
     if (t.watched !== m.path) { t.watched = m.path; post({ cmd: 'fs.watch', tab: t.id, path: m.path }); }   // le programme prévient quand le dossier change (fs.changed)
     drawTabs(); if (t === T()) { show(t.mode === 'reload'); lastShow = performance.now(); if (t.renameAfter) { const n = t.renameAfter; t.renameAfter = null; rename(n); } }
     if (isUnc(m.path)) rememberServer(m.path);
@@ -145,7 +159,7 @@
     const t = T(), hid = settings['show.hidden'] === true;
     if (hid !== shownHidden) { shownHidden = hid; for (const x of tabs) x.stale = true; if (t) { t.stale = false; reload(); } return; }
     refreshViewSettings();   // vues par dossier, colonnes masquées
-    if (t && t.rows) paintRows(true);
+    if (t && t.rows && !busy()) paintRows(true);   // (pas pendant un renommage ni un glisser : la session et les récents écrivent des réglages en pleine navigation)
     drawSide();   // serveurs du réseau, dossiers épinglés, récents : des réglages aussi
   }
   // Le dossier d'un onglet a changé hors de la fenêtre : on le relit (sélection et défilement gardés), sauf pendant un renommage ou un glisser (on attend la fin) ; un onglet caché se relit quand on y revient.

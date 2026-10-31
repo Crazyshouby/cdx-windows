@@ -112,6 +112,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
     {
         try
         {
+            bool restore = path == null && windows.Count == 0;   // ouverte sans dossier et seule : la page retrouve les onglets de la dernière session
             path ??= Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             env ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview-explorer"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
             var f = new ExplorerForm(this);
@@ -121,7 +122,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             int off = (count++ % 6) * 28;
             f.Bounds = new Rectangle(160 + off, 70 + off, (int)(1180 * scale), (int)(720 * scale));
             f.Show(); Host.ForceForeground(f.Handle);
-            await f.InitWebAsync(env, root, "explorer/explorer.html?theme=" + theme + "&path=" + Uri.EscapeDataString(path) + (select != null ? "&select=" + Uri.EscapeDataString(select) : ""), scale);
+            await f.InitWebAsync(env, root, "explorer/explorer.html?theme=" + theme + "&path=" + Uri.EscapeDataString(path) + (select != null ? "&select=" + Uri.EscapeDataString(select) : "") + (restore ? "&restore=1" : ""), scale);
             Host.Log("explorateur ouvert : " + path);
         }
         catch (Exception ex) { Host.Log("explorateur : " + ex); }

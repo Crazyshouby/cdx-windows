@@ -168,6 +168,62 @@ static class Fs
         return result;
     }
 
+    // ---------- aperçus étendus (lot 8) : Markdown rendu et code coloré (la page s'en charge, d'après kind et lang), documents Office (le texte en est extrait ici) ----------
+    static readonly HashSet<string> CodeExt = new(StringComparer.OrdinalIgnoreCase)
+    { ".js", ".mjs", ".ts", ".tsx", ".jsx", ".py", ".cs", ".rs", ".ps1", ".psm1", ".json", ".css", ".html", ".htm", ".xml", ".svg", ".c", ".h", ".cpp", ".hpp", ".java", ".kt", ".go", ".sh", ".bat", ".cmd", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".sql", ".iss", ".cmake" };
+    public static string KindOf(string ext) => ext is ".md" or ".markdown" ? "md" : CodeExt.Contains(ext) ? "code" : "text";
+
+    // Le texte d'un document Office (docx, xlsx, pptx) : des zip de XML, dont on sort les paragraphes, les cellules de la première feuille, les textes des diapositives.
+    public static object OfficePreview(string path, string ext)
+    {
+        try
+        {
+            using var zip = System.IO.Compression.ZipFile.OpenRead(path);
+            var sb = new System.Text.StringBuilder(); bool truncated = false;
+            void Add(string s) { if (sb.Length < 65536) sb.Append(s); else truncated = true; }
+            System.Xml.Linq.XDocument Xml(string name) { var e = zip.GetEntry(name); if (e == null) return null; using var st = e.Open(); return System.Xml.Linq.XDocument.Load(st); }
+            if (ext == ".docx")
+            {
+                var doc = Xml("word/document.xml"); if (doc == null) return new { type = "fs.preview", path, kind = "error", error = "Document Word sans texte lisible" };
+                System.Xml.Linq.XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+                foreach (var p in doc.Descendants(w + "p"))
+                {
+                    Add(string.Concat(p.Descendants().Where(x => x.Name == w + "t" || x.Name == w + "tab" || x.Name == w + "br").Select(x => x.Name == w + "t" ? x.Value : x.Name == w + "tab" ? "\t" : "\n")));
+                    Add("\n");
+                }
+            }
+            else if (ext == ".xlsx")
+            {
+                System.Xml.Linq.XNamespace s = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                var shared = Xml("xl/sharedStrings.xml")?.Descendants(s + "si").Select(si => string.Concat(si.Descendants(s + "t").Select(t => t.Value))).ToList() ?? new List<string>();
+                var sheet = Xml("xl/worksheets/sheet1.xml"); if (sheet == null) return new { type = "fs.preview", path, kind = "error", error = "Classeur sans première feuille lisible" };
+                int rows = 0;
+                foreach (var row in sheet.Descendants(s + "row"))
+                {
+                    if (++rows > 300) { truncated = true; break; }
+                    Add(string.Join("\t", row.Elements(s + "c").Select(c => { var v = c.Element(s + "v")?.Value ?? c.Element(s + "is")?.Value ?? ""; return (string)c.Attribute("t") == "s" && int.TryParse(v, out int k) && k >= 0 && k < shared.Count ? shared[k] : v; })));
+                    Add("\n");
+                }
+            }
+            else
+            {
+                System.Xml.Linq.XNamespace a = "http://schemas.openxmlformats.org/drawingml/2006/main";
+                var slides = zip.Entries.Where(e => System.Text.RegularExpressions.Regex.IsMatch(e.FullName, @"^ppt/slides/slide\d+\.xml$")).OrderBy(e => int.Parse(System.Text.RegularExpressions.Regex.Match(e.FullName, @"\d+").Value)).ToList();
+                if (slides.Count == 0) return new { type = "fs.preview", path, kind = "error", error = "Présentation sans diapositive lisible" };
+                int n = 0;
+                foreach (var e in slides)
+                {
+                    n++; Add($"— Diapositive {n} —\n");
+                    using var st = e.Open(); var x = System.Xml.Linq.XDocument.Load(st);
+                    foreach (var p in x.Descendants(a + "p")) { var t = string.Concat(p.Descendants(a + "t").Select(z => z.Value)); if (t.Length > 0) { Add(t); Add("\n"); } }
+                    Add("\n");
+                }
+            }
+            return new { type = "fs.preview", path, kind = "office", lang = ext.TrimStart('.'), text = sb.ToString(), truncated };
+        }
+        catch (Exception ex) { return new { type = "fs.preview", path, kind = "error", error = "Document illisible : " + ex.Message }; }
+    }
+
     // Aperçu d'un fichier texte : les 64 premiers Ko, décodés en UTF-16 / UTF-8 (avec ou sans BOM), à défaut en Latin-1. Un octet nul = binaire.
     static object Preview(string path, string tab)
     {
@@ -175,6 +231,8 @@ static class Fs
         {
             var fi = new FileInfo(path);
             if (!fi.Exists) return new { type = "fs.preview", path, kind = "error", error = "Fichier introuvable" };
+            string ext = fi.Extension.ToLowerInvariant();
+            if (ext is ".docx" or ".xlsx" or ".pptx") return OfficePreview(path, ext);
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var buf = new byte[(int)Math.Min(65536, fi.Length)];
             int n = fs.Read(buf, 0, buf.Length);
@@ -191,7 +249,7 @@ static class Fs
                 int bad = text.IndexOf('�');
                 if (bad >= 0 && bad < text.Length - 3) text = System.Text.Encoding.Latin1.GetString(buf, start, n - start);   // pas de l'UTF-8 : Windows-1252 / Latin-1
             }
-            return new { type = "fs.preview", path, kind = "text", text, truncated };
+            return new { type = "fs.preview", path, kind = KindOf(ext), lang = ext.TrimStart('.'), text, truncated };
         }
         catch (Exception ex) { return new { type = "fs.preview", path, kind = "error", error = ex.Message }; }
     }

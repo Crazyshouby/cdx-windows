@@ -16,8 +16,8 @@
   const showProps = () => { const t = T(), s = selected(); const p = s.length ? pathOf(s[0]) : t.path; if (p) post({ cmd: 'fs.props', path: p }); };
   const copyPath = () => { const s = selected(), t = T(); const paths = s.length ? s.map(pathOf) : (t.path ? [t.path] : []); if (!paths.length) return; post({ cmd: 'fs.copypath', paths }); $('st2').textContent = paths.length > 1 ? 'Chemins copiés' : 'Chemin copié'; };
   const toggleHidden = () => setSetting('show.hidden', settings['show.hidden'] !== true);
-  const closeTab = () => { if (tabs.length > 1) { post({ cmd: 'fs.watch', tab: tabs[cur].id, path: '' }); tabs.splice(cur, 1); cur = Math.min(cur, tabs.length - 1); drawTabs(); show(); } };
-  const switchTab = d => { if (tabs.length < 2) return; cur = (cur + d + tabs.length) % tabs.length; drawTabs(); show(); if (T().stale) { T().stale = false; reload(); } };
+  const closeTab = () => closeTabAt(cur);
+  const switchTab = d => { if (tabs.length < 2) return; selectTab((cur + d + tabs.length) % tabs.length); };
   const focusFind = () => { $('find').focus(); $('find').select(); };
 
   // La table : { k : touches, t : intitulé, g : groupe de l'aide, run : action }. Plusieurs touches pour une même action : séparées par « | ».
@@ -76,6 +76,12 @@
     { g: 'Affichage', k: 'Alt+P', t: "Volet d'aperçu", run: () => { if (typeof setPreview === 'function') setPreview(!pvOn); } },
     { g: 'Affichage', k: 'F1|Ctrl+/', t: 'Raccourcis clavier', run: () => keyHelp() },
   ];
+  KEYS.push(
+    { g: 'Navigation', k: 'Ctrl+Shift+T', t: 'Rouvrir l’onglet fermé', run: reopenClosed },
+    ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => ({ g: 'Navigation', k: 'Ctrl+' + n, t: 'Onglet ' + n, run: () => selectTab(n - 1) })),
+    { g: 'Navigation', k: 'Ctrl+9', t: 'Dernier onglet', run: () => selectTab(tabs.length - 1) },
+    { g: 'Fichiers', k: 'Ctrl+Shift+P', t: 'Épingler le dossier à l’accès rapide (ou l’en retirer)', run: () => { const s = selected(); togglePin(s.length === 1 && s[0].d && !s[0].drive ? pathOf(s[0]) : T().path); } },
+  );
   // « ArrowDown », « Ctrl+Shift+I »... : le nom d'un événement clavier, dans l'ordre Ctrl, Alt, Maj.
   const keyName = e => {
     let k = e.key === ' ' ? 'Space' : e.key.length === 1 ? e.key.toUpperCase() : e.key;

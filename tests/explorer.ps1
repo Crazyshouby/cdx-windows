@@ -243,7 +243,7 @@ try {
   # le fond de la liste
   Js "T().sel = new Set(); show(true); const f = document.getElementById('files'); const b = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 200), clientY: Math.round(b.bottom - 20) }))" | Out-Null
   $m = Menu
-  Check "menu du fond : Nouveau, Coller, Trier par, Afficher, Actualiser, terminal, Propriétés" (($m -match 'Nouveau\|Coller\|Trier par\|Afficher\|Actualiser\|Ouvrir dans un terminal\|Propriétés') -and ((MenuTitle) -eq 'menus'))
+  Check "menu du fond : Nouveau, Coller, Trier par, Afficher, Actualiser, terminal, Épingler, Propriétés" (($m -match 'Nouveau\|Coller\|Trier par\|Afficher\|Actualiser\|Ouvrir dans un terminal\|Épingler ce dossier à l.accès rapide\|Propriétés') -and ((MenuTitle) -eq 'menus'))
   MenuClick 'Trier par' | Out-Null
   Check "« Trier par » : Nom, Date, Type, Taille, Croissant, Décroissant ; Nom est coché" (Until { (Menu) -match ' // Nom\|Date de modification\|Type\|Taille\|Croissant\|Décroissant' } 4000)
   Check "…la case de « Nom » et de « Croissant » est cochée" ((Js "[...document.querySelectorAll('.menu')][1].querySelectorAll('.chk.on').length") -eq '2')
@@ -491,6 +491,52 @@ try {
   Js "setView('details'); go('$($work.Replace('\', '\\'))\\petit', 'push')" | Out-Null
   Check "retour dans le premier dossier : sa vue à lui (petites icônes) est retrouvée" (Until { (Js "T().path") -eq "$work\petit" -and (Js "T().view") -eq 'icons-s' } 10000)
   Js "setView('details')" | Out-Null
+
+  # --- onglets et accès rapide (lot 7) ---
+  Js "go('$($work.Replace('\', '\\'))\\petit', 'push')" | Out-Null; Until { (Js "T().path") -eq "$work\petit" } 10000 | Out-Null
+  Js "addTab('$($work.Replace('\', '\\'))\\autre')" | Out-Null
+  Check "un second onglet s'ouvre et devient l'actif" ((Until { (Js "tabs.length") -eq '2' -and (Js "T().path") -eq "$work\autre" } 10000))
+  Js "moveTab(1, 0)" | Out-Null
+  Check "réordonner : l'onglet glissé passe en premier et reste l'actif" ((Js "tabs[0].path") -eq "$work\autre" -and (Js "cur") -eq '0')
+  Js "duplicateTab(0)" | Out-Null
+  Check "dupliquer : un troisième onglet sur le même dossier, juste après" ((Until { (Js "tabs.length") -eq '3' } 6000) -and ((Js "tabs[1].path") -eq "$work\autre"))
+  Js "closeOthers(1)" | Out-Null
+  Check "fermer les autres : un seul onglet reste" ((Js "tabs.length") -eq '1')
+  Js "reopenClosed()" | Out-Null
+  Check "rouvrir l'onglet fermé (Ctrl+Maj+T) : le dernier fermé (petit) revient" ((Until { (Js "tabs.length") -eq '2' -and (Js "T().path") -eq "$work\petit" } 10000))
+  Js "document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', ctrlKey: true, bubbles: true }))" | Out-Null
+  Check "Ctrl+1 va au premier onglet" (Until { (Js "cur") -eq '0' -and (Js "T().path") -eq "$work\autre" } 4000)
+  Check "la session (onglets, onglet actif) est gardée dans les réglages" (Until { (Js "JSON.stringify((settings.session || {}).tabs)") -eq ('["' + $work.Replace('\', '\\') + '\\autre","' + $work.Replace('\', '\\') + '\\petit"]') -and (Js "String(settings.session.cur)") -eq '0' } 6000)
+  Js "togglePin('$($work.Replace('\', '\\'))\\petit')" | Out-Null
+  Check "épingler un dossier : il apparaît sous « Accès rapide » dans la barre latérale (réglage pins)" (Until { (Js "JSON.stringify(settings.pins)") -eq ('["' + $work.Replace('\', '\\') + '\\petit"]') -and (Js "document.querySelector('#side [data-pin]')?.dataset.p") -eq "$work\petit" -and (Js "[...document.querySelectorAll('#side .head')].map(h => h.textContent).join('|')") -like 'Accès rapide*' } 6000)
+  Js "togglePin('$($work.Replace('\', '\\'))\\petit')" | Out-Null
+  Check "le retirer : plus d'épingle" (Until { (Js "!!document.querySelector('#side [data-pin]')") -eq $false } 6000)
+  Check "les dossiers visités sont dans les récents (réglage recent) et dans la barre latérale, sauf celui affiché" ((Until { (Js "(settings.recent || []).filter(r => r.p.toLowerCase().endsWith('\\petit') || r.p.toLowerCase().endsWith('\\autre')).length") -eq '2' } 6000) -and (Until { (Js "document.querySelector('#side [data-rec], #side [data-freq]')?.dataset.p") -eq "$work\petit" } 6000))
+  $app.Kill(); Start-Sleep -Seconds 2
+  $app = Start-Process "$Bin\cdx-explorer.exe" -PassThru; $started += $app
+  Check "une fenêtre ouverte sans dossier retrouve les onglets de la session (2 onglets, l'actif)" ((Until { (Js "tabs.length") -eq '2' } 30000) -and (Until { (Js "T().path") -eq "$work\autre" -and (Js "tabs[1].path") -eq "$work\petit" } 15000))
+
+  # --- aperçus étendus (lot 8) : Markdown rendu, code coloré, documents Office ---
+  Js "go('$($work.Replace('\', '\\'))\\petit', 'push')" | Out-Null; Until { (Js "T().path") -eq "$work\petit" } 10000 | Out-Null
+  Set-Content "$work\petit\doc.md" "# Titre du document`n`nUn **mot** et une liste :`n`n- un`n- deux`n" -Encoding UTF8
+  Set-Content "$work\petit\script.js" "// un commentaire`nconst n = 42;`nfunction f() { return 'texte'; }`n" -Encoding UTF8
+  Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+  function Zip([string]$path, [hashtable]$entries) { $z = [IO.Compression.ZipFile]::Open($path, 'Create'); foreach ($k in $entries.Keys) { $e = $z.CreateEntry($k); $st = $e.Open(); $b = [Text.Encoding]::UTF8.GetBytes($entries[$k]); $st.Write($b, 0, $b.Length); $st.Dispose() }; $z.Dispose() }
+  Zip "$work\petit\doc.docx" @{ 'word/document.xml' = '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Bonjour Word</w:t></w:r></w:p><w:p><w:r><w:t>Deuxième paragraphe</w:t></w:r></w:p></w:body></w:document>' }
+  Zip "$work\petit\classeur.xlsx" @{ 'xl/sharedStrings.xml' = '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Cellule A1</t></si></sst>'; 'xl/worksheets/sheet1.xml' = '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><v>42</v></c></row></sheetData></worksheet>' }
+  Zip "$work\petit\diapos.pptx" @{ 'ppt/slides/slide1.xml' = '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Titre de la diapo</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>' }
+  Until { (Js "T().items.some(i => i.n === 'diapos.pptx') && T().items.some(i => i.n === 'doc.md')") -eq $true } 10000 | Out-Null
+  Js "setPreview(true); T().sel = new Set(['doc.md']); show(true)" | Out-Null
+  Check "aperçu d'un fichier Markdown : rendu (titre, gras, liste)" (Until { (Js "document.querySelector('#pvbox .pvmd h1')?.textContent") -eq 'Titre du document' -and (Js "document.querySelectorAll('#pvbox .pvmd li').length") -eq '2' -and (Js "document.querySelector('#pvbox .pvmd strong')?.textContent") -eq 'mot' } 8000)
+  Js "T().sel = new Set(['script.js']); show(true)" | Out-Null
+  Check "aperçu d'un script : code coloré (mot-clé, chaîne, commentaire, nombre)" (Until { (Js "[...document.querySelectorAll('#pvbox .code .kw')].map(e => e.textContent).join(' ')") -like '*const*function*return*' -and (Js "document.querySelector('#pvbox .code .st')?.textContent") -eq "'texte'" -and (Js "document.querySelector('#pvbox .code .cm')?.textContent") -eq '// un commentaire' -and (Js "document.querySelector('#pvbox .code .nu')?.textContent") -eq '42' } 8000)
+  Js "T().sel = new Set(['doc.docx']); show(true)" | Out-Null
+  Check "aperçu d'un document Word : le texte des paragraphes" (Until { (Js "document.querySelector('#pvbox .pvtext')?.textContent") -like "*Bonjour Word*Deuxième paragraphe*" } 8000)
+  Js "T().sel = new Set(['classeur.xlsx']); show(true)" | Out-Null
+  Check "aperçu d'un classeur Excel : les cellules de la première feuille (texte partagé et nombre)" (Until { (Js "document.querySelector('#pvbox .pvtext')?.textContent") -like "*Cellule A1*42*" } 8000)
+  Js "T().sel = new Set(['diapos.pptx']); show(true)" | Out-Null
+  Check "aperçu d'une présentation PowerPoint : les textes des diapositives" (Until { (Js "document.querySelector('#pvbox .pvtext')?.textContent") -like "*Diapositive 1*Titre de la diapo*" } 8000)
+  Js "setPreview(false); T().sel.clear(); show(true)" | Out-Null
 
   # --- réglages : aller-retour page → hôte → page, fichier, redémarrage ---
   Js "setSetting('essai.cle', { a: 1, b: [1, 2] })" | Out-Null
