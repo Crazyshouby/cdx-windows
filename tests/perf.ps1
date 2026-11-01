@@ -1,4 +1,4 @@
-# Essai de performance de l'Explorateur sur un très grand dossier : 100 000 fichiers jetables dans un dossier temporaire. Mesure, dans la vraie fenêtre isolée (page pilotée par le canal de test) :
+﻿# Essai de performance de l'Explorateur sur un très grand dossier : 100 000 fichiers jetables dans un dossier temporaire. Mesure, dans la vraie fenêtre isolée (page pilotée par le canal de test) :
 # le temps avant les premières lignes, la lecture complète, le nombre de lignes réellement dessinées (la liste est virtualisée), le défilement, la sélection d'une ligne, le tri, et la mémoire
 # après plusieurs relectures. Les seuils sont larges (la machine peut être chargée) ; les durées sont affichées pour suivre leur évolution.
 #   pwsh -File tests\perf.ps1 [-Bin <dossier des .exe>] [-N 100000]

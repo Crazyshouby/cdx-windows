@@ -1,4 +1,4 @@
-# Essai isolé de la fenêtre « Transferts » : (A) la fenêtre seule, avec des messages de producteurs simulés par le bus ; (B) un vrai Explorateur qui copie des milliers de fichiers
+﻿# Essai isolé de la fenêtre « Transferts » : (A) la fenêtre seule, avec des messages de producteurs simulés par le bus ; (B) un vrai Explorateur qui copie des milliers de fichiers
 # (pause, reprise, annulation, fermeture de sa dernière fenêtre pendant la copie) ; (C) un vrai téléchargement du navigateur, depuis un petit serveur local volontairement lent.
 # Tout est isolé : tubes à préfixe, dossier de réglages et de données jetables, dossiers jetables dans %TEMP% ; seul le téléchargement du navigateur écrit dans le dossier Téléchargements
 # (un nom unique, supprimé ensuite). Aucune frappe ni clic sur la session : la page est pilotée par le canal de test.

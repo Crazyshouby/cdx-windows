@@ -1,4 +1,4 @@
-# Essai isolé de l'Explorateur dans sa vraie fenêtre (le socle : liste lue en arrière-plan, réglages persistants) ; il grandira avec les fonctionnalités (liste vivante, vues...).
+﻿# Essai isolé de l'Explorateur dans sa vraie fenêtre (le socle : liste lue en arrière-plan, réglages persistants) ; il grandira avec les fonctionnalités (liste vivante, vues...).
 # Des dossiers jetables dans un dossier temporaire, la page pilotée par le canal de test ; rien n'est lu ni écrit hors de ce dossier et du dossier de données de l'essai.
 #   pwsh -File tests\explorer.ps1 [-Bin <dossier des .exe>]
 param([string]$Bin)

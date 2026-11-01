@@ -145,7 +145,17 @@
   });
 
   // ---- le fil ----
-  const toolLine = it => `<div class="tl ${it.ok === true ? 'ok' : it.ok === false ? 'err' : ''}" data-tool="${esc(it.id || '')}" title="${esc(it.result || it.target || '')}"><span class="pix">${pix('apps', 16)}</span><span class="nm">${esc(it.name)}</span><span class="tg">${esc(it.target || '')}</span><span class="st">${it.ok === true ? 'ok' : it.ok === false ? 'erreur' : '…'}</span></div>`;
+  // l'icône d'une ligne d'outil : celle du programme de la suite visé (famille pixel), sinon celle de la nature de l'outil
+  const APP_ICON = { shell: 'cdx', explorer: 'explorateur', browser: 'navigateur', repos: 'depots', transfers: 'transferts', notes: 'notes', terminal: 'terminal', agenda: 'agenda', mail: 'courrier', pilote: 'pilote', kirc: 'kirc' };
+  function toolIcon(it) {
+    const n = String(it.name || ''), t = String(it.target || '').toLowerCase();
+    if (/app_(open|state|command|restart)/.test(n)) return APP_ICON[t.split(/[\s:]/)[0]] || 'apps';
+    if (/browser_/.test(n)) return 'navigateur'; if (/mail_/.test(n)) return 'courrier'; if (/agenda_/.test(n)) return 'agenda';
+    if (/notes_|cdx-notes|vault_|projects_|tasks_list|folders_/.test(n)) return 'notes'; if (/project_folder/.test(n)) return 'depots'; if (/notify/.test(n)) return 'cloche';
+    if (/^(Read|Write|Edit|Glob|Grep)$/.test(n)) return 'fichier'; if (/Bash|PowerShell/.test(n)) return 'terminal'; if (/Web(Search|Fetch)/.test(n)) return 'recherche'; if (/AskUserQuestion/.test(n)) return 'message';
+    return 'apps';
+  }
+  const toolLine = it => `<div class="tl ${it.ok === true ? 'ok' : it.ok === false ? 'err' : ''}" data-tool="${esc(it.id || '')}" title="${esc(it.result || it.target || '')}"><span class="pix">${pix(toolIcon(it), 16)}</span><span class="nm">${esc(it.name)}</span><span class="tg">${esc(it.target || '')}</span><span class="st">${it.ok === true ? 'ok' : it.ok === false ? 'erreur' : '…'}</span></div>`;
   const askLine = it => `<div class="tl ask ${it.decision === 'attente' ? '' : 'done'}" data-ask="${esc(it.id || '')}" title="${esc(it.detail || '')}"><span class="pix">${pix(it.decision === 'refusé' ? 'erreur' : it.decision === 'attente' ? 'cloche' : 'cadenas', 16)}</span><span class="nm">${esc(it.title)}</span><span class="tg">${esc((it.detail || '').split('\n')[0])}</span><span class="st">${esc(it.decision === 'auto' ? 'auto' : it.decision)}</span></div>`;
   function itemHtml(it) {
     if (it.kind === 'user') return `<div class="m u">${esc(it.text)}</div>`;

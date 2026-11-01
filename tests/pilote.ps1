@@ -1,4 +1,4 @@
-# Essai isolé de « Pilote » contre un faux Claude Code (tests\fake_claude.py, lancé à la place de claude.exe) : la conversation, le flux affiché, les outils de la suite
+﻿# Essai isolé de « Pilote » contre un faux Claude Code (tests\fake_claude.py, lancé à la place de claude.exe) : la conversation, le flux affiché, les outils de la suite
 # par le serveur MCP cdx-pilote-mcp (lancé par le faux Claude comme le ferait le vrai), le navigateur CDX piloté (ouvert, lu), les accords (automatiques dans le dossier
 # des projets, demandés ailleurs, refus), la question à choix, la commande d'un programme, la création d'un projet (dossier + fiche dans un coffre jetable), la reprise
 # après redémarrage (--resume), l'arrêt. Rien ne touche au vrai Claude Code, au vrai coffre ni aux vrais programmes (préfixe de tubes, dossiers sous %TEMP%).

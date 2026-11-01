@@ -1,4 +1,4 @@
-# Essai isolé d'« Agenda » contre un faux Google (tests\fake_google.py) : la liaison du compte (OAuth, page de consentement locale qui rend le code, jeton gardé
+﻿# Essai isolé d'« Agenda » contre un faux Google (tests\fake_google.py) : la liaison du compte (OAuth, page de consentement locale qui rend le code, jeton gardé
 # chiffré, rafraîchi), la lecture des agendas et des événements, la création, la modification, la suppression, les tâches ; puis le redémarrage sans consentement et l'oubli du compte.
 # Rien ne touche au vrai compte Google ni aux vrais réglages (CDX_SUITE_DIR, CDX_DATA_DIR, CDX_GOOGLE_API) ; aucune entrée simulée.
 #   pwsh -File tests\agenda.ps1 [-Bin <dossier des .exe>]

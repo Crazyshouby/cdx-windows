@@ -43,6 +43,9 @@ tests\              pilote.ps1 (Pilote contre fake_claude.py et fake_gmail.py : 
 
 ## Essais (aucune entrée simulée)
 
+Les essais `tests\*.ps1` se lancent avec PowerShell 7 (`pwsh`, ou la console PowerShell de Claude Code) ; ils portent une marque d'ordre d'octets UTF-8 depuis le 01/11/2026 pour que
+Windows PowerShell 5.1 lise aussi leurs accents (sans elle, « écris » partait en « Ã©cris » et quatorze vérifications de Pilote échouaient sans que la ligne ÉCHEC soit repérable).
+
 - Auto-tests, sans fenêtre visible : `cdx-explorer --selftest-fs`, `--selftest-web` ; `cdx-shell --selftest-sys`, `--selftest-audio`, `--selftest-snap` (19 vérifications de l'aimantation), `--selftest-spell` (24 vérifications du correcteur orthographique) ; `cdx-browser --selftest-browser` ; `cdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables) ; `cdx-terminal --selftest-pty` (10 vérifications de la pseudo-console : sortie, code de sortie, UTF-8, redimensionnement, arrêt) ; `tests\terminal.ps1 -Bin <dossier>` (43 vérifications dans la vraie fenêtre isolée : shells, police et WebGL, couleurs de la charte, accent, onglets, volets, raccourcis, redimensionnement, titre, fermeture, dossier de départ, et avec `-ExplorerBin` l'Explorateur qui ouvre un onglet puis relance le terminal).
   Résultats dans `%LOCALAPPDATA%\CdxShell\selftest*.txt`.
 - Canal de contrôle : si `%LOCALAPPDATA%\CdxShell\debug.txt` existe au lancement, chaque programme ouvre un tube réservé à l'utilisateur courant
@@ -143,7 +146,9 @@ Décision du 01/11/2026 : une icône pixel par application, d'une même famille,
   pas le même rouge partout), avec la lumière de l'icône de KIRC (arête claire en haut et à gauche, ombre en bas et à droite, contour noir). Explorateur : le dossier jaune existant ;
   Navigateur : globe bleu et vert ; Dépôts : classeur gris ; Notes : carnet à spirale blanc ; Terminal : écran noir dans un cadre gris, invite verte ; Agenda : page de calendrier au bandeau
   rouge ; Courrier : enveloppe beige ; Pilote : volant noir au klaxon rouge ; Transferts : flèches verte et bleue ; CDX : le carré rouge de l'accent et son C.
-- **Dans les pages** : les mêmes noms dans `icons.js` (`pix('notes')`, `data-ic="pilote"`…) ; les épingles par défaut de la barre et les tuiles du Démarrer les utilisent (`Pins.cs`).
+- **Dans les pages** : les mêmes noms dans `icons.js` (`pix('notes')`, `data-ic="pilote"`…) ; les épingles de la barre et les tuiles du Démarrer (`Pins.cs` : une épingle d'une application
+  de la suite prend son icône de la famille même si `epingles.json` a été écrit avec un pictogramme générique), les notifications du centre (l'icône du programme qui notifie), le fil de Pilote
+  (l'icône du programme visé par l'outil, sinon la nature de l'outil). Alt+Tab et la liste des tâches montrent l'icône de la fenêtre, donc celle de l'exécutable.
 - **Les exécutables** : `icons\<nom>.ico` (16, 32, 48 et 256 px, images PNG dans l'ICO, rouge fixe), produits par `python gen/gen_app_icons.py ..\cdx-windows\icons` dans cdx-ui et
   versionnés ici ; `<ApplicationIcon>` dans les dix projets, `SetupIconFile` de l'installeur (`cdx.ico`). `HostForm` prend l'icône de son exécutable pour la fenêtre (Alt+Tab, liste
   des tâches de la barre).

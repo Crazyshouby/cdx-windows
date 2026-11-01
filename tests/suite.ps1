@@ -1,4 +1,4 @@
-# Essai de la suite par les canaux de contrôle (aucune entrée simulée) : le shell lance l'Explorateur et le navigateur comme programmes à part, la
+﻿# Essai de la suite par les canaux de contrôle (aucune entrée simulée) : le shell lance l'Explorateur et le navigateur comme programmes à part, la
 # seconde ouverture est relayée à la première instance, et l'arrêt brutal de l'un ou de l'autre n'emporte pas le shell.
 # Prérequis : %LOCALAPPDATA%\CdxShell\debug.txt, puis (re)lancer bin\cdx-shell.exe (il ouvre alors « CdxShellCtl »). Le test ferme ce qu'il ouvre ;
 # supprimer debug.txt et relancer le shell ensuite. Attention : il manipule le shell en cours.

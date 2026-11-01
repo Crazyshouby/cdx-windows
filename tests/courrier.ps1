@@ -1,4 +1,4 @@
-# Essai isolé de « Courrier » contre un faux Gmail (tests\fake_gmail.py) : liaison du compte avec la portée gmail.modify, libellés et compteurs, liste des fils,
+﻿# Essai isolé de « Courrier » contre un faux Gmail (tests\fake_gmail.py) : liaison du compte avec la portée gmail.modify, libellés et compteurs, liste des fils,
 # lecture d'un fil (marqué lu, HTML dans un cadre isolé, images distantes bloquées puis autorisées, pièce jointe enregistrée), réponse (fil, In-Reply-To, citation),
 # nouveau message avec pièce jointe (multipart, objet accentué encodé), archiver, favori, non lu, corbeille, libellé, recherche, nouveau courrier relevé, redémarrage.
 # Rien ne touche au vrai compte Google ni aux vrais réglages ; aucune entrée simulée.

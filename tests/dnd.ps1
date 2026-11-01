@@ -1,4 +1,4 @@
-# Essai isolé du glisser-déposer de l'Explorateur dans sa vraie fenêtre : des éléments jetables dans un dossier temporaire ; la page est pilotée par des événements de pointeur
+﻿# Essai isolé du glisser-déposer de l'Explorateur dans sa vraie fenêtre : des éléments jetables dans un dossier temporaire ; la page est pilotée par des événements de pointeur
 # fabriqués par le canal de test (jamais de vraie souris, rien sur la session de Valentin). Déplacer sur un dossier, copier avec Ctrl, sur un lieu de la barre latérale et sur un onglet,
 # refus d'un dossier sur lui-même, Échap qui annule, la ligne fantôme et les cibles éclairées, et la sortie de la fenêtre qui confie les éléments à Windows (message fs.dragout).
 #   pwsh -File tests\dnd.ps1 [-Bin <dossier des .exe>]

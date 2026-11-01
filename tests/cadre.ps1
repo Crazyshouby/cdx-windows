@@ -1,4 +1,4 @@
-# Essai isolé du cadre de fenêtre (cdx-frame.js sur le pont cdx-bridge.js) dans les vraies fenêtres de l'Explorateur et du navigateur : le pont est
+﻿# Essai isolé du cadre de fenêtre (cdx-frame.js sur le pont cdx-bridge.js) dans les vraies fenêtres de l'Explorateur et du navigateur : le pont est
 # détecté, les boutons de la barre de titre agissent (agrandir, rétablir, fermer), les gestionnaires de pages reçoivent leurs messages.
 # Isolé comme bus.ps1 (préfixe de tube, réglages et données de test) ; aucune entrée simulée (les boutons sont cliqués par le code de la page).
 #   pwsh -File tests\cadre.ps1 [-Bin <dossier des .exe>]

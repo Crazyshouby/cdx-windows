@@ -83,6 +83,8 @@
   $('quit').onclick = () => post({ cmd: 'quit' });
 
   // ---- notifications : envoyées par les autres applications de la suite (cdx.shell, message « notify ») ----
+  // l'icône de chaque programme de la suite (famille pixel de la charte, 01/11/2026) ; les autres : le pictogramme générique
+  const APP_ICON = { shell: 'cdx', explorer: 'explorateur', browser: 'navigateur', repos: 'depots', transfers: 'transferts', notes: 'notes', terminal: 'terminal', agenda: 'agenda', mail: 'courrier', pilote: 'pilote', kirc: 'kirc' };
   handlers.notify = m => {
     const box = $('notifs'); box.textContent = '';
     const items = (m.items || []).slice().reverse();
@@ -91,13 +93,14 @@
     for (const n of items) {
       const row = document.createElement('div'); row.className = 'nt ' + n.level;
       const orb = document.createElement('span'); orb.className = 'orb ' + (n.level === 'error' ? 'red' : n.level === 'warn' ? 'amber' : 'green');
+      const ic = document.createElement('span'); ic.className = 'pix'; ic.innerHTML = pix(APP_ICON[n.from] || 'apps', 16);   // l'icône du programme qui a notifié
       const body = document.createElement('div'); body.className = 'body';
       const ti = document.createElement('div'); ti.className = 'ti'; ti.textContent = n.title;
       const tx = document.createElement('div'); tx.className = 'tx'; tx.textContent = n.text || '';
       body.append(ti, tx);
       const meta = document.createElement('span'); meta.className = 'meta';
       meta.textContent = n.from + ' · ' + new Date(n.at * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      row.append(orb, body, meta); box.appendChild(row);
+      row.append(orb, ic, body, meta); box.appendChild(row);
     }
   };
   $('nclear').onclick = () => post({ cmd: 'notify.clear' });

@@ -1,4 +1,4 @@
-# Essai isolé de « Notes » dans sa vraie fenêtre : un coffre jetable sous %TEMP%, la page pilotée par le canal de test, des événements fabriqués (jamais de vraie souris ni de frappe sur
+﻿# Essai isolé de « Notes » dans sa vraie fenêtre : un coffre jetable sous %TEMP%, la page pilotée par le canal de test, des événements fabriqués (jamais de vraie souris ni de frappe sur
 # ta session). Même le serveur MCP est lancé ici, contre le même coffre, pour voir ce que fait l'application quand Claude écrit.
 #   pwsh -File tests\notes.ps1 [-Bin <dossier des .exe>]
 param([string]$Bin)

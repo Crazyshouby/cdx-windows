@@ -275,6 +275,9 @@ static class SelfTest
             Check("la migration est écrite : « seen » contient cdx:notes, une relecture ne la refait pas", File.ReadAllText(legacy).Contains("\"seen\"") && File.ReadAllText(legacy).Contains("cdx:notes") && File.ReadAllText(legacy).Contains("cdx:terminal") && File.ReadAllText(legacy).Contains("cdx:agenda") && File.ReadAllText(legacy).Contains("cdx:courrier") && File.ReadAllText(legacy).Contains("cdx:pilote") && new PinStore(legacy).Items.Count == 7);
             File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"bar\":true,\"tile\":true,\"barIndex\":0}]}");
             Check("tuile Notes retirée par l'utilisateur (déjà dans « seen ») : elle ne revient pas", new PinStore(legacy).Items.Count == 1);
+            File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"ic\":\"dossier\",\"bar\":true,\"tile\":true},{\"name\":\"Notes\",\"target\":\"cdx:notes\",\"ic\":\"carnet\",\"bar\":false,\"tile\":true},{\"name\":\"Chrome\",\"target\":\"chrome.exe\",\"ic\":\"serveur\",\"bar\":true,\"tile\":true}]}");
+            var mig = new PinStore(legacy);
+            Check("icônes de la famille (01/11/2026) : une application de la suite enregistrée avec un pictogramme générique prend la sienne, un programme étranger garde le sien", mig.Find("cdx:explorer").Ic == "explorateur" && mig.Find("cdx:notes").Ic == "notes" && mig.Find("chrome.exe").Ic == "serveur");
 
             var big = new PinStore(Path.Combine(dir, "grand.json")); big.Items.Clear();
             int added = 0; for (int i = 0; i < PinStore.Max + 5; i++) if (big.AddToBar("App" + i, "cdx:app" + i)) added++;

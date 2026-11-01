@@ -1,4 +1,4 @@
-# Essai isolé de « Dépôts » (cdx-repos.exe) dans sa vraie fenêtre : des dépôts jetables (propre, modifié, en avance sur un remote local, vide) dans un dossier
+﻿# Essai isolé de « Dépôts » (cdx-repos.exe) dans sa vraie fenêtre : des dépôts jetables (propre, modifié, en avance sur un remote local, vide) dans un dossier
 # temporaire désigné par un repos.json de test ; la page les affiche, le détail se remplit, les filtres et la recherche agissent, un second lancement
 # passe la main à la première instance. Aucune entrée simulée (la page est pilotée par le canal de test) et aucun vrai dépôt n'est lu.
 #   pwsh -File tests\repos.ps1 [-Bin <dossier des .exe>]

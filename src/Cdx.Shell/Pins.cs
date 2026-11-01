@@ -81,6 +81,8 @@ sealed class PinStore
                 bool bar = B(e, "bar"), tile = B(e, "tile");
                 if (!bar && !tile) continue;
                 string ic = S(e, "ic"); if (ic != null && !Regex.IsMatch(ic, "^[a-z0-9_-]{1,30}$")) ic = null;
+                var suite = Defaults.FirstOrDefault(x => Same(x.Target, t) && x.Target.StartsWith("cdx:", StringComparison.OrdinalIgnoreCase));
+                if (suite != null) ic = suite.Ic;   // une application de la suite porte son icône de la famille (01/11/2026), même dans un fichier écrit avec un pictogramme générique
                 list.Add(new Pin(n, t, ic, bar, tile));
                 if (bar && e.TryGetProperty("barIndex", out var bi) && bi.ValueKind == JsonValueKind.Number && bi.TryGetInt32(out var bii)) idx[t] = bii;
                 if (list.Count >= Max) break;

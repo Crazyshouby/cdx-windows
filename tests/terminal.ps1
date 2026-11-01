@@ -1,4 +1,4 @@
-# Essai isolé du terminal (cdx-terminal.exe) dans sa vraie fenêtre : de vrais PowerShell derrière de vraies pseudo-consoles, affichés par la page (xterm.js, WebGL).
+﻿# Essai isolé du terminal (cdx-terminal.exe) dans sa vraie fenêtre : de vrais PowerShell derrière de vraies pseudo-consoles, affichés par la page (xterm.js, WebGL).
 # On commande le terminal par le canal de test (écrire dans l'entrée d'un shell, lire l'écran de la page, agir sur les onglets et les volets) : aucune entrée simulée sur
 # le bureau (les raccourcis clavier sont des événements envoyés dans la page, pas des touches), et le presse-papiers n'est pas touché (copier/coller ne sont pas essayés ici).
 # Le terminal tourne avec son propre bus, son propre dossier de données et son propre suite.json.
