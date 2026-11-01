@@ -52,6 +52,10 @@
     "web/cdx/cdx-split.js": {
       "from": "cdx-split.js",
       "sha256": "d7923d23884679fe9e390fd80852d1d9d4d2a1d2d3b82d12327bbdafc30e1093"
+    },
+    "web/cdx/cdx-spell.js": {
+      "from": "cdx-spell.js",
+      "sha256": "c304545b412f6fc9ced1698f21609b62345ffe41d64195150a008ae593146c6b"
     }
   }
 }

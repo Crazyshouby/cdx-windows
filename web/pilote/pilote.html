@@ -85,6 +85,7 @@
 <script src="/cdx/cdx-bridge.js"></script>
 <script src="/cdx/cdx-frame.js"></script>
 <script src="/cdx/cdx-split.js"></script>
+<script src="/cdx/cdx-spell.js"></script>
 <script src="/cdx/host.js"></script>
 <script src="/notes/js/md.js"></script>
 </head>
@@ -248,10 +249,16 @@
   });
 
   // ---- réglages de la fenêtre ----
+  // le correcteur orthographique (cdx-spell.js) sur la zone de saisie ; réglage gardé
+  const spellKey = 'cdx.pilote.spell'; let spell = true; try { spell = localStorage.getItem(spellKey) !== 'off'; } catch (e) { }
+  const spellIn = window.CdxSpell ? CdxSpell.attach($('in'), { enabled: spell }) : null;
+  const setSpell = on => { spell = on; try { localStorage.setItem(spellKey, on ? 'on' : 'off'); } catch (e) { } if (spellIn) spellIn.enable(on); };
   windowSettings(() => [
     ['Autonomie', null, { sub: LEVELS.map(([k, n]) => [n, () => post({ cmd: 'pl.level', value: k }), { check: state.level === k }]) }],
     ['Modèle', null, { sub: MODELS.map(([k, n]) => [n, () => post({ cmd: 'pl.model', value: k }), { check: (state.model || '') === k }]) }],
     ['Effort', null, { sub: EFFORTS.map(([k, n]) => [n, () => post({ cmd: 'pl.effort', value: k }), { check: (state.effort || '') === k }]) }],
+    null,
+    ['Correcteur orthographique', () => setSpell(!spell), { check: spell }],
     null,
     ['Ouvrir le dossier des projets', () => post({ cmd: 'pl.open-path', path: state.root })],
     ['Mémoire de Pilote (dans Notes)', () => post({ cmd: 'pl.memory' })],

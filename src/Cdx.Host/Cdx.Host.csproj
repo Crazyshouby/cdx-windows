@@ -24,6 +24,7 @@
     <InternalsVisibleTo Include="cdx-agenda" />
     <InternalsVisibleTo Include="cdx-mail" />
     <InternalsVisibleTo Include="cdx-pilote" />
+    <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
   </ItemGroup>
 
 </Project>

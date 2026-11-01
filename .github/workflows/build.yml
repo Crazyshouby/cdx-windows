@@ -28,7 +28,7 @@ jobs:
       - name: Self-tests (bus, AudioLinker link, snapping, files, git)
         shell: pwsh
         run: |
-          foreach ($t in @(@('cdx-shell', '--selftest-bus'), @('cdx-shell', '--selftest-audio'), @('cdx-shell', '--selftest-snap'), @('cdx-shell', '--selftest-pilote'), @('cdx-explorer', '--selftest-fs'), @('cdx-repos', '--selftest-git'))) {
+          foreach ($t in @(@('cdx-shell', '--selftest-bus'), @('cdx-shell', '--selftest-audio'), @('cdx-shell', '--selftest-snap'), @('cdx-shell', '--selftest-pilote'), @('cdx-shell', '--selftest-spell'), @('cdx-explorer', '--selftest-fs'), @('cdx-repos', '--selftest-git'))) {
             $p = Start-Process "bin\$($t[0]).exe" -ArgumentList $t[1] -Wait -PassThru
             "$($t[0]) $($t[1]) : code $($p.ExitCode)"
             if ($p.ExitCode -ne 0) { Get-Content "$env:LOCALAPPDATA\CdxShell\selftest*.txt"; throw "$($t[1]) en échec" }

@@ -43,7 +43,7 @@ tests\              pilote.ps1 (Pilote contre fake_claude.py et fake_gmail.py : 
 
 ## Essais (aucune entrée simulée)
 
-- Auto-tests, sans fenêtre visible : `cdx-explorer --selftest-fs`, `--selftest-web` ; `cdx-shell --selftest-sys`, `--selftest-audio`, `--selftest-snap` (19 vérifications de l'aimantation) ; `cdx-browser --selftest-browser` ; `cdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables) ; `cdx-terminal --selftest-pty` (10 vérifications de la pseudo-console : sortie, code de sortie, UTF-8, redimensionnement, arrêt) ; `tests\terminal.ps1 -Bin <dossier>` (43 vérifications dans la vraie fenêtre isolée : shells, police et WebGL, couleurs de la charte, accent, onglets, volets, raccourcis, redimensionnement, titre, fermeture, dossier de départ, et avec `-ExplorerBin` l'Explorateur qui ouvre un onglet puis relance le terminal).
+- Auto-tests, sans fenêtre visible : `cdx-explorer --selftest-fs`, `--selftest-web` ; `cdx-shell --selftest-sys`, `--selftest-audio`, `--selftest-snap` (19 vérifications de l'aimantation), `--selftest-spell` (21 vérifications du correcteur orthographique) ; `cdx-browser --selftest-browser` ; `cdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables) ; `cdx-terminal --selftest-pty` (10 vérifications de la pseudo-console : sortie, code de sortie, UTF-8, redimensionnement, arrêt) ; `tests\terminal.ps1 -Bin <dossier>` (43 vérifications dans la vraie fenêtre isolée : shells, police et WebGL, couleurs de la charte, accent, onglets, volets, raccourcis, redimensionnement, titre, fermeture, dossier de départ, et avec `-ExplorerBin` l'Explorateur qui ouvre un onglet puis relance le terminal).
   Résultats dans `%LOCALAPPDATA%\CdxShell\selftest*.txt`.
 - Canal de contrôle : si `%LOCALAPPDATA%\CdxShell\debug.txt` existe au lancement, chaque programme ouvre un tube réservé à l'utilisateur courant
   (`cdx.shell.ctl`, `cdx.explorer.ctl`, `cdx.browser.ctl`, `cdx.repos.ctl`) pour lire son état et exécuter du JavaScript dans ses pages. `tests\navigateur.ps1` et
@@ -135,6 +135,28 @@ Claude Code en sous-processus plutôt que l'API ; un projet = fiche dans Notes +
 - **Essais** : `cdx-shell --selftest-pilote` (36 vérifications : l'analyseur sur des lignes réelles de Claude Code 2.1.316, la politique) ; `tests\pilote.ps1` (41 vérifications contre
   `tests\fake_claude.py`, un faux `claude -p` qui lance les vrais serveurs MCP et rejoue les scénarios : outils, navigateur piloté, accords automatiques et demandés, refus, question à choix,
   commande d'un programme, création d'un projet dans un coffre jetable, lecture du courrier contre un faux Gmail, mémoire dans le coffre relue après reprise, redémarrage et reprise, arrêt). Rien ne touche au vrai Claude Code ni aux vrais programmes.
+
+## Correcteur orthographique (01/11/2026)
+
+Décision du 01/11/2026 : un correcteur à nous plutôt que celui de Chromium. Celui de WebView2 s'appuie sur le correcteur de Windows et sa langue suit celle de
+l'environnement, pas le texte (bogue WebView2 n° 5294, suivi chez Microsoft) ; surtout, avec nos menus (AreDefaultContextMenusEnabled = false) l'événement
+ContextMenuRequested n'est jamais levé (c'est écrit dans sa spécification), donc ses suggestions n'atteignent jamais la page. Vérifié par un programme d'essai le 01/11/2026.
+- **Le moteur** (`Cdx.Host/Spell.cs`) : Hunspell en C# pur (paquet WeCantSpell.Hunspell 7.0.1) et le dictionnaire français de Dicollecte 7.7 (`web\dict\fr` : `fr.aff`, `fr.dic`,
+  `README_dict_fr.txt`, licence MPL 2.0 ; le dictionnaire de LibreOffice et de Firefox, pris dans le dépôt LibreOffice/dictionaries). Chargé en arrière-plan au premier mot (270 ms),
+  partagé par les fenêtres d'un programme. Hunspell connaît toutes les formes conjuguées ; il ne lit pas la phrase (les accords sont de la grammaire, pas de l'orthographe).
+  L'hôte ajoute les élisions (« l'école », « qu'il », apostrophe droite ou typographique) et les mots composés par trait d'union dont chaque partie existe. Les mots ajoutés vont dans
+  `dictionnaire-perso.txt` du dossier des données (une ligne par mot) ; `CDX_DICT_DIR` désigne un autre dossier de dictionnaire (essais).
+- **Le contrat avec les pages** (servi par `HostForm` pour tous les programmes, avant l'application) : `sp.check {id, words}` → `sp.result {id, bad}` ; `sp.suggest {id, word}` →
+  `sp.suggestions {id, word, list}` ; `sp.add {word}` → `sp.added {word}` ; `sp.off` quand il n'y a pas de dictionnaire.
+- **La page** (`web\cdx\cdx-spell.js`, composant de la charte, canonique dans cdx-ui) : un calque posé sous la zone de texte (même police, même largeur utile, mêmes retours à la ligne,
+  texte transparent) porte les mots inconnus soulignés en rouge ondulé ; la zone de texte devient transparente et défile avec lui. Jamais vérifiés : adresses, mots avec chiffres, sigles,
+  lettres seules, le mot en cours de frappe, et avec l'option `markdown` le code, les liens `[[…]]` et `[…](…)`, les #étiquettes. Clic droit sur un mot souligné : les suggestions
+  (huit au plus), « Ajouter au dictionnaire », « Ignorer ici », puis Annuler / Rétablir / Couper / Copier / Tout sélectionner (ces actions seules ailleurs dans la zone).
+  Un mot choisi remplace l'autre par `insertText` (l'historique Annuler est gardé).
+- **Où** : l'éditeur de Notes (Réglages > Affichage > Correcteur orthographique), le message de Courrier et la zone de saisie de Pilote (Réglages > Correcteur orthographique) ;
+  réglage gardé par programme, en marche par défaut.
+- **Essais** : `cdx-shell --selftest-spell` (21 vérifications : mots, formes fausses, élisions, traits d'union, suggestions, dictionnaire personnel jetable, contrat des pages) et
+  `tests/spell.test.html` de cdx-ui (23 vérifications dans Chrome headless contre un faux hôte : découpage, calque, mot du curseur, menu, remplacement, ajout, arrêt, retrait, sp.off).
 
 ## Courrier (lot 5, 01/11/2026)
 `src\Cdx.Mail\` (**cdx-mail**, dixième programme, tuile « Courrier », `cdx:courrier`, portée Google `gmail.modify` ajoutée au compte de la suite) : `Gmail.cs` (lecture d'un message de

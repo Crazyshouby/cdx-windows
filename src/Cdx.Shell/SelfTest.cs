@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Text;
 using System.Text.Json;
@@ -535,6 +536,53 @@ static class SelfTest
         try { Directory.Delete(dir, true); } catch { }
         lines.Add(bad == 0 ? "TOUT EST BON" : $"{bad} vérification(s) en échec");
         File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-bus.txt"), lines);
+        Environment.ExitCode = bad == 0 ? 0 : 1;
+    }
+
+    // cdx-shell.exe --selftest-spell : le correcteur orthographique (Cdx.Host/Spell.cs) sur le dictionnaire livré (web/dict/fr, Dicollecte) et un dictionnaire
+    // personnel jetable (jamais le vrai dictionnaire-perso.txt) ; puis le contrat des pages (cdx-spell.js : sp.check, sp.suggest, sp.add). Résultat dans selftest-spell.txt.
+    public static void RunSpell()
+    {
+        var lines = new List<string>(); int bad = 0;
+        void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
+        string perso = Path.Combine(Path.GetTempPath(), "cdx-selftest-perso-" + Guid.NewGuid().ToString("N")[..8] + ".txt");
+        try
+        {
+            Spell.PersonalFile = perso;
+            Check("le dictionnaire français est livré (web/dict/fr : fr.dic, fr.aff)", Spell.Available);
+            var sw = Stopwatch.StartNew(); Spell.Load().Wait(); lines.Add($"        chargement : {sw.ElapsedMilliseconds} ms");
+            Check("dictionnaire chargé", Spell.Ready);
+            Check("mots connus : bonjour, Bonjour (début de phrase), BONJOUR, été, mangeaient, peut-être, aujourd'hui, Paris", Spell.Check("bonjour") && Spell.Check("Bonjour") && Spell.Check("BONJOUR") && Spell.Check("été") && Spell.Check("mangeaient") && Spell.Check("peut-être") && Spell.Check("aujourd'hui") && Spell.Check("Paris"));
+            Check("formes qui n'existent pas : marchée, mangaient, orthografe", !Spell.Check("marchée") && !Spell.Check("mangaient") && !Spell.Check("orthografe"));
+            Check("élisions : l'école, qu'il, d’après (apostrophe typographique), jusqu'au, n'importe", Spell.Check("l'école") && Spell.Check("qu'il") && Spell.Check("d’après") && Spell.Check("jusqu'au") && Spell.Check("n'importe"));
+            Check("élision d'un mot inconnu : l'écolle reste une faute", !Spell.Check("l'écolle"));
+            Check("trait d'union : dis-moi (chaque partie existe) ; dis-mouah non", Spell.Check("dis-moi") && !Spell.Check("dis-mouah"));
+            var sug = Spell.Suggest("marchée"); lines.Add("        suggestions pour « marchée » : " + string.Join(", ", sug));
+            Check("suggestions pour « marchée » : « marché » en tête, huit au plus", sug.Count > 0 && sug.Count <= 8 && sug.Take(3).Contains("marché"));
+            var sug2 = Spell.Suggest("orthografe"); lines.Add("        suggestions pour « orthografe » : " + string.Join(", ", sug2));
+            Check("suggestion pour « orthografe » : orthographe", sug2.Contains("orthographe"));
+            Check("un mot connu n'a pas besoin de suggestion, un mot vide non plus", Spell.Suggest("").Count == 0);
+            Check("« cdx » est inconnu avant l'ajout", !Spell.Check("cdx") && !Spell.Check("Cdx"));
+            Spell.Add("cdx");
+            Check("ajouté au dictionnaire personnel : connu, avec sa majuscule de début de phrase, et écrit dans le fichier", Spell.Check("cdx") && Spell.Check("Cdx") && File.ReadAllText(perso).Trim() == "cdx");
+            Spell.Add("cdx"); Check("ajouté deux fois : une seule ligne", File.ReadAllText(perso).Trim() == "cdx");
+            // le contrat des pages
+            string[] Bad(object reply) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(reply)); return d.RootElement.GetProperty("bad").EnumerateArray().Select(x => x.GetString()).ToArray(); }
+            var r1 = Spell.Reply("""{"cmd":"sp.check","id":"sp1","words":["bonjour","marchée","cdx","Orthografe","l'école"]}""");
+            string j1 = JsonSerializer.Serialize(r1);
+            Check("sp.check : seuls les mots inconnus reviennent, avec l'identifiant", j1.Contains("\"type\":\"sp.result\"") && j1.Contains("\"id\":\"sp1\"") && Bad(r1).SequenceEqual(new[] { "marchée", "Orthografe" }));
+            var r2 = JsonSerializer.Serialize(Spell.Reply("""{"cmd":"sp.suggest","id":"sp2","word":"orthografe"}"""));
+            Check("sp.suggest : la liste des suggestions", r2.Contains("\"type\":\"sp.suggestions\"") && r2.Contains("\"id\":\"sp2\"") && r2.Contains("orthographe"));
+            var r3 = JsonSerializer.Serialize(Spell.Reply("""{"cmd":"sp.add","word":"Valentinois"}"""));
+            Check("sp.add : le mot est ajouté et confirmé", r3.Contains("\"type\":\"sp.added\"") && Spell.Check("Valentinois") && File.ReadAllText(perso).Contains("Valentinois"));
+            Check("sp.add d'un mot vide : rien", Spell.Reply("""{"cmd":"sp.add","word":"  "}""") == null);
+            Check("un message d'une autre nature ou illisible : null (il va à l'application)", Spell.Reply("""{"cmd":"n.read","path":"a"}""") == null && Spell.Reply("pas du json") == null && Spell.Reply("""{"cmd":"sp.quoi"}""") == null);
+            Check("sp.check d'une liste vide : aucun mot", Bad(Spell.Reply("""{"cmd":"sp.check","id":"sp3","words":[]}""")).Length == 0);
+        }
+        catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
+        try { File.Delete(perso); } catch (Exception) { }
+        lines.Add(bad == 0 ? "TOUT EST BON" : $"{bad} vérification(s) en échec");
+        File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-spell.txt"), lines);
         Environment.ExitCode = bad == 0 ? 0 : 1;
     }
 

@@ -33,6 +33,7 @@ static class Program
         if (args.Length > 0 && args[0] == "--selftest-tasks") { SelfTest.RunTasks(); return; }
         if (args.Length > 0 && args[0] == "--selftest-snap") { SelfTest.RunSnap(); return; }
         if (args.Length > 0 && args[0] == "--selftest-pilote") { SelfTest.RunPilot(); return; }
+        if (args.Length > 0 && args[0] == "--selftest-spell") { SelfTest.RunSpell(); return; }
 
         if (!SingleInstance.Acquire("shell", out var mutex)) return;
         using var _ = mutex;

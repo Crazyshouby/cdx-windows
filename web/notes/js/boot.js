@@ -1,5 +1,9 @@
 // Démarrage : réglages de la fenêtre (bouton hachuré), raccourcis, boutons, ouverture.
   // Les réglages de la fenêtre, derrière le bouton hachuré de la barre de titre (host.js : windowSettings) ; la suite y ajoute la couleur d'accent.
+  // Le correcteur orthographique (cdx-spell.js, dictionnaire dans l'hôte) sur l'éditeur ; réglage gardé (Affichage > Correcteur orthographique).
+  let spell = ls('spell', true); const spellEd = window.CdxSpell ? CdxSpell.attach($('ed'), { markdown: true, enabled: spell }) : null;
+  const setSpell = on => { spell = on; lsSet('spell', on); if (spellEd) spellEd.enable(on); };
+
   windowSettings(() => [
     ['Affichage', null, { sub: () => [
       ['Édition seule', () => setMode('edit'), { check: mode === 'edit' }],
@@ -7,6 +11,7 @@
       ['Aperçu seul', () => setMode('view'), { check: mode === 'view' }],
       null,
       ['Retour à la ligne', () => setWrap(!wrap), { check: wrap }],
+      ['Correcteur orthographique', () => setSpell(!spell), { check: spell }],
       null,
       ['Volet d’information (plan, liens, étiquettes)', () => setInfo(!infoOpen), { check: infoOpen }],
       ['Graphe dans une colonne (à côté de l’éditeur)', () => setGraphCol(!graphCol), { check: graphCol }],

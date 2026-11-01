@@ -48,7 +48,8 @@ class HostForm : Form
         c.WebMessageReceived += (s, e) =>
         {
             DroppedPaths = e.AdditionalObjects?.OfType<CoreWebView2File>().Select(f => f.Path).ToArray();
-            try { app.OnMessage(this, e.WebMessageAsJson); } finally { DroppedPaths = null; }
+            // les messages du correcteur orthographique (cdx-spell.js : sp.check, sp.suggest, sp.add) sont servis par l'hôte commun (Spell.cs)
+            try { if (!Spell.Handle(this, e.WebMessageAsJson)) app.OnMessage(this, e.WebMessageAsJson); } finally { DroppedPaths = null; }
         };
         c.Navigate("https://cdx.shell/" + page);
     }

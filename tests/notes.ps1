@@ -81,6 +81,23 @@ try {
   Js "document.querySelector('#pv input.task').click()" | Out-Null
   Check "cocher une tâche dans l'aperçu change la ligne du texte, puis le fichier" ((Until { Has (ReadV 'Alpha.md') '- [x] première' } 6000) -and (Has (Js "document.getElementById('ed').value") '- [x] première'))
 
+  # ---------- correcteur orthographique (cdx-spell.js, Cdx.Host/Spell.cs, dictionnaire web/dict/fr) ----------
+  Js "const e = document.getElementById('ed'); e.value = 'Bonjour marchée hier.'; e.blur(); e.dispatchEvent(new Event('input'))" | Out-Null
+  Check "un mot inconnu est souligné par le calque (le dictionnaire est chargé par l'hôte au premier mot), pas les mots connus" ((Until { (Js "document.querySelectorAll('.cdx-spell mark').length") -eq '1' } 10000) -and ((Js "document.querySelector('.cdx-spell mark').textContent") -eq 'marchée'))
+  Js "const m = document.querySelector('.cdx-spell mark'), r = m.getBoundingClientRect(); document.getElementById('ed').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 3, clientY: r.top + r.height / 2 }))" | Out-Null
+  Check "clic droit sur le mot : le menu de la charte propose « marché » parmi les suggestions, puis « Ajouter au dictionnaire »" (Until { ('|' + (Js "[...document.querySelectorAll('.menu[data-cdx] .menu-item')].map(i => i.textContent).join('|')") + '|') -like '*|marché|*|Ajouter au dictionnaire|*' } 5000)
+  Js "[...document.querySelectorAll('.menu[data-cdx] .menu-item')].find(i => i.textContent === 'marché').click()" | Out-Null
+  Check "choisir la suggestion corrige le texte et retire le soulignement" ((Until { (Js "document.getElementById('ed').value") -eq 'Bonjour marché hier.' } 3000) -and (Until { (Js "document.querySelectorAll('.cdx-spell mark').length") -eq '0' } 3000))
+  Js "const e = document.getElementById('ed'); e.value = 'Le mot Zorglub.'; e.blur(); e.dispatchEvent(new Event('input'))" | Out-Null
+  Check "« Zorglub » est souligné" (Until { (Js "document.querySelector('.cdx-spell mark') ? document.querySelector('.cdx-spell mark').textContent : ''") -eq 'Zorglub' } 6000)
+  Js "const m = document.querySelector('.cdx-spell mark'), r = m.getBoundingClientRect(); document.getElementById('ed').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 3, clientY: r.top + r.height / 2 }))" | Out-Null
+  Until { (Js "document.querySelectorAll('.menu[data-cdx] .menu-item').length") -gt 0 } 5000 | Out-Null
+  Js "[...document.querySelectorAll('.menu[data-cdx] .menu-item')].find(i => i.textContent === 'Ajouter au dictionnaire').click()" | Out-Null
+  Check "« Ajouter au dictionnaire » : plus de soulignement, le mot est dans dictionnaire-perso.txt du dossier de données d'essai" ((Until { (Js "document.querySelectorAll('.cdx-spell mark').length") -eq '0' } 5000) -and (Until { (Test-Path "$data\dictionnaire-perso.txt") -and ((Get-Content "$data\dictionnaire-perso.txt" -Raw) -match 'Zorglub') } 3000))
+  Js "const e = document.getElementById('ed'); e.value = 'Un zorglub en minuscule.'; e.blur(); e.dispatchEvent(new Event('input'))" | Out-Null
+  Start-Sleep -Milliseconds 800
+  Check "un mot du dictionnaire personnel n'est plus souligné, même en minuscules" ((Js "document.querySelectorAll('.cdx-spell mark').length") -eq '0')
+
   # ---------- aides d'écriture ----------
   Js "const e = document.getElementById('ed'); e.value = '- un'; e.focus(); e.setSelectionRange(4, 4); e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))" | Out-Null
   Check "Entrée dans une liste : l'élément suivant est préparé" ((Until { (Js "document.getElementById('ed').value") -eq "- un`n- " } 3000))
