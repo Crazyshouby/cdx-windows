@@ -31,7 +31,7 @@ function Open-Pilote { $p = Start-Process "$Bin\cdx-pilote.exe" -ArgumentList '-
 function Send([string]$text) { $j = @{ cmd = 'pl.send'; text = $text } | ConvertTo-Json -Compress; Ctl "cmd $j" | Out-Null }
 function WaitIdle([int]$ms = 30000) { Until { $s = St; $s.current -and -not ($s.conversations | Where-Object { $_.id -eq $s.current }).busy } $ms }
 function LastAssistant { ($(Items) | Where-Object { $_.kind -eq 'assistant' } | Select-Object -Last 1).text }
-$started = @()
+$started = @(); $launchedBefore = @()
 try {
   $srv = Start-Process python -ArgumentList '-m', 'http.server', $port, '--bind', '127.0.0.1', '--directory', $www -PassThru -WindowStyle Hidden; $started += $srv; Start-Sleep 1
 
@@ -107,6 +107,7 @@ try {
 
   "8. redémarrage : la conversation et la session sont retrouvées (--resume)"
   $conv = (St).conversations[0]; $turnsFile = "$data\fake-claude-$($conv.session).txt"
+  $launchedBefore = @((St).launched)   # le nouveau Pilote ne connaîtra pas le navigateur lancé par l'ancien : on le note pour le fermer à la fin
   $before = (Get-Content $turnsFile).Count
   $app.CloseMainWindow() | Out-Null; if (-not $app.WaitForExit(5000)) { $app.Kill() }; Start-Sleep 1
   $app = Open-Pilote; $started += $app
@@ -134,7 +135,7 @@ try {
   Check "suppression : il n'en reste qu'une, son fichier a disparu" ((Until { (St).conversations.Count -eq 1 } 5000) -and -not (Test-Path "$data\pilote\$del.json"))
 }
 finally {
-  foreach ($pid2 in @((St).launched)) { if ($pid2) { try { Stop-Process -Id $pid2 -Force -ErrorAction SilentlyContinue } catch { } } }
+  foreach ($pid2 in @((St).launched) + @($launchedBefore)) { if ($pid2) { try { Stop-Process -Id $pid2 -Force -ErrorAction SilentlyContinue } catch { } } }
   foreach ($p in $started) { try { if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } } catch { } }
   Start-Sleep 1
   Get-Process python -ErrorAction SilentlyContinue | Where-Object { try { $_.CommandLine -match 'fake_claude.py' -and $_.CommandLine -match [regex]::Escape($data) } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue
