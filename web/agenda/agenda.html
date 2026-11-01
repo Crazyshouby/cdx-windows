@@ -78,6 +78,7 @@
 <script src="/cdx/cdx-bridge.js"></script>
 <script src="/cdx/cdx-frame.js"></script>
 <script src="/cdx/cdx-split.js"></script>
+<script src="/cdx/cdx-spell.js"></script>
 <script src="/cdx/host.js"></script>
 </head>
 <body>
@@ -222,6 +223,7 @@
       <label>Description</label><textarea class="text-input" id="fd">${esc(e ? e.description : '')}</textarea></div>
       <div class="btns"><button class="primary" id="save">Enregistrer</button><button class="btn" id="cancel">Annuler</button></div>`);
     d.querySelector('#vt').textContent = e ? 'Modifier l’événement' : 'Nouvel événement'; d.querySelector('#ft').focus();
+    if (window.CdxSpell) CdxSpell.attach(d.querySelector('#fd'), { enabled: spell, auto: autoc, grammar: '/cdx/grammaire-worker.js', grammarEnabled: gram });   // le correcteur sur la description (calque retiré avec le voile)
     d.querySelector('#fall').onchange = () => { const on = d.querySelector('#fall').checked; d.querySelector('#fst').disabled = on; d.querySelector('#fet').disabled = on; };
     d.querySelector('#cancel').onclick = closeVeil;
     d.querySelector('#save').onclick = () => {
@@ -258,7 +260,17 @@
   });
 
   // ---- réglages de la fenêtre ----
+  // le correcteur (cdx-spell.js) sur la description d'un événement ; réglages gardés
+  let spell = ls('correcteur', true), autoc = ls('autocorrection', true), gram = ls('grammaire', true);
+  const spellTa = () => veil && veil.querySelector('#fd') && veil.querySelector('#fd').__cdxSpell;
+  const setSpell = on => { spell = on; lsSet('correcteur', on); const t = spellTa(); if (t) t.enable(on); };
+  const setAuto = on => { autoc = on; lsSet('autocorrection', on); const t = spellTa(); if (t) t.auto(on); };
+  const setGram = on => { gram = on; lsSet('grammaire', on); const t = spellTa(); if (t) t.grammar(on); };
   windowSettings(() => [
+    ['Correcteur orthographique', () => setSpell(!spell), { check: spell }],
+    ['Correction automatique à la fin du mot', () => setAuto(!autoc), { check: autoc, disabled: !spell }],
+    ['Grammaire (accords, conjugaison)', () => setGram(!gram), { check: gram }],
+    null,
     ['Agendas affichés', null, { sub: () => ev.calendars.length ? ev.calendars.map(c => [c.name, () => post({ cmd: 'ag.cal.toggle', id: c.id, on: !c.on }), { check: c.on }]) : [['(aucun)', null, { disabled: true }]] }],
     ['Nouvelle liste de tâches…', () => { const v = prompt('Nom de la liste'); if (v && v.trim()) post({ cmd: 'ag.list.add', title: v.trim() }); }, { disabled: !state.connected }],
     null,

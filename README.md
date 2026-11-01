@@ -183,8 +183,9 @@ ContextMenuRequested n'est jamais levé (c'est écrit dans sa spécification), d
   pas la typographie ni le style (apostrophes droites, espaces, majuscules… seraient du bruit). Les erreurs sont soulignées en pointillé « attention » (`--warn`) ; clic droit :
   le message de Grammalecte en titre, les suggestions, « Ignorer ici » (règle + mot, le temps de la fenêtre). Grammalecte ne signale qu'une faute à la fois par accord
   (« Les chat mange » : « chat » d'abord ; « mange » une fois « chats » écrit, puisqu'il s'accordait avec le singulier).
-- **Où** : l'éditeur de Notes (Réglages > Affichage > Correcteur orthographique, Grammaire), le message de Courrier et la zone de saisie de Pilote (Réglages > Correcteur orthographique,
-  Grammaire) ; réglages gardés par programme, en marche par défaut.
+- **Où** : l'éditeur de Notes (Réglages > Affichage > Correcteur orthographique, Grammaire), le message de Courrier, la zone de saisie de Pilote et la description d'un événement
+  d'Agenda (Réglages > Correcteur orthographique, Correction automatique, Grammaire) ; réglages gardés par programme, en marche par défaut. Les autres programmes n'ont pas de zone
+  de texte multiligne (les champs d'une ligne, comme un titre ou un nom, ne sont pas corrigés).
 - **Essais** : `cdx-shell --selftest-spell` (24 vérifications : mots, formes fausses, élisions, traits d'union, suggestions, dictionnaire personnel jetable, contrat des pages) et
   `tests/spell.test.html` de cdx-ui (44 vérifications dans Chrome headless contre un faux hôte et un faux worker : découpage, calque, mot du curseur, menus, remplacement, ajout, correction
   automatique, grammaire, « Ignorer ici », arrêt, retrait, sp.off) ; `tests\notes.ps1` vérifie la chaîne entière dans la vraie fenêtre (Hunspell et Grammalecte : soulignement, menu, correction

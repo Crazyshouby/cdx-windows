@@ -55,6 +55,7 @@ class Shell : IHostApp
         TaskbarState.AutoHide();
         InstallKeyboardHook();
         Host.StartControlPipe("shell", Bar, HandleControl, () => cleaned);
+        Host.StartPilotPipe("shell", Bar, HandleControl, () => cleaned, "state", "notifs", "pins", "audio", "tray");   // Pilote lit l'état de la barre ; jamais launch ni evalbar
 
         env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
         await Bar.InitWebAsync(env, root, "shell/bar.html?theme=" + theme, scale);
@@ -349,6 +350,7 @@ class Shell : IHostApp
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
         switch (c)
         {
+            case "state": return JsonSerializer.Serialize(new { pins = pinStore.Items.Count, onBar = pinStore.OnBar.Count, notifications = notifications.Count, unread = unreadNotifs, audio = audio == null ? "aucune liaison" : audio.Connected ? "connecté" : "déconnecté", tray = tray?.Count ?? 0 });
             case "launch": Launch(a); return "ok";
             case "evalbar": return await Bar.Web.CoreWebView2.ExecuteScriptAsync(a);   // exécute du JavaScript dans la page de la barre (tests)
             case "notifs": return notifications.Count + "/" + unreadNotifs;

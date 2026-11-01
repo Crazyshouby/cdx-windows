@@ -245,6 +245,13 @@ function onKey(p, e) {
   return true;
 }
 
+// Les réglages de la fenêtre (bouton hachuré de la barre de titre, host.js) : les mêmes actions que le menu d'un volet ; la suite y ajoute le thème.
+windowSettings(() => [
+  ['Nouvel onglet', () => newTab(), { key: 'Ctrl+Maj+T' }],
+  ['Séparer à droite', () => { if (active && active.focus) splitPane(active.focus, 'h'); }, { key: 'Alt+Maj++', disabled: !(active && active.focus) }],
+  ['Séparer en bas', () => { if (active && active.focus) splitPane(active.focus, 'v'); }, { disabled: !(active && active.focus) }],
+]);
+
 function paneMenu(p, x, y) {
   const back = f => () => { f(); setTimeout(() => (bySid.has(p.sid) ? p : active?.focus)?.term?.focus(), 0); };
   CdxFrame.menu([
