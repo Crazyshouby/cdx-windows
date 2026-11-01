@@ -82,7 +82,7 @@ class H(BaseHTTPRequestHandler):
                 if lid and lid not in labels: continue
                 if not lid and not spam and labels & {"TRASH", "SPAM"}: continue
                 if qq and not matches(ms, qq): continue
-                out.append({"id": tid, "snippet": ms[-1]["snippet"], "historyId": "1"})
+                out.append({"id": tid, "snippet": ms[-1]["snippet"], "historyId": str(len(ms)) + "-" + ",".join(sorted(labels))})
             return self.send_json({"threads": out[:int(q.get("maxResults", ["50"])[0])], "resultSizeEstimate": len(out)})
         m = re.match(r"^/gmail/v1/users/me/threads/([^/]+)$", p)
         if m:

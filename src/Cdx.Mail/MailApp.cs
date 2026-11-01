@@ -21,6 +21,11 @@ sealed class MailApp : ApplicationContext, IHostApp
     string curLabel = "INBOX", curQuery = "";
     List<object> lastThreads; List<object> lastLabels;
     int lastUnread = -1;
+    // Le quota Gmail se compte en unités par minute et par utilisateur : threads.get en coûte 10, labels.get 1. On relit donc un fil seulement si sa version
+    // (historyId) a changé depuis la dernière fois, on ne demande les compteurs que pour la boîte de réception et le libellé ouvert, et on s'arrête 30 s quand Google dit stop.
+    readonly Dictionary<string, (string history, object summary)> threadCache = new();
+    readonly Dictionary<string, (int unread, int total)> counts = new();
+    DateTime quotaUntil = DateTime.MinValue; int loadSeq;
     static readonly string[] Scopes = { GoogleAuth.ScopeGmail };
     static string CacheFile => Path.Combine(Host.DataDir, "courrier-cache.json");
 
@@ -33,6 +38,7 @@ sealed class MailApp : ApplicationContext, IHostApp
             using var d = JsonDocument.Parse(File.ReadAllText(CacheFile)); var r = d.RootElement;
             if (r.TryGetProperty("threads", out var t)) lastThreads = JsonSerializer.Deserialize<List<object>>(t.GetRawText());
             if (r.TryGetProperty("labels", out var l)) lastLabels = JsonSerializer.Deserialize<List<object>>(l.GetRawText());
+            if (r.TryGetProperty("cache", out var c)) foreach (var e in c.EnumerateObject()) threadCache[e.Name] = (e.Value.GetProperty("h").GetString(), JsonSerializer.Deserialize<object>(e.Value.GetProperty("s").GetRawText()));
         }
         catch { }
         if (theme == null) watch = Suite.Watch(this.theme, a => { this.theme = a; form?.Send(new { type = "theme", value = a }); });
@@ -41,7 +47,10 @@ sealed class MailApp : ApplicationContext, IHostApp
 
     public bool Closing { get; private set; }
     protected override void ExitThreadCore() { Closing = true; poll.Dispose(); watch?.Dispose(); base.ExitThreadCore(); }
-    void SaveCache() { try { File.WriteAllText(CacheFile, JsonSerializer.Serialize(new { threads = lastThreads, labels = lastLabels })); } catch (Exception ex) { Host.Log("cache : " + ex.Message); } }
+    void SaveCache() { try { File.WriteAllText(CacheFile, JsonSerializer.Serialize(new { threads = lastThreads, labels = lastLabels, cache = threadCache.ToDictionary(k => k.Key, k => new { h = k.Value.history, s = k.Value.summary }) })); } catch (Exception ex) { Host.Log("cache : " + ex.Message); } }
+    // Google a refusé pour quota : on attend 30 s avant tout nouvel appel, et on le dit.
+    bool QuotaHold() { if (DateTime.UtcNow >= quotaUntil) return false; form?.Send(new { type = "error", text = $"Quota Google dépassé : nouvel essai possible dans {(int)(quotaUntil - DateTime.UtcNow).TotalSeconds + 1} s." }); return true; }
+    bool IsQuota(Exception ex) { if (ex is GoogleApiException g && (g.Status == 429 || g.Message.Contains("Quota exceeded", StringComparison.OrdinalIgnoreCase))) { quotaUntil = DateTime.UtcNow.AddSeconds(30); return true; } return false; }
 
     public async void Open()
     {
@@ -69,7 +78,7 @@ sealed class MailApp : ApplicationContext, IHostApp
 
     // ---------- état ----------
     void PushState() => form?.Send(new { type = "state", connected = GoogleAuth.IsConnected && GoogleAuth.HasScope(GoogleAuth.ScopeGmail), email = GoogleAuth.Email, hasClient = GoogleAuth.HasClient, busy, error = lastError, clientFile = GoogleAuth.ClientFile, label = curLabel, q = curQuery });
-    void Fail(string what, Exception ex) { lastError = what + " : " + ex.Message; Host.Log(lastError); form?.Send(new { type = "error", text = lastError }); PushState(); }
+    void Fail(string what, Exception ex) { lastError = IsQuota(ex) ? what + " : quota Google dépassé (trop d'appels en une minute), nouvel essai dans 30 s." : what + " : " + ex.Message; Host.Log(what + " : " + ex.Message); form?.Send(new { type = "error", text = lastError }); PushState(); }
     bool Ready => GoogleAuth.IsConnected && GoogleAuth.HasScope(GoogleAuth.ScopeGmail);
     static string S(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : "";
     static int I(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
@@ -77,21 +86,17 @@ sealed class MailApp : ApplicationContext, IHostApp
     // ---------- libellés ----------
     async Task LoadLabelsAsync()
     {
-        if (!Ready) return;
+        if (!Ready || QuotaHold()) return;
         try
         {
             using var d = await GoogleAuth.ApiAsync(HttpMethod.Get, Gmail.Me + "/labels");
             var raw = d.RootElement.TryGetProperty("labels", out var ls) ? ls.EnumerateArray().Select(l => (id: S(l, "id"), name: S(l, "name"), type: S(l, "type"))).Where(l => !Gmail.Hidden(l.id)).ToList() : new();
-            // les compteurs (non lus) : un appel par libellé affiché, en parallèle
-            var counts = new Dictionary<string, (int unread, int total)>();
-            var gate = new SemaphoreSlim(6);
-            await Task.WhenAll(raw.Select(async l =>
+            // les compteurs : la boîte de réception et le libellé ouvert seulement (une unité chacun ; une boîte peut avoir des centaines de libellés)
+            foreach (var id in new[] { "INBOX", curLabel }.Distinct().Where(x => raw.Any(l => l.id == x)))
             {
-                await gate.WaitAsync();
-                try { using var g = await GoogleAuth.ApiAsync(HttpMethod.Get, Gmail.Me + "/labels/" + Uri.EscapeDataString(l.id)); lock (counts) counts[l.id] = (I(g.RootElement, "threadsUnread"), I(g.RootElement, "threadsTotal")); }
-                catch (Exception ex) { Host.Log("libellé " + l.id + " : " + ex.Message); }
-                finally { gate.Release(); }
-            }));
+                try { using var g = await GoogleAuth.ApiAsync(HttpMethod.Get, Gmail.Me + "/labels/" + Uri.EscapeDataString(id)); counts[id] = (I(g.RootElement, "threadsUnread"), I(g.RootElement, "threadsTotal")); }
+                catch (Exception ex) { Host.Log("libellé " + id + " : " + ex.Message); if (IsQuota(ex)) break; }
+            }
             var items = new List<object>();
             foreach (var id in Gmail.SystemOrder) { var l = raw.FirstOrDefault(x => x.id == id); if (l.id != null) items.Add(new { id, name = Gmail.LabelName(id, l.name), system = true, unread = counts.TryGetValue(id, out var c) ? c.unread : 0, total = counts.TryGetValue(id, out var c2) ? c2.total : 0 }); }
             items.Add(new { id = "ALL", name = "Tous les messages", system = true, unread = 0, total = 0 });
@@ -107,44 +112,52 @@ sealed class MailApp : ApplicationContext, IHostApp
     {
         string path = Gmail.Me + "/threads?maxResults=" + max + (label == "ALL" ? "" : "&labelIds=" + Uri.EscapeDataString(label)) + (label is "SPAM" or "TRASH" ? "&includeSpamTrash=true" : "") + (q.Length > 0 ? "&q=" + Uri.EscapeDataString(q) : "");
         using var d = await GoogleAuth.ApiAsync(HttpMethod.Get, path);
-        var ids = d.RootElement.TryGetProperty("threads", out var ts) ? ts.EnumerateArray().Select(t => S(t, "id")).ToList() : new();
-        var result = new object[ids.Count]; var gate = new SemaphoreSlim(8);
-        await Task.WhenAll(ids.Select(async (id, i) =>
+        var ids = d.RootElement.TryGetProperty("threads", out var ts) ? ts.EnumerateArray().Select(t => (id: S(t, "id"), history: S(t, "historyId"))).ToList() : new();
+        var result = new object[ids.Count]; var gate = new SemaphoreSlim(8); int fetched = 0;
+        await Task.WhenAll(ids.Select(async (th, i) =>
         {
+            string id = th.id;
+            if (threadCache.TryGetValue(id, out var cached) && cached.history == th.history && th.history.Length > 0) { result[i] = cached.summary; return; }   // inchangé depuis la dernière lecture : pas d'appel
             await gate.WaitAsync();
             try
             {
+                Interlocked.Increment(ref fetched);
                 using var t = await GoogleAuth.ApiAsync(HttpMethod.Get, Gmail.Me + "/threads/" + Uri.EscapeDataString(id) + "?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date");
                 var msgs = t.RootElement.TryGetProperty("messages", out var ms) ? ms.EnumerateArray().Select(Gmail.Parse).ToList() : new();
                 if (msgs.Count == 0) return;
                 var last = msgs.OrderBy(m => m.Date).Last();
                 var froms = msgs.Select(m => m.From).Where(f => f.Length > 0).Select(f => { var n = System.Text.RegularExpressions.Regex.Match(f, @"^""?([^""<]+?)""?\s*<"); return n.Success ? n.Groups[1].Value.Trim() : f; }).Distinct().ToList();
                 result[i] = new { id, subject = msgs[0].Subject.Length > 0 ? msgs[0].Subject : "(sans objet)", from = string.Join(", ", froms), snippet = last.Snippet, date = last.Date, count = msgs.Count, unread = msgs.Any(m => m.Unread), starred = msgs.Any(m => m.Starred), labels = msgs.SelectMany(m => m.Labels).Distinct().ToList() };
+                lock (threadCache) threadCache[id] = (th.history, result[i]);
             }
-            catch (Exception ex) { Host.Log("fil " + id + " : " + ex.Message); }
+            catch (Exception ex) { Host.Log("fil " + id + " : " + ex.Message); IsQuota(ex); }
             finally { gate.Release(); }
         }));
+        if (fetched > 0) Host.Log($"fils relus : {fetched} sur {ids.Count}");
         return result.Where(r => r != null).ToList();
     }
 
     async Task LoadThreadsAsync(string label, string q)
     {
         curLabel = label ?? "INBOX"; curQuery = q ?? "";
-        if (!Ready) { PushState(); return; }
+        if (!Ready || QuotaHold()) { PushState(); return; }
+        int seq = ++loadSeq;   // une lecture plus récente rend celle-ci caduque
         busy = true; PushState();
         try
         {
             var items = await FetchThreadsAsync(curLabel, curQuery);
-            if (curLabel == "INBOX" && curQuery.Length == 0) { lastThreads = items; SaveCache(); }
+            if (seq != loadSeq) return;
+            if (curLabel == "INBOX" && curQuery.Length == 0) lastThreads = items;
+            SaveCache();
             lastError = ""; form?.Send(new { type = "threads", label = curLabel, q = curQuery, items, fresh = true });
         }
-        catch (Exception ex) { Fail("Lecture des messages", ex); }
-        finally { busy = false; PushState(); }
+        catch (Exception ex) { if (seq == loadSeq) Fail("Lecture des messages", ex); }
+        finally { if (seq == loadSeq) { busy = false; PushState(); } }
     }
 
     async Task OpenThreadAsync(string id)
     {
-        if (!Ready || string.IsNullOrEmpty(id)) return;
+        if (!Ready || string.IsNullOrEmpty(id) || QuotaHold()) return;
         try
         {
             using var t = await GoogleAuth.ApiAsync(HttpMethod.Get, Gmail.Me + "/threads/" + Uri.EscapeDataString(id) + "?format=full");
@@ -159,7 +172,7 @@ sealed class MailApp : ApplicationContext, IHostApp
     // archive · trash · spam · inbox · read · unread · star · unstar
     async Task ActAsync(string id, string what)
     {
-        if (!Ready || string.IsNullOrEmpty(id)) return;
+        if (!Ready || string.IsNullOrEmpty(id) || QuotaHold()) return;
         try
         {
             string p = Gmail.Me + "/threads/" + Uri.EscapeDataString(id);
@@ -247,7 +260,7 @@ sealed class MailApp : ApplicationContext, IHostApp
         busy = true; lastError = ""; PushState();
         try { string err = await GoogleAuth.ConnectAsync(Scopes); if (err != null) { lastError = err; Host.Log("Google : " + err); } }
         finally { busy = false; PushState(); }
-        if (Ready) { await LoadLabelsAsync(); await LoadThreadsAsync("INBOX", ""); }
+        if (Ready) { await LoadThreadsAsync("INBOX", ""); await LoadLabelsAsync(); }
     }
 
     // ---------- messages de la page ----------
@@ -266,7 +279,7 @@ sealed class MailApp : ApplicationContext, IHostApp
                     PushState();
                     if (lastLabels != null) from.Send(new { type = "labels", items = lastLabels, fresh = false });
                     if (lastThreads != null) from.Send(new { type = "threads", label = "INBOX", q = "", items = lastThreads, fresh = false });
-                    if (Ready) { await LoadLabelsAsync(); await LoadThreadsAsync("INBOX", ""); }
+                    if (Ready) { await LoadThreadsAsync("INBOX", ""); await LoadLabelsAsync(); }
                     break;
                 case "ml.connect": await ConnectAsync(); break;
                 case "ml.disconnect": await GoogleAuth.DisconnectAsync(); lastThreads = null; lastLabels = null; SaveCache(); PushState(); break;
