@@ -72,23 +72,29 @@ class HostForm : Form
     // Un déplacement ou un redimensionnement est confié à Windows (WM_NCLBUTTONDOWN, Host.WindowCommand) ; pendant le geste, WM_MOVING / WM_SIZING
     // proposent un rectangle que l'on corrige : la fenêtre colle aux autres fenêtres de la suite (cdx-*, KIRC, AudioLinker) et aux bords de la zone de
     // travail de son écran. Les voisines sont relevées une fois, à l'entrée du geste (WM_ENTERSIZEMOVE).
-    List<Rectangle> snapOthers;
+    // Windows propose chaque rectangle à partir du DERNIER rendu (donc de la position aimantée), pas de la souris : une fenêtre collée serait ré-aimantée à chaque
+    // petit mouvement et ne se décollerait plus (vu le 01/11/2026). On tient donc le rectangle « libre » (ce qu'il serait sans aimantation) en lui ajoutant l'écart
+    // entre la proposition et le dernier rendu, et c'est lui qu'on aimante : au-delà de la distance d'attraction, la fenêtre se libère.
+    List<Rectangle> snapOthers; Rectangle snapFree, snapLast;
     protected override void WndProc(ref Message m)
     {
         base.WndProc(ref m);
         switch (m.Msg)
         {
-            case 0x0231: /* WM_ENTERSIZEMOVE */ snapOthers = SuiteWindows(Handle); break;
+            case 0x0231: /* WM_ENTERSIZEMOVE */ snapOthers = SuiteWindows(Handle); snapFree = snapLast = Bounds; break;
             case 0x0232: /* WM_EXITSIZEMOVE */ snapOthers = null; break;
             case 0x0216: /* WM_MOVING */
             case 0x0214: /* WM_SIZING */
                 if (snapOthers == null || WindowState != FormWindowState.Normal) break;
-                var rc = Marshal.PtrToStructure<RECT>(m.LParam); var r = Rectangle.FromLTRB(rc.Left, rc.Top, rc.Right, rc.Bottom);
+                var rc = Marshal.PtrToStructure<RECT>(m.LParam); var p = Rectangle.FromLTRB(rc.Left, rc.Top, rc.Right, rc.Bottom);
+                var r = Rectangle.FromLTRB(snapFree.Left + (p.Left - snapLast.Left), snapFree.Top + (p.Top - snapLast.Top), snapFree.Right + (p.Right - snapLast.Right), snapFree.Bottom + (p.Bottom - snapLast.Bottom));
+                snapFree = r;
                 double k = DeviceDpi / 96.0; int dist = (int)Math.Round(Snap.Dist * k), gap = (int)Math.Round(Snap.Gap * k);
                 var area = Screen.FromRectangle(r).WorkingArea;
                 var s = m.Msg == 0x0216 ? new Rectangle(Snap.Move(r, snapOthers, area, dist, gap), r.Size)
                     : Snap.Size(r, (int)m.WParam, snapOthers, area, dist, gap, Math.Max(1, MinimumSize.Width), Math.Max(1, MinimumSize.Height));
-                if (s != r) Marshal.StructureToPtr(new RECT { Left = s.Left, Top = s.Top, Right = s.Right, Bottom = s.Bottom }, m.LParam, false);
+                snapLast = s;
+                if (s != p) Marshal.StructureToPtr(new RECT { Left = s.Left, Top = s.Top, Right = s.Right, Bottom = s.Bottom }, m.LParam, false);
                 m.Result = (IntPtr)1;
                 break;
         }
