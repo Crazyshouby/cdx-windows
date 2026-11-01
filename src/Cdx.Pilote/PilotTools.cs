@@ -109,6 +109,8 @@ static class PilotTools
         new("mail_read", "Lit un fil du courrier : chaque message avec expéditeur, destinataires, date, texte (HTML converti) et noms des pièces jointes. Ne marque rien comme lu.", Obj(("id", "string", "Identifiant du fil donné par mail_search.")), true, a => Ok(MailRead(S(a, "id")))),
         new("agenda_events", "Les événements de l'agenda Google (programme Agenda, lancé au besoin) entre deux jours : agendas, événements (titre, début, fin, lieu, description).", Obj(("from", "string", "Premier jour, AAAA-MM-JJ."), ("to", "string", "Jour de fin (exclu), AAAA-MM-JJ.")), true, a => Ok(AgendaEvents(S(a, "from"), S(a, "to")))),
         new("agenda_tasks", "Les listes de tâches Google (programme Agenda) avec leurs tâches, échéances et état.", Obj(), true, a => Ok(AgendaTasks())),
+        new("app_restart", "Ferme un programme de la suite et le relance (sa fenêtre est fermée proprement : le navigateur retrouve sa session, Courrier et Agenda leur compte). À utiliser quand un outil répond que le programme tourne dans une version antérieure. Toujours soumis à l'accord de Valentin.",
+            Obj(("app", "string", "explorer, browser, terminal, notes, repos, agenda, courrier ou transfers.")), false, a => Ok(AppRestart(S(a, "app")))),
         new("notify", "Une notification dans la barre CDX (titre court, texte).", Obj(("title", "string", "Titre (80 caractères au plus)."), ("text", "string", "(facultatif) Texte (400 caractères au plus).")), false, a => Ok(Notify(S(a, "title"), S(a, "text", false)))),
         new("project_folder", "Crée le dossier d'un projet dans le dossier des projets de Valentin (Dev\\), avec un dépôt git initialisé, et rend son chemin. S'il existe déjà, le dit sans rien toucher. La fiche du projet se crée à part avec projects_create (notes).",
             Obj(("name", "string", "Nom du projet (deviendra le nom du dossier)."), ("git", "boolean", "(facultatif) Initialiser un dépôt git (oui par défaut).")), false, a => Ok(ProjectFolder(S(a, "name"), !(a["git"] is JsonValue gv && gv.TryGetValue<bool>(out var g)) || g))),
@@ -161,7 +163,10 @@ static class PilotTools
         string a = BusName(app); if (!AppNames.Contains(app) && app != "mail") return "ERREUR programme inconnu : " + app;
         if (!PipeExists(a)) return "ERREUR " + app + " ne tourne pas (app_open le lance).";
         if (!PipeExistsFull(Bus.PipeName(a) + ".pilot")) return "ERREUR " + app + " tourne dans une version antérieure, sans canal de pilotage : il faut le fermer et le relancer.";
-        return Host.Pilot(a, line) ?? "ERREUR " + app + " ne répond pas";
+        string r = Host.Pilot(a, line) ?? "ERREUR " + app + " ne répond pas";
+        // un programme lancé avant une mise à jour n'a pas la commande : le dire, avec le remède (app_restart, que Valentin confirme)
+        if (r.StartsWith("ERREUR commande refusée sur le canal de pilotage")) r = "ERREUR " + app + " tourne dans une version antérieure, sans cette commande : il faut le fermer et le relancer (outil app_restart, avec l'accord de Valentin).";
+        return r;
     }
 
     static string SuiteState()
@@ -220,6 +225,22 @@ static class PilotTools
         string cmd = o["cmd"].GetValue<string>(); if (cmd.StartsWith("win.")) throw new ArgException("Les commandes de fenêtre ne passent pas par là.");
         string r = Pilot(appName, "cmd " + o.ToJsonString());
         return r;
+    }
+
+    static string AppRestart(string appName)
+    {
+        if (!AppNames.Contains(appName)) throw new ArgException("Programme inconnu : " + appName + ".");
+        string a = BusName(appName);
+        if (PipeExists(a))
+        {
+            if (PipeExistsFull(Bus.PipeName(a) + ".pilot")) Host.Pilot(a, "cmd {\"cmd\":\"win.close\"}", 5000);
+            else return "ERREUR " + appName + " tourne dans une version sans canal de pilotage : ferme-le toi-même (sa fenêtre), puis app_open le relancera.";
+            var t0 = DateTime.UtcNow;
+            while (PipeExists(a) && (DateTime.UtcNow - t0).TotalSeconds < 12) Thread.Sleep(250);
+            if (PipeExists(a)) return "ERREUR " + appName + " ne s'est pas fermé (plusieurs fenêtres, ou une boîte ouverte) : ferme-le toi-même, puis app_open.";
+            Thread.Sleep(800);
+        }
+        return EnsureRunning(a, null) ? "ok : " + appName + " relancé" : "ERREUR impossible de relancer " + appName;
     }
 
     static string Notify(string title, string text)

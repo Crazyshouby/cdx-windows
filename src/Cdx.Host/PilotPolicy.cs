@@ -30,7 +30,7 @@ static class PilotPolicy
         "mcp__cdx-suite__app_open", "mcp__cdx-suite__browser_open", "mcp__cdx-suite__browser_navigate", "mcp__cdx-suite__browser_click", "mcp__cdx-suite__browser_back", "mcp__cdx-suite__notify", "mcp__cdx-suite__project_folder",
     };
     // Toujours confirmé, à tous les niveaux : irréversible ou visible de l'extérieur.
-    static readonly string[] AlwaysAsk = { "mcp__cdx-notes__notes_trash", "AskUserQuestion" };
+    static readonly string[] AlwaysAsk = { "mcp__cdx-notes__notes_trash", "mcp__cdx-suite__app_restart", "AskUserQuestion" };
     static readonly Regex AlwaysAskCommand = new(@"(^|[\s;&|(])(git\s+push|git\s+reset\s+--hard|git\s+clean|git\s+branch\s+-D|git\s+checkout\s+--\s|rm\s+-r|rm\s+-f|rmdir|del\s|erase\s|Remove-Item|rd\s|format\s|shutdown|Restart-Computer|Stop-Computer|taskkill|Stop-Process|reg\s+delete|diskpart)", RegexOptions.IgnoreCase);
     // Les commandes sûres (lecture, ou réversibles dans un dépôt) : chaque morceau d'une ligne (&&, ;, |) doit en être.
     static readonly Regex SafeCommand = new(@"^\s*(cd|ls|dir|pwd|cat|type|head|tail|wc|find|findstr|rg|grep|echo|where|which|tree|Get-ChildItem|Get-Content|Get-Location|Select-String|Test-Path|git\s+(status|log|diff|show|branch|remote|rev-parse|ls-files|init|add|commit|switch\s+-c|checkout\s+-b|stash\s+list|tag)|mkdir|md|New-Item\s+-ItemType\s+Directory|dotnet\s+(--version|build|test|new|restore|run)|node\s+(--version|-v)|npm\s+(--version|-v|install|i|ci|test|run|init)|npx\s+tsc|python\s+(--version|-V|-m\s+venv)|pip\s+(--version|list|install)|cargo\s+(--version|build|test|new|init|check)|gh\s+(repo\s+view|pr\s+list|pr\s+view|run\s+list|issue\s+list))(\s|$)", RegexOptions.IgnoreCase);
