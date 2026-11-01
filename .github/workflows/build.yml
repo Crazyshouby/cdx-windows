@@ -3,7 +3,8 @@ name: build
 on: [push, pull_request]
 jobs:
   build:
-    runs-on: windows-2022
+    # Windows Server 2025 (build 26100) : l'installeur exige Windows 11 (MinVersion=10.0.22000) et refuse Server 2022 (build 20348) avec le code 1.
+    runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
