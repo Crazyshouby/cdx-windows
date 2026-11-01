@@ -2,12 +2,13 @@ using System.Drawing;
 
 namespace Cdx;
 
-// Aimantation des fenêtres (charte : tokens.json « snap_distance » 10 px d'attraction, « snap_gap » 2 px d'écart entre deux fenêtres, 0 au bord de l'écran).
+// Aimantation des fenêtres (charte : tokens.json « snap_distance » 10 px d'attraction, « snap_gap » 0 : les fenêtres se collent bord à bord, entre elles comme au bord
+// de l'écran ; c'était 2 px jusqu'à la charte 2.0.1). Le paramètre `gap` est gardé pour que la règle reste lisible et essayable.
 // Logique pure, les mêmes règles que KIRC (src-tauri/src/app.rs : snap_rect, snap_size) : une fenêtre glissée ou redimensionnée colle aux bords des autres
 // fenêtres de la suite qui lui font face, et à ceux de la zone de travail de son écran. Pixels d'écran (l'hôte met Dist et Gap à l'échelle de l'écran).
 static class Snap
 {
-    public const int Dist = 10, Gap = 2;
+    public const int Dist = 10, Gap = 0;
 
     // Déplacement : `r` est le rectangle proposé pour la fenêtre glissée ; renvoie sa position une fois aimantée.
     public static Point Move(Rectangle r, IEnumerable<Rectangle> others, Rectangle? area, int dist, int gap)

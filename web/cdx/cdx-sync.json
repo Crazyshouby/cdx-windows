@@ -1,5 +1,5 @@
 {
-  "cdxUi": "2.0.1",
+  "cdxUi": "2.0.2",
   "files": {
     "web/cdx/cdx-ui.css": {
       "from": "cdx-ui.css",
@@ -23,7 +23,7 @@
     },
     "web/cdx/cdx-bridge.js": {
       "from": "cdx-bridge.js",
-      "sha256": "9066861fa5c108b69ee1f46acec158a742baebc030b489fdd97430bc61783ebf"
+      "sha256": "471c46183fff3529301e0509addbb9cc303ad259e43acd6138d24c6da2f912a6"
     },
     "web/cdx/cdx-frame.js": {
       "from": "cdx-frame.js",
@@ -35,7 +35,7 @@
     },
     "web/cdx/tokens.json": {
       "from": "tokens.json",
-      "sha256": "a9be8971fe2fc8fc5052ba8495a5882dd6f5075c8b840dfff8cf4db1dc68feb3"
+      "sha256": "1ba2ba2b857f151e07b995077aa7060b704a40641b59737be61033ab15ffbba2"
     },
     "tools/charte-lint.mjs": {
       "from": "charte-lint.mjs",

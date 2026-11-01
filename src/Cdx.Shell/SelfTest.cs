@@ -395,28 +395,29 @@ static class SelfTest
         try
         {
             var one = new[] { new Rectangle(500, 100, 300, 200) }; var none = Array.Empty<Rectangle>(); Rectangle? screen = new Rectangle(0, 0, 1920, 1040);
-            Point Mv(int x, int y, int w = 200, int h = 100, Rectangle[] o = null, Rectangle? a = null) => Snap.Move(new Rectangle(x, y, w, h), o ?? one, a, 10, 2);
-            Check("déplacement : notre bord droit colle au bord gauche de B, 2 px d'écart", Mv(294, 120) == new Point(298, 120));
-            Check("notre bord gauche colle au bord droit de B", Mv(805, 120) == new Point(802, 120));
-            Check("sous B, 2 px d'écart", Mv(520, 304) == new Point(520, 302));
-            Check("au-dessus de B", Mv(520, -4) == new Point(520, -2));
+            Point Mv(int x, int y, int w = 200, int h = 100, Rectangle[] o = null, Rectangle? a = null) => Snap.Move(new Rectangle(x, y, w, h), o ?? one, a, Snap.Dist, Snap.Gap);
+            Check("déplacement : notre bord droit colle au bord gauche de B, sans écart", Mv(294, 120) == new Point(300, 120));
+            Check("notre bord gauche colle au bord droit de B", Mv(805, 120) == new Point(800, 120));
+            Check("sous B, sans écart", Mv(520, 304) == new Point(520, 300));
+            Check("au-dessus de B", Mv(520, -4) == new Point(520, 0));
             Check("bords gauches alignés", Mv(503, 130) == new Point(500, 130));
             Check("trop loin : rien ne bouge", Mv(100, 120) == new Point(100, 120));
             Check("pas en face sur l'autre axe : rien ne bouge", Mv(490, 600) == new Point(490, 600));
             Check("bords de l'écran : sans écart", Mv(7, 6, 200, 100, none, screen) == new Point(0, 0) && Mv(1715, 935, 200, 100, none, screen) == new Point(1720, 940));
-            Check("le bord le plus proche gagne (une fenêtre à 2 px plutôt que l'écran à 4)", Mv(4, 120, 200, 100, new[] { new Rectangle(204, 100, 300, 200) }, screen) == new Point(2, 120));
+            Check("le bord le plus proche gagne (une fenêtre à 1 px plutôt que l'écran à 3)", Mv(3, 120, 200, 100, new[] { new Rectangle(204, 100, 300, 200) }, screen) == new Point(4, 120));
             Check("ni voisine ni écran : la position proposée", Mv(3, 3, 200, 100, none, null) == new Point(3, 3));
 
-            Rectangle Sz(int x, int y, int w, int h, int edge = 8, Rectangle[] o = null, Rectangle? a = null) => Snap.Size(new Rectangle(x, y, w, h), edge, o ?? one, a, 10, 2);
-            Check("redimensionner par le coin bas-droite : le bord droit s'arrête à 2 px de B", Sz(100, 120, 396, 100) == new Rectangle(100, 120, 398, 100));
+            Rectangle Sz(int x, int y, int w, int h, int edge = 8, Rectangle[] o = null, Rectangle? a = null) => Snap.Size(new Rectangle(x, y, w, h), edge, o ?? one, a, Snap.Dist, Snap.Gap);
+            Check("redimensionner par le coin bas-droite : le bord droit s'arrête contre B", Sz(100, 120, 396, 100) == new Rectangle(100, 120, 400, 100));
             Check("loin de tout : la taille proposée", Sz(100, 120, 200, 500) == new Rectangle(100, 120, 200, 500));
             Check("bords droits alignés", Sz(100, 120, 697, 100) == new Rectangle(100, 120, 700, 100));
             Check("bords de l'écran", Sz(100, 120, 1815, 915, 8, none, screen) == new Rectangle(100, 120, 1820, 920));
             Check("rien à portée : rien ne change", Sz(100, 120, 300, 300, 8, one, screen) == new Rectangle(100, 120, 300, 300));
-            Check("bord gauche tiré : il colle au bord droit de B, les autres bords ne bougent pas", Sz(804, 120, 200, 100, 1) == Rectangle.FromLTRB(802, 120, 1004, 220));
-            Check("bord haut tiré : il s'arrête sous B", Sz(520, 304, 200, 100, 3) == Rectangle.FromLTRB(520, 302, 720, 404));
-            Check("bord bas tiré, sans toucher à la largeur", Sz(520, 20, 200, 77, 6) == new Rectangle(520, 20, 200, 78));
-            Check("taille minimale respectée", Snap.Size(new Rectangle(100, 100, 30, 30), 8, none, null, 10, 2, 50, 40) == new Rectangle(100, 100, 50, 40));
+            Check("bord gauche tiré : il colle au bord droit de B, les autres bords ne bougent pas", Sz(804, 120, 200, 100, 1) == Rectangle.FromLTRB(800, 120, 1004, 220));
+            Check("bord haut tiré : il s'arrête sous B", Sz(520, 304, 200, 100, 3) == Rectangle.FromLTRB(520, 300, 720, 404));
+            Check("bord bas tiré, sans toucher à la largeur", Sz(520, 20, 200, 77, 6) == new Rectangle(520, 20, 200, 80));
+            Check("taille minimale respectée", Snap.Size(new Rectangle(100, 100, 30, 30), 8, none, null, Snap.Dist, Snap.Gap, 50, 40) == new Rectangle(100, 100, 50, 40));
+            Check("la règle de l'écart reste essayable : avec 2 px, le bord droit s'arrête à 2 px de B", Snap.Size(new Rectangle(100, 120, 396, 100), 8, one, null, 10, 2) == new Rectangle(100, 120, 398, 100));
         }
         catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
         lines.Add(bad == 0 ? "TOUT EST BON" : $"{bad} vérification(s) en échec");
