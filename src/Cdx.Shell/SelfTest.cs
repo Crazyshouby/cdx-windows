@@ -468,20 +468,23 @@ static class SelfTest
 
                 // ---- suite.json
                 Check("suite.json absent : rouge", Suite.ReadAccent() == "rouge");
-                Suite.WriteAccent("bleu");
-                Check("écriture puis lecture : bleu", Suite.ReadAccent() == "bleu");
+                Suite.WriteAccent("jean");
+                Check("écriture puis lecture : jean", Suite.ReadAccent() == "jean");
                 Check("écriture atomique : aucun .tmp ne reste", !File.Exists(Suite.FilePath + ".tmp"));
-                Check("la surveillance signale bleu (< 1 s)", Until(() => accents.Contains("bleu"), 1000));
+                Check("la surveillance signale jean (< 1 s)", Until(() => accents.Contains("jean"), 1000));
                 bool threw = false; try { Suite.WriteAccent("../x"); } catch (ArgumentException) { threw = true; }
-                Check("accent inconnu refusé à l'écriture", threw && Suite.ReadAccent() == "bleu");
+                Check("accent inconnu refusé à l'écriture", threw && Suite.ReadAccent() == "jean");
+                // les anciens noms (charte < 2.0.0) sont des alias : lus et signalés sous leur nom canonique
+                Suite.WriteAccent("bleu");
+                Check("ancien nom « bleu » : écrit, relu « jean », signalé « jean »", Suite.ReadAccent() == "jean" && Suite.Canonical("violet") == "reve-violet" && Suite.Canonical("cdx") == "rouge" && Suite.Canonical("x") == null);
                 File.WriteAllText(Suite.FilePath, "{{{ abîmé");
                 Check("fichier abîmé : repli (rouge), aucune exception", Suite.ReadAccent() == "rouge");
                 File.WriteAllText(Suite.FilePath, "{\"version\":2,\"accent\":\"vert\"}");
                 Check("version inconnue : ignorée", Suite.ReadAccent("ambre") == "ambre");
                 int a0 = accents.Count; Thread.Sleep(700);
                 Check("fichier abîmé ou d'une autre version : la surveillance ne change rien", accents.Count == a0);
-                Suite.WriteAccent("violet");
-                Check("retour à un fichier valide : violet signalé (< 1 s)", Until(() => accents.Contains("violet"), 1000));
+                Suite.WriteAccent("lavande");
+                Check("retour à un fichier valide : lavande signalé (< 1 s)", Until(() => accents.Contains("lavande"), 1000));
                 Suite.RegisterApp("shell", @"C:\Windows\System32\notepad.exe");
                 Check("apps.json : chemin enregistré, nom hors liste refusé", Suite.AppPath("shell") != null && Suite.AppPath("../evil") == null);
             }

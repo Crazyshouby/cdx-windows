@@ -36,13 +36,14 @@ try {
   Check "le navigateur aussi" ((Ctl "${prefix}browser.ctl" 'evalui document.documentElement.dataset.theme') -eq '"rouge"')
   $sw = [Diagnostics.Stopwatch]::StartNew()
   '{"version":1,"accent":"bleu"}' | Set-Content "$suite\suite.json.tmp" -Encoding ascii; Move-Item "$suite\suite.json.tmp" "$suite\suite.json" -Force
-  $okE = Until { (Ctl "${prefix}explorer.ctl" 'eval document.documentElement.dataset.theme') -eq '"bleu"' } 3000
+  # « bleu » est un ancien nom (charte < 2.0.0) : les pages reçoivent son nom canonique, « jean »
+  $okE = Until { (Ctl "${prefix}explorer.ctl" 'eval document.documentElement.dataset.theme') -eq '"jean"' } 3000
   $tE = $sw.ElapsedMilliseconds
-  $okB = Until { (Ctl "${prefix}browser.ctl" 'evalui document.documentElement.dataset.theme') -eq '"bleu"' } 3000
-  Check "l'Explorateur passe au bleu (en $tE ms, y compris l'aller-retour du test)" ($okE -and $tE -lt 1500)
-  Check "le navigateur passe au bleu" $okB
+  $okB = Until { (Ctl "${prefix}browser.ctl" 'evalui document.documentElement.dataset.theme') -eq '"jean"' } 3000
+  Check "l'Explorateur passe au bleu jean, ancien nom « bleu » compris (en $tE ms, y compris l'aller-retour du test)" ($okE -and $tE -lt 1500)
+  Check "le navigateur passe au bleu jean" $okB
   'pas du json {{{' | Set-Content "$suite\suite.json" -Encoding ascii; Start-Sleep 1
-  Check "fichier abîmé : l'accent ne change pas, rien ne plante" ((Ctl "${prefix}explorer.ctl" 'eval document.documentElement.dataset.theme') -eq '"bleu"')
+  Check "fichier abîmé : l'accent ne change pas, rien ne plante" ((Ctl "${prefix}explorer.ctl" 'eval document.documentElement.dataset.theme') -eq '"jean"')
   '{"version":1,"accent":"ambre"}' | Set-Content "$suite\suite.json" -Encoding ascii
   Check "retour à un fichier valide : ambre" (Until { (Ctl "${prefix}explorer.ctl" 'eval document.documentElement.dataset.theme') -eq '"ambre"' } 3000)
 

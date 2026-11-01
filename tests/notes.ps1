@@ -150,7 +150,7 @@ try {
 
   # ---------- réglages ----------
   Js "document.querySelector('.tb-m').click()" | Out-Null
-  Check "le bouton hachuré ouvre « Réglages » : Affichage, Coffre, Claude et tes notes, Couleur d'accent" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent.trim()).join('|')") -match '^Affichage\|Projets et tâches\|Graphe des liens\|Coffre\|Claude et tes notes…\|Couleur d.accent$' } 4000)
+  Check "le bouton hachuré ouvre « Réglages » : Affichage, Coffre, Claude et tes notes, Thème" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent.trim()).join('|')") -match '^Affichage\|Projets et tâches\|Graphe des liens\|Coffre\|Claude et tes notes…\|Thème$' } 4000)
   Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Affichage').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Aperçu seul').click()" | Out-Null
   Check "Affichage > Aperçu seul : l'éditeur disparaît" ((Js "document.getElementById('pane').className") -like '*mode-view*' -and ((Js "getComputedStyle(document.getElementById('ed')).display") -eq 'none'))
   Js "setMode('split')" | Out-Null

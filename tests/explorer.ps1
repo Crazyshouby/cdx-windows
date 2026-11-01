@@ -65,17 +65,17 @@ try {
   Remove-Item "$work\petit\pendant.txt"
   Until { (Js "T().items.length") -eq '3' } 6000 | Out-Null
 
-  # --- le menu « Réglages » du bouton hachuré de la barre de titre (Affichage, Sélection, couleur d'accent) ---
+  # --- le menu « Réglages » du bouton hachuré de la barre de titre (Affichage, Sélection, Thème) ---
   Js "document.querySelector('.tb-m').click()" | Out-Null
-  Check "le bouton hachuré ouvre le menu « Réglages » : Affichage, Sélection, Couleur d'accent" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent.trim()).join('|')") -match '^Affichage\|Sélection\|Couleur d.accent$' } 4000)
+  Check "le bouton hachuré ouvre le menu « Réglages » : Affichage, Sélection, Thème" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent.trim()).join('|')") -match '^Affichage\|Sélection\|Thème$' } 4000)
   Check "le menu porte le titre « Réglages »" ((Js "document.querySelector('.menu .menu-title')?.textContent") -eq 'Réglages')
-  Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('accent')).click()" | Out-Null
-  Check "« Couleur d'accent » : les sept couleurs de la suite, la couleur actuelle cochée" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].filter(e => ['Rouge','Bleu','Vert','Violet','Ambre','Sarcelle','Charbon'].includes(e.textContent.trim())).length") -eq '7' -and (Js "document.querySelectorAll('.menu .chk.on').length") -eq '1' } 4000)
-  Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Bleu').click()" | Out-Null
-  Check "choisir « Bleu » écrit l'accent de la suite (suite.json, isolé pour l'essai)" (Until { (Test-Path "$suite\suite.json") -and ((Get-Content "$suite\suite.json" -Raw) -match '"accent"\s*:\s*"bleu"') } 6000)
-  Check "la fenêtre prend la couleur : accent bleu reçu de la suite" (Until { (Js "document.documentElement.dataset.theme") -eq 'bleu' } 6000)
+  Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Thème').click()" | Out-Null
+  Check "« Thème » : les seize thèmes de la charte 2.0.0, la couleur actuelle cochée" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].filter(e => ['Clair-obscur rouge','Bleu jean','Ambre CRT','Sarcelle','Techno électrique','Rêve bleu','Lagon','Turquoise'].includes(e.textContent.trim())).length") -eq '8' -and (Js "document.querySelectorAll('.menu .chk.on').length") -eq '1' } 4000)
+  Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Bleu jean').click()" | Out-Null
+  Check "choisir « Bleu jean » écrit l'accent de la suite (suite.json, isolé pour l'essai)" (Until { (Test-Path "$suite\suite.json") -and ((Get-Content "$suite\suite.json" -Raw) -match '"accent"\s*:\s*"jean"') } 6000)
+  Check "la fenêtre prend la couleur : accent jean reçu de la suite" (Until { (Js "document.documentElement.dataset.theme") -eq 'jean' } 6000)
   Check "le menu se ferme après le choix" ((Js "document.querySelectorAll('.menu[data-cdx]').length") -eq '0')
-  Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.includes('accent')).click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Rouge').click()" | Out-Null
+  Js "document.querySelector('.tb-m').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Thème').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Clair-obscur rouge').click()" | Out-Null
   Check "retour au rouge (état d'origine de l'essai)" (Until { (Get-Content "$suite\suite.json" -Raw) -match '"accent"\s*:\s*"rouge"' } 6000)
   Check "les boutons « Sélection » et « Affichage » ont quitté la barre d'outils (déchargée)" ((Js "!document.getElementById('cSel') && !document.getElementById('cView')") -eq 'true')
 

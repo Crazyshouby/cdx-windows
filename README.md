@@ -50,7 +50,7 @@ tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, re
   Sans argument, les programmes le suivent ; `--theme <nom>` (ou `lancer.ps1 <nom>`) fixe un thème pour ce lancement seulement.
 - **Bus** : un tube `\\.\pipe\cdx.<nom>` par programme (`Bus.cs`), messages `{type, from, data}` validés par liste blanche : `notify` (shell), `open-path` et `select` (Explorateur),
   `open-url` (navigateur, http et https seulement), `show` (Dépôts). Lancer `cdx-browser.exe <adresse>` alors qu'il tourne déjà passe par ce bus. Spécification : `cdx-ui/docs/SUITE.md`.
-- Essais : `cdx-shell --selftest-bus` (19 vérifications), `tests\bus.ps1` (essai de bout en bout isolé : ni le vrai bus, ni le vrai `suite.json`, ni le vrai profil du navigateur).
+- Essais : `cdx-shell --selftest-bus` (20 vérifications), `tests\bus.ps1` (essai de bout en bout isolé : ni le vrai bus, ni le vrai `suite.json`, ni le vrai profil du navigateur).
 
 ## Socle de l'Explorateur (lot 0 du plan « l'Explorateur se suffit à lui-même »)
 - **Page en modules** : `web/explorer/explorer.html` (balisage), `explorer.css`, `js/*.js` (core, tabs, list, nav, select, commands, menu, keys, dnd, boot) + `preview.js`, scripts classiques qui partagent leurs noms.

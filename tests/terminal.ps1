@@ -56,8 +56,8 @@ try {
   Check "la couleur ANSI rouge est celle de la charte (#ff5a4a)" ((Js "window.__panes.get(1).term.options.theme.red") -eq '#ff5a4a')
   Check "pas de gras : la police normale est aussi celle du « gras »" ((Js "window.__panes.get(1).term.options.fontWeightBold") -eq 'normal')
   Check "aucun coin arrondi dans le cadre, les onglets ni les volets" ((Js "[...document.querySelectorAll('.win, .tb, .tb-btn, .tabs, .tab, .termbox, .cb')].every(e => getComputedStyle(e).borderRadius === '0px')") -eq $true)
-  Js "cdx.emit('theme', 'bleu')" | Out-Null
-  Check "un changement d'accent recolore le terminal (bleu : texte #8fd0ff, sélection #001177 / #ff00ff)" (Until { (Js "(() => { const o = window.__panes.get(1).term.options.theme; return o.foreground + ' ' + o.selectionBackground + ' ' + o.selectionForeground; })()") -eq '#8fd0ff #001177 #ff00ff' } 3000)
+  Js "cdx.emit('theme', 'jean')" | Out-Null
+  Check "un changement de thème recolore le terminal (jean : texte #ffffff, sélection #002cb2 / #ffffff)" (Until { (Js "(() => { const o = window.__panes.get(1).term.options.theme; return o.foreground + ' ' + o.selectionBackground + ' ' + o.selectionForeground; })()") -eq '#ffffff #002cb2 #ffffff' } 3000)
 
   # --- onglets ---
   Check "un onglet à l'ouverture, avec son bouton « + »" ((Js "document.querySelectorAll('#tabs .tab:not(.new)').length + '/' + document.querySelectorAll('#tabs .tab.new').length") -eq '1/1')
