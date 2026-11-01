@@ -8,6 +8,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>cdx-browser</AssemblyName>
     <RootNamespace>Cdx</RootNamespace>
+    <ApplicationIcon>..\..\icons\navigateur.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>

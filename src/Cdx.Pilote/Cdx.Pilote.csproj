@@ -9,6 +9,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>cdx-pilote</AssemblyName>
     <RootNamespace>Cdx</RootNamespace>
+    <ApplicationIcon>..\..\icons\pilote.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>

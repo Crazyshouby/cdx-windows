@@ -20,6 +20,7 @@
 ; Ne jamais changer ce GUID : c'est par lui qu'une mise à jour retrouve la version qu'elle remplace.
 AppId={{7C1D0E52-9B3A-4F6E-8D21-5A0C4B7E9F13}
 AppName={#AppName}
+SetupIconFile=..\icons\cdx.ico
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher=Valentin Large

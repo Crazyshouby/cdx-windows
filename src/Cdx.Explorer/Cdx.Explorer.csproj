@@ -8,6 +8,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>cdx-explorer</AssemblyName>
     <RootNamespace>Cdx</RootNamespace>
+    <ApplicationIcon>..\..\icons\explorateur.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>

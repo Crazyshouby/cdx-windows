@@ -8,6 +8,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>cdx-agenda</AssemblyName>
     <RootNamespace>Cdx</RootNamespace>
+    <ApplicationIcon>..\..\icons\agenda.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>

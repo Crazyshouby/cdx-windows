@@ -8,6 +8,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>cdx-terminal</AssemblyName>
     <RootNamespace>Cdx</RootNamespace>
+    <ApplicationIcon>..\..\icons\terminal.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>

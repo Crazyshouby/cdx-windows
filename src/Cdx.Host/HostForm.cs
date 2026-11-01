@@ -22,6 +22,8 @@ class HostForm : Form
         app = a; Name = name;
         FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; StartPosition = FormStartPosition.Manual;
         BackColor = Color.FromArgb(0x33, 0x33, 0x33);
+        // l'icône de la fenêtre (Alt+Tab, liste des tâches de la barre) : celle de l'exécutable (icons\<application>.ico, famille pixel de la charte)
+        try { if (Environment.ProcessPath != null) Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath); } catch (Exception) { }
         Controls.Add(Web);
     }
 

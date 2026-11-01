@@ -20,12 +20,13 @@ sealed class PinStore
     readonly HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
     static readonly string[] Legacy = { "cdx:explorer", "ms-settings:", "wt.exe", "chrome.exe", "cdx:navigateur", "cdx:repos", "calc.exe", "notepad.exe", "shell:My Pictures" };   // les neuf d'origine
 
+    // Les icônes des applications de la suite sont celles de la famille pixel (cdx-ui, pixel_icons.py APPS, 01/11/2026) ; les autres, des pictogrammes génériques.
     public static readonly Pin[] Defaults =
     {
-        new("Explorateur", "cdx:explorer", "dossier", true, true), new("Paramètres", "ms-settings:", "reglages", true, true), new("Terminal", "wt.exe", "console", true, true),
-        new("Chrome", "chrome.exe", "serveur", true, true), new("Navigateur CDX", "cdx:navigateur", "kirc", true, true), new("Dépôts", "cdx:repos", "liste", false, true),
+        new("Explorateur", "cdx:explorer", "explorateur", true, true), new("Paramètres", "ms-settings:", "reglages", true, true), new("Terminal", "wt.exe", "console", true, true),
+        new("Chrome", "chrome.exe", "serveur", true, true), new("Navigateur CDX", "cdx:navigateur", "navigateur", true, true), new("Dépôts", "cdx:repos", "depots", false, true),
         new("Calculatrice", "calc.exe", "apps", false, true), new("Bloc-notes", "notepad.exe", "journal", false, true), new("Images", "shell:My Pictures", "image", false, true),
-        new("Notes", "cdx:notes", "carnet", false, true), new("Terminal CDX", "cdx:terminal", "console", false, true), new("Agenda", "cdx:agenda", "horloge", false, true), new("Courrier", "cdx:courrier", "message", false, true), new("Pilote", "cdx:pilote", "processeur", false, true),
+        new("Notes", "cdx:notes", "notes", false, true), new("Terminal CDX", "cdx:terminal", "terminal", false, true), new("Agenda", "cdx:agenda", "agenda", false, true), new("Courrier", "cdx:courrier", "courrier", false, true), new("Pilote", "cdx:pilote", "pilote", false, true),
     };
 
     public PinStore(string file) { this.file = file; SetItems(Defaults.ToList()); foreach (var d in Defaults) seen.Add(d.Target); Load(); }

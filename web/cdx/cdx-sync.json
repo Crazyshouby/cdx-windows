@@ -11,11 +11,11 @@
     },
     "web/cdx/fonts.css": {
       "from": "fonts.css",
-      "sha256": "42e6d1d1f8f7268a15631b5d982fc41a9080665140bfc3d844f88480ecdca0c7"
+      "sha256": "189da1a91bb477cc6d051a3491e46af820b904a889fab937bc1e25636a1ecbdf"
     },
     "web/cdx/icons.js": {
       "from": "icons.js",
-      "sha256": "3e225987c4d5e6526cc42e42c94e1e716ff53b003bc23de80b1617295ad788b5"
+      "sha256": "3d0360da7fcf54b979d6b129814965e2fabbda87273a4bbc83ade60e1698cd8f"
     },
     "tools/cdx-verify.mjs": {
       "from": "cdx-verify.mjs",
