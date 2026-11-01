@@ -139,9 +139,10 @@ Claude Code en sous-processus plutôt que l'API ; un projet = fiche dans Notes +
 ## Icônes d'application (01/11/2026)
 
 Décision du 01/11/2026 : une icône pixel par application, d'une même famille, sans retouche des icônes existantes ; dessins approuvés par Valentin.
-- **La famille** vit dans la charte (cdx-ui `gen/pixel_icons.py`, dictionnaire `APPS`) : dix pictogrammes 16 × 16 avec la lumière de l'icône de KIRC (corps rouge qui suit l'accent du
-  thème dans les pages, arête claire en haut et à gauche, ombre en bas et à droite, contour noir, détails blancs). Explorateur : le dossier jaune existant (au choix de Valentin) ; Navigateur : boussole ; Dépôts : classeur à tiroirs ;
-  Notes : carnet à spirale ; Terminal : écran dans un cadre ; Agenda : page de calendrier ; Courrier : enveloppe ; Pilote : volant ; Transferts : flèches croisées ; CDX : le carré et son C.
+- **La famille** vit dans la charte (cdx-ui `gen/pixel_icons.py`, dictionnaire `APPS`) : dix pictogrammes 16 × 16, chacun dans les couleurs de son objet (choix de Valentin :
+  pas le même rouge partout), avec la lumière de l'icône de KIRC (arête claire en haut et à gauche, ombre en bas et à droite, contour noir). Explorateur : le dossier jaune existant ;
+  Navigateur : globe bleu et vert ; Dépôts : classeur gris ; Notes : carnet à spirale blanc ; Terminal : écran noir dans un cadre gris, invite verte ; Agenda : page de calendrier au bandeau
+  rouge ; Courrier : enveloppe beige ; Pilote : volant noir au klaxon rouge ; Transferts : flèches verte et bleue ; CDX : le carré rouge de l'accent et son C.
 - **Dans les pages** : les mêmes noms dans `icons.js` (`pix('notes')`, `data-ic="pilote"`…) ; les épingles par défaut de la barre et les tuiles du Démarrer les utilisent (`Pins.cs`).
 - **Les exécutables** : `icons\<nom>.ico` (16, 32, 48 et 256 px, images PNG dans l'ICO, rouge fixe), produits par `python gen/gen_app_icons.py ..\cdx-windows\icons` dans cdx-ui et
   versionnés ici ; `<ApplicationIcon>` dans les dix projets, `SetupIconFile` de l'installeur (`cdx.ico`). `HostForm` prend l'icône de son exécutable pour la fenêtre (Alt+Tab, liste
