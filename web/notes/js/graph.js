@@ -5,7 +5,19 @@
   const gc = $('gcanvas');
   window.__graph = { get nodes() { return gNodes; }, get edges() { return gEdges; } };
 
-  function openGraph() { if (view === 'graph') { showView(null); return; } showView('graph'); post({ cmd: 'n.graph' }); }
+  // « Graphe dans une colonne » : le graphe vit dans la colonne #gcol à droite de l'éditeur (volet redimensionnable) au lieu de prendre sa place.
+  let graphCol = !!ls('graphCol', false);
+  const graphOn = () => graphCol ? !$('gcol').hidden : view === 'graph';
+  function placeGraph() { const g = $('graph'); if (graphCol) { $('gcol').appendChild(g); g.hidden = false; } else { $('main').appendChild(g); g.hidden = view !== 'graph'; } }
+  function openGraph() {
+    if (graphCol) { const on = $('gcol').hidden; $('gcol').hidden = !on; $('bGraph').classList.toggle('on', on); if (on) { post({ cmd: 'n.graph' }); graphShown(); } return; }
+    if (view === 'graph') { showView(null); return; } showView('graph'); post({ cmd: 'n.graph' });
+  }
+  function setGraphCol(on) {
+    const was = graphOn(); if (view === 'graph') showView(null);
+    graphCol = on; lsSet('graphCol', on); $('gcol').hidden = !(on && was); placeGraph();
+    if (was) { if (on) { $('bGraph').classList.add('on'); graphShown(); } else openGraph(); }
+  }
   function graphShown() { gResize(); gDraw(); }
   const gColors = () => { const cs = getComputedStyle(document.documentElement), v = (n, d) => cs.getPropertyValue(n).trim() || d; return { ink: v('--ink', '#000'), node: v('--field-ink', '#0f0'), cur: v('--accent', '#d41818'), edge: '#444444', text: v('--text', '#fff'), faint: v('--faint', '#888'), proj: v('--a-spark', '#ff8a74') }; };
 
@@ -17,7 +29,7 @@
     gAdj = new Map(); for (const n of gNodes) gAdj.set(n.id, new Set());
     for (const e of gEdges) { gAdj.get(e.from).add(e.to); gAdj.get(e.to).add(e.from); gById.get(e.from).deg++; gById.get(e.to).deg++; }
     $('ginfo').textContent = `${gNodes.length} note${gNodes.length > 1 ? 's' : ''} · ${gEdges.length} lien${gEdges.length > 1 ? 's' : ''}`;
-    if (view === 'graph') { gResize(); gAlpha = 1; gStart(); }
+    if (graphOn()) { gResize(); gAlpha = 1; gStart(); }
   };
 
   // ---------- disposition par forces ----------
@@ -42,7 +54,7 @@
     gAlpha *= 0.985;
   }
   function gStart() { if (gRunning) return; gRunning = requestAnimationFrame(gFrame); }
-  function gFrame() { gRunning = 0; if (view !== 'graph') return; for (let i = 0; i < 2; i++) gStep(); gDraw(); if (gAlpha > 0.01) gStart(); }
+  function gFrame() { gRunning = 0; if (!graphOn()) return; for (let i = 0; i < 2; i++) gStep(); gDraw(); if (gAlpha > 0.01) gStart(); }
   // Pour les essais (pas d'images animées en headless) : fait avancer la disposition d'un coup.
   function graphSettle(n = 300) { for (let i = 0; i < n; i++) gStep(); gDraw(); }
 
@@ -78,7 +90,7 @@
     gZoom = Math.max(0.2, Math.min(2.5, Math.min(gc.width / w, gc.height / h))); gPanX = -(x0 + x1) / 2; gPanY = -(y0 + y1) / 2; gDraw();
   }
   $('gFit').onclick = gFit;
-  new ResizeObserver(() => { if (view === 'graph') { gResize(); gDraw(); } }).observe(gc);
+  new ResizeObserver(() => { if (graphOn()) { gResize(); gDraw(); } }).observe(gc);
 
   // ---------- souris ----------
   const gAt = (mx, my) => { let best = null, bd = 100; for (const n of gNodes) { const p = toScreen(n); const d = (p.x - mx) ** 2 + (p.y - my) ** 2; if (d < bd) { bd = d; best = n; } } return best; };

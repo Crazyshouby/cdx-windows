@@ -9,9 +9,11 @@
       ['Retour à la ligne', () => setWrap(!wrap), { check: wrap }],
       null,
       ['Volet d’information (plan, liens, étiquettes)', () => setInfo(!infoOpen), { check: infoOpen }],
+      ['Graphe dans une colonne (à côté de l’éditeur)', () => setGraphCol(!graphCol), { check: graphCol }],
     ] }],
+    ['Mise en forme', null, { sub: formatMenu }],
     ['Projets et tâches', () => openProjects(), { check: view === 'projects' }],
-    ['Graphe des liens', () => openGraph(), { check: view === 'graph' }],
+    ['Graphe des liens', () => openGraph(), { check: graphOn() }],
     ['Coffre', null, { sub: () => [
       ['Ouvrir le dossier dans l\u2019Explorateur', () => post({ cmd: 'n.reveal' })],
       ['Changer de dossier de notes\u2026', () => post({ cmd: 'n.choosevault' }), { disabled: !!(hello && hello.pinnedRoot) }],
@@ -43,6 +45,7 @@
 
   CdxFrame.init();
   CdxSplit.init({ pane: $('side'), side: 'left', key: 'notes-arbre', min: 180, max: 520 });
+  placeGraph(); CdxSplit.init({ pane: $('gcol'), side: 'right', key: 'notes-graphe', min: 200, max: 900 });
   showDoc(); renderTabs(); renderTree();
 
   // Hors du programme (page ouverte dans un navigateur) : un coffre d'exemple pour voir la mise en page.

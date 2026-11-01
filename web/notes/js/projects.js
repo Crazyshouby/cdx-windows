@@ -7,8 +7,8 @@
   function showView(name) {
     view = name;
     $('main').classList.toggle('viewing', !!name);
-    $('projects').hidden = name !== 'projects'; $('graph').hidden = name !== 'graph';
-    document.querySelectorAll('#views .mb').forEach(b => b.classList.toggle('on', b.dataset.v === name));
+    $('projects').hidden = name !== 'projects'; if (!graphCol) $('graph').hidden = name !== 'graph';
+    document.querySelectorAll('#views .mb').forEach(b => b.classList.toggle('on', b.dataset.v === name || (b.dataset.v === 'graph' && graphOn())));
     if (name === 'projects') { $('st2').textContent = ''; setStatus('Projets et tâches', ''); }
     if (name === 'graph') { $('st2').textContent = ''; setStatus('Graphe des liens', ''); if (typeof graphShown === 'function') graphShown(); }
     if (!name && cur) updateStatus();

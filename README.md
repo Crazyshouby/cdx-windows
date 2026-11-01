@@ -24,7 +24,7 @@ Toutes les données sont dans `%LOCALAPPDATA%\CdxShell\`.
 
 ```
 src\Cdx.Host\       la bibliothèque commune : fenêtre hôte WebView2, appels Windows, journal, instance unique et relais, canal de test,
-                    boutons latéraux de la souris (types internes, visibles des trois programmes seulement)
+                    boutons latéraux de la souris, aimantation des fenêtres (types internes, visibles des trois programmes seulement)
 src\Cdx.Shell\      cdx-shell : Program.cs (barre, Démarrer, centre, Alt+Tab, crochet clavier), AudioLink.cs, Sys.cs
 src\Cdx.Explorer\   cdx-explorer : Fs.cs (fichiers), ExplorerForm.cs
 src\Cdx.Browser\    cdx-browser : Browser.cs (onglets, favoris, historique, téléchargements)
@@ -39,11 +39,17 @@ tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, re
 
 ## Essais (aucune entrée simulée)
 
-- Auto-tests, sans fenêtre visible : `cdx-explorer --selftest-fs`, `--selftest-web` ; `cdx-shell --selftest-sys`, `--selftest-audio` ; `cdx-browser --selftest-browser` ; `cdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables) ; `cdx-terminal --selftest-pty` (10 vérifications de la pseudo-console : sortie, code de sortie, UTF-8, redimensionnement, arrêt) ; `tests\terminal.ps1 -Bin <dossier>` (43 vérifications dans la vraie fenêtre isolée : shells, police et WebGL, couleurs de la charte, accent, onglets, volets, raccourcis, redimensionnement, titre, fermeture, dossier de départ, et avec `-ExplorerBin` l'Explorateur qui ouvre un onglet puis relance le terminal).
+- Auto-tests, sans fenêtre visible : `cdx-explorer --selftest-fs`, `--selftest-web` ; `cdx-shell --selftest-sys`, `--selftest-audio`, `--selftest-snap` (19 vérifications de l'aimantation) ; `cdx-browser --selftest-browser` ; `cdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables) ; `cdx-terminal --selftest-pty` (10 vérifications de la pseudo-console : sortie, code de sortie, UTF-8, redimensionnement, arrêt) ; `tests\terminal.ps1 -Bin <dossier>` (43 vérifications dans la vraie fenêtre isolée : shells, police et WebGL, couleurs de la charte, accent, onglets, volets, raccourcis, redimensionnement, titre, fermeture, dossier de départ, et avec `-ExplorerBin` l'Explorateur qui ouvre un onglet puis relance le terminal).
   Résultats dans `%LOCALAPPDATA%\CdxShell\selftest*.txt`.
 - Canal de contrôle : si `%LOCALAPPDATA%\CdxShell\debug.txt` existe au lancement, chaque programme ouvre un tube réservé à l'utilisateur courant
   (`cdx.shell.ctl`, `cdx.explorer.ctl`, `cdx.browser.ctl`, `cdx.repos.ctl`) pour lire son état et exécuter du JavaScript dans ses pages. `tests\navigateur.ps1` et
   `tests\suite.ps1` s'en servent ; supprimer `debug.txt` et relancer ensuite.
+
+## Aimantation des fenêtres (01/11/2026)
+Toutes les fenêtres de l'hôte C# (`Cdx.Host/Snap.cs`, `HostForm.WndProc`) : pendant un déplacement ou un redimensionnement, la fenêtre colle aux bords des autres
+fenêtres de la suite (`cdx-*.exe`, KIRC, AudioLinker) qui lui font face, et aux bords de la zone de travail de son écran. Règles de la charte (`tokens.json`) : 10 px
+d'attraction, 2 px d'écart entre deux fenêtres, aucun au bord de l'écran, à l'échelle de l'écran ; mêmes règles que KIRC (`app.rs`). Windows fait le geste
+(`WM_NCLBUTTONDOWN`), l'hôte corrige le rectangle proposé par `WM_MOVING` / `WM_SIZING` ; les voisines sont relevées à l'entrée du geste. Essai : `cdx-shell --selftest-snap`.
 
 ## Réglages communs et bus (phase 2)
 - **Accent de la suite** : `%APPDATA%\CDX\suite.json` (`{"version":1,"accent":"bleu"}`). Chaque programme le relit à chaud (250 ms) et recolore ses pages ; `cdx-shell.exe --accent bleu` l'écrit.
@@ -105,7 +111,8 @@ qu'AudioLinker tourne sur la machine.
 Le coffre (`Cdx.Vault`, dossier `Documents\Notes CDX` par défaut) est partagé avec le serveur MCP `cdx-notes-mcp` de Claude ; l'application voit tout changement du dossier. Page `web/notes/` :
 `core.js` (index, liens, boîtes), `tree.js` (arborescence, filtre, glisser-déposer), `doc.js` (onglets, éditeur, aperçu, enregistrement, conflits), `nav.js` (**volet d'information** : plan de la note, liens sortants et rétroliens avec ligne et contexte, étiquettes du coffre ; **recherche dans le texte** par Entrée dans le filtre ou `?` devant,
 avec `"phrase"`, `tag:`, `in:`, `type:` ; **sélecteur Ctrl+P** qui crée la note si elle n'existe pas ; **autocomplétion des `[[liens]]`** dans l'éditeur), `projects.js` (**vue Projets** : fiches `type: projet` filtrées par statut, tâches ouvertes de tout le coffre cochables depuis la vue, nouveau projet depuis le modèle, menu statut/priorité, dossier du dépôt dans l'Explorateur, Dépôts),
-`graph.js` (**graphe** des liens sur un canevas : disposition par forces, survol, glisser, molette, clic = ouvrir), `md.js` (moteur Markdown maison, `tests/md.test.mjs`). Essai : `tests\notes.ps1` (72 vérifications, dont Claude qui écrit par le MCP pendant que l'application est ouverte).
+`graph.js` (**graphe** des liens sur un canevas : disposition par forces, survol, glisser, molette, clic = ouvrir ; réglage **« Graphe dans une colonne »** : le graphe à droite de l'éditeur, volet redimensionnable, la note active en accent), `md.js` (moteur Markdown maison, `tests/md.test.mjs`).
+**Mise en forme** (menu Réglages > Mise en forme, et raccourcis dans l'éditeur, `doc.js` FORMATS) : gras Ctrl+B, italique Ctrl+I, barré Ctrl+Maj+X, code Ctrl+Maj+C, lien Ctrl+K, titres Ctrl+1 à 6 (touche physique, clavier AZERTY compris), paragraphe Ctrl+0, liste Ctrl+L, numérotée Ctrl+Maj+L, case à cocher Ctrl+Entrée (coche et décoche), citation Ctrl+Maj+Q ; sur plusieurs lignes à la fois, et un second appel retire le préfixe. Essai : `tests\notes.ps1` (88 vérifications, dont Claude qui écrit par le MCP pendant que l'application est ouverte).
 
 ## Installeur (phase 5)
 `pwsh -File installer\build.ps1 [-Bin <dossier des .exe>] [-Sign]` construit `installer\Output\CDX-Setup-<version>.exe` (Inno Setup 6, français) et son `.sha256`. La version vit dans

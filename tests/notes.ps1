@@ -88,6 +88,25 @@ try {
   Check "Entrée sur un élément vide : on sort de la liste" ((Until { (Js "document.getElementById('ed').value") -eq "- un`n" } 3000))
   Js "const e = document.getElementById('ed'); e.value = 'mot'; e.focus(); e.setSelectionRange(0, 3); e.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, bubbles: true, cancelable: true }))" | Out-Null
   Check "Ctrl+B met la sélection en gras" ((Until { (Js "document.getElementById('ed').value") -eq '**mot**' } 3000))
+  function Key([string]$key, [string]$code = '', [bool]$shift = $false) { Js "const e = document.getElementById('ed'); e.dispatchEvent(new KeyboardEvent('keydown', { key: '$key', code: '$code', ctrlKey: true, shiftKey: $($shift.ToString().ToLower()), bubbles: true, cancelable: true }))" | Out-Null }
+  function EdIs([string]$v) { Until { (Js "document.getElementById('ed').value") -eq $v } 3000 }
+  Js "const e = document.getElementById('ed'); e.value = 'Titre'; e.focus(); e.setSelectionRange(2, 2)" | Out-Null
+  Key '&' 'Digit1'; Check "Ctrl+1 (touche physique : « & » sur un clavier AZERTY) fait un titre de niveau 1" (EdIs '# Titre')
+  Key 'é' 'Digit2'; Check "Ctrl+2 change le niveau du titre" (EdIs '## Titre')
+  Key 'é' 'Digit2'; Check "le même raccourci une seconde fois retire le titre" (EdIs 'Titre')
+  Js "const e = document.getElementById('ed'); e.value = 'un\ndeux'; e.setSelectionRange(0, 7)" | Out-Null
+  Key 'l'; Check "Ctrl+L : une puce sur chaque ligne de la sélection" (EdIs "- un`n- deux")
+  Key 'L' '' $true; Check "Ctrl+Maj+L : la liste devient numérotée" (EdIs "1. un`n2. deux")
+  Key 'l'; Key 'l'; Check "Ctrl+L deux fois : puces, puis plus de liste" (EdIs "un`ndeux")
+  Js "const e = document.getElementById('ed'); e.value = 'faire'; e.setSelectionRange(5, 5)" | Out-Null
+  Key 'Enter'; Check "Ctrl+Entrée ajoute une case à cocher" (EdIs '- [ ] faire')
+  Key 'Enter'; Check "Ctrl+Entrée sur une case la coche" (EdIs '- [x] faire')
+  Key 'Enter'; Check "et la décoche" (EdIs '- [ ] faire')
+  Key 'Q' '' $true; Check "Ctrl+Maj+Q : citation, à la place du préfixe précédent" (EdIs '> faire')
+  Key ')' 'Digit0'; Check "Ctrl+0 : paragraphe sans préfixe" (EdIs 'faire')
+  Js "const e = document.getElementById('ed'); e.value = 'mot'; e.setSelectionRange(0, 3)" | Out-Null
+  Key 'X' '' $true; Check "Ctrl+Maj+X barre la sélection" (EdIs '~~mot~~')
+  Check "le menu « Mise en forme » reprend les seize actions avec leurs raccourcis" (((Js "formatMenu().filter(Boolean).length") -eq 16) -and ((Js "formatMenu()[0][2].key") -eq 'Ctrl+B'))
   Type-Text (ReadV 'Alpha.md').Replace("`r`n", "`n")
   Start-Sleep -Milliseconds 1500
 
@@ -150,7 +169,7 @@ try {
 
   # ---------- réglages ----------
   Js "document.querySelector('.tb-m').click()" | Out-Null
-  Check "le bouton hachuré ouvre « Réglages » : Affichage, Coffre, Claude et tes notes, Thème" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent.trim()).join('|')") -match '^Affichage\|Projets et tâches\|Graphe des liens\|Coffre\|Claude et tes notes…\|Thème$' } 4000)
+  Check "le bouton hachuré ouvre « Réglages » : Affichage, Mise en forme, Coffre, Claude et tes notes, Thème" (Until { (Js "[...document.querySelectorAll('.menu .menu-item')].map(e => e.textContent.trim()).join('|')") -match '^Affichage\|Mise en forme\|Projets et tâches\|Graphe des liens\|Coffre\|Claude et tes notes…\|Thème$' } 4000)
   Js "[...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Affichage').click(); [...document.querySelectorAll('.menu .menu-item')].find(e => e.textContent.trim() === 'Aperçu seul').click()" | Out-Null
   Check "Affichage > Aperçu seul : l'éditeur disparaît" ((Js "document.getElementById('pane').className") -like '*mode-view*' -and ((Js "getComputedStyle(document.getElementById('ed')).display") -eq 'none'))
   Js "setMode('split')" | Out-Null
@@ -212,6 +231,13 @@ try {
   Check "le canevas est dessiné (fond noir, des pixels d'une autre couleur)" ((Js "var c = document.getElementById('gcanvas'); var d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; var n = 0; for (var i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 0) n++; n > 50 ? 'oui' : 'non'") -eq 'oui')
   Js "graphOpenNode('Nav/Comète.md')" | Out-Null
   Check "un nœud ouvre sa note et referme le graphe" ((Until { (Js "cur") -eq 'Nav/Comète.md' } 6000) -and ((Js "String(view)") -eq 'null') -and ((Js "getComputedStyle(document.getElementById('pane')).display") -ne 'none'))
+  Js "setGraphCol(true); openGraph()" | Out-Null
+  Check "graphe dans une colonne : le canevas est à droite de l'éditeur, qui reste visible" ((Until { (Js "graphCol && !document.getElementById('gcol').hidden && document.getElementById('gcanvas').closest('#gcol') !== null && getComputedStyle(document.getElementById('pane')).display !== 'none' && document.getElementById('gcanvas').getBoundingClientRect().left > document.getElementById('ed').getBoundingClientRect().left ? 'oui' : 'non'") -eq 'oui' } 4000))
+  Js "graphOpenNode('Nav/Lune.md')" | Out-Null
+  Check "depuis la colonne, un nœud ouvre sa note et la colonne reste" ((Until { (Js "cur") -eq 'Nav/Lune.md' } 6000) -and ((Js "document.getElementById('gcol').hidden ? 'cachée' : 'visible'") -eq 'visible'))
+  Js "setGraphCol(false)" | Out-Null
+  Check "réglage retiré : le graphe reprend la place de l'éditeur" ((Until { (Js "String(view)") -eq 'graph' } 4000) -and ((Js "document.getElementById('gcanvas').closest('#main') !== null ? 'oui' : 'non'") -eq 'oui'))
+  Js "showView(null)" | Out-Null
 
   # ---------- le bus : une autre application demande d'ouvrir une note ----------
   Check "bus open-note : la note demandée s'ouvre" ((BusSend 'notes' 'open-note' 'repos' @{ path = 'Beta.md' }) -and (Until { (Js "cur") -eq 'Beta.md' } 6000))

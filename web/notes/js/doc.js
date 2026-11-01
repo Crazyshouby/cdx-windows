@@ -50,6 +50,7 @@
   }
 
   function showDoc() {
+    if (typeof graphOn === 'function' && graphOn()) gDraw();   // le graphe en colonne marque la note active
     ed.disabled = !cur; document.body.classList.toggle('nowrap', !wrap);
     const w = $('pane'); w.classList.remove('mode-edit', 'mode-split', 'mode-view'); w.classList.add('mode-' + mode);
     document.querySelectorAll('#modes .mb').forEach(b => b.classList.toggle('on', b.dataset.m === mode));
@@ -219,13 +220,49 @@
     let marker = m[2]; const n = /^(\d+)([.)] )$/.exec(marker); if (n) marker = (+n[1] + 1) + n[2]; else marker = marker.replace(/\[[xX]\]/, '[ ]');
     replaceRange(s, s, '\n' + m[1] + marker); return true;
   }
+  // ---------- mise en forme par raccourci (et menu Réglages > Mise en forme) ----------
+  // Une ligne : son retrait, son préfixe (titre, case, puce, numéro, citation) et le reste.
+  const PREFIX = /^(\s*)(#{1,6} |[-*+] \[[ xX]\] |[-*+] |\d+[.)] |> )?/;
+  const kindOf = p => !p ? '' : p[0] === '#' ? 'h' : p[0] === '>' ? 'quote' : /\[/.test(p) ? 'task' : /^\d/.test(p) ? 'ol' : 'ul';
+  // Pose un préfixe sur les lignes de la sélection ('h' niveau 1..6 ou 0 = paragraphe, 'ul', 'ol', 'task', 'quote'), ou le retire si toutes l'ont déjà ;
+  // une case déjà là se coche / se décoche. Les lignes vides d'une sélection de plusieurs lignes sont laissées telles quelles.
+  function setPrefix(kind, level = 1) {
+    const t = ed.value, s = ed.selectionStart, e = ed.selectionEnd;
+    const a = t.lastIndexOf('\n', s - 1) + 1; let z = t.indexOf('\n', e > s && t[e - 1] === '\n' ? e - 1 : e); if (z < 0) z = t.length;
+    const lines = t.slice(a, z).split('\n'); const parts = lines.map(l => { const m = PREFIX.exec(l); return { ind: m[1], p: m[2] || '', body: l.slice(m[0].length) }; });
+    const used = parts.filter(p => lines.length === 1 || p.body.trim() || p.p);
+    const all = used.length > 0 && used.every(p => kindOf(p.p) === kind && (kind !== 'h' || p.p.length - 1 === level));
+    const allChecked = used.every(p => /\[[xX]\]/.test(p.p));
+    let n = 0;
+    const out = parts.map(p => {
+      if (!used.includes(p)) return p.ind + p.p + p.body;
+      if (kind === 'task' && kindOf(p.p) === 'task') return p.ind + (allChecked ? p.p.replace(/\[[xX]\]/, '[ ]') : p.p.replace(/\[ \]/, '[x]')) + p.body;
+      if (all || (kind === 'h' && level === 0)) return p.ind + p.body;
+      const np = kind === 'h' ? '#'.repeat(level) + ' ' : kind === 'ul' ? '- ' : kind === 'ol' ? (++n) + '. ' : kind === 'task' ? '- [ ] ' : '> ';
+      return p.ind + np + p.body;
+    }).join('\n');
+    if (out === t.slice(a, z)) return;
+    if (s === e) replaceRange(a, z, out, Math.max(a, s + out.length - (z - a)));
+    else replaceRange(a, z, out, a, a + out.length);
+  }
+  // Les actions de mise en forme : [touche (e.key en minuscules, ou le code physique DigitN : Ctrl+1 vaut aussi sur un clavier AZERTY), Maj, libellé, action, raccourci].
+  const FORMATS = [
+    ['b', false, 'Gras', () => wrapSel('**', '**'), 'Ctrl+B'], ['i', false, 'Italique', () => wrapSel('*', '*'), 'Ctrl+I'],
+    ['x', true, 'Barré', () => wrapSel('~~', '~~'), 'Ctrl+Maj+X'], ['c', true, 'Code', () => wrapSel('`', '`'), 'Ctrl+Maj+C'],
+    ['k', false, 'Lien [[…]]', () => wrapSel('[[', ']]'), 'Ctrl+K'], null,
+    ['Digit1', false, 'Titre 1', () => setPrefix('h', 1), 'Ctrl+1'], ['Digit2', false, 'Titre 2', () => setPrefix('h', 2), 'Ctrl+2'], ['Digit3', false, 'Titre 3', () => setPrefix('h', 3), 'Ctrl+3'],
+    ['Digit4', false, 'Titre 4', () => setPrefix('h', 4), 'Ctrl+4'], ['Digit5', false, 'Titre 5', () => setPrefix('h', 5), 'Ctrl+5'], ['Digit6', false, 'Titre 6', () => setPrefix('h', 6), 'Ctrl+6'],
+    ['Digit0', false, 'Paragraphe (retirer le préfixe)', () => setPrefix('h', 0), 'Ctrl+0'], null,
+    ['l', false, 'Liste à puces', () => setPrefix('ul'), 'Ctrl+L'], ['l', true, 'Liste numérotée', () => setPrefix('ol'), 'Ctrl+Maj+L'],
+    ['enter', false, 'Case à cocher (cocher, décocher)', () => setPrefix('task'), 'Ctrl+Entrée'], ['q', true, 'Citation', () => setPrefix('quote'), 'Ctrl+Maj+Q'],
+  ];
+  function formatKey(e) { const k = e.key.toLowerCase(); const f = FORMATS.find(f => f && f[1] === e.shiftKey && (f[0].startsWith('Digit') ? e.code === f[0] : f[0] === k)); return f ? f[3] : null; }
+  // Le même choix pour le menu : [libellé, action, { key }]. La sélection de la zone de texte survit au menu ; en aperçu seul, on passe en double.
+  const formatMenu = () => FORMATS.map(f => f ? [f[2], () => { if (mode === 'view') setMode('split'); f[3](); }, { key: f[4] }] : null);
   ed.addEventListener('keydown', e => {
     if (e.key === 'Tab' && !e.ctrlKey) { e.preventDefault(); indentSel(e.shiftKey); }
     else if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.isComposing) { if (continueList()) e.preventDefault(); }
-    else if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
-      const k = e.key.toLowerCase();
-      if (k === 'b') { e.preventDefault(); wrapSel('**', '**'); } else if (k === 'i') { e.preventDefault(); wrapSel('*', '*'); } else if (k === 'k') { e.preventDefault(); wrapSel('[[', ']]'); }
-    }
+    else if ((e.ctrlKey || e.metaKey) && !e.altKey) { const f = formatKey(e); if (f) { e.preventDefault(); f(); } }
   });
 
   function setMode(m) { mode = m; lsSet('mode', m); showDoc(); if (cur) { renderPreview(); if (m !== 'view') ed.focus(); } }

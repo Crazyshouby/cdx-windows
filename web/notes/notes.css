@@ -108,6 +108,10 @@ body.noinfo .info { display: none; }
 .main.viewing .pane, .main.viewing #notice { display: none; }
 .view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; }
 .view[hidden] { display: none; }
+/* le graphe dans une colonne (réglage « Graphe dans une colonne ») : à droite de l'éditeur, volet redimensionnable (cdx-split) */
+.gcol { flex: none; width: 320px; }
+.gcol[hidden] { display: none; }
+.gcol .gbar .faint { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #views .mb.on { color: #fff; }
 /* autocomplétion des [[liens]] */
 .ac { position: absolute; z-index: 60; min-width: 200px; max-width: 360px; background: var(--card-2); border: 1px solid #000; box-shadow: var(--bevel), 4px 5px 0 rgba(0, 0, 0, .5); padding: 2px 0; }

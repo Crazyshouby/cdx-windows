@@ -67,4 +67,46 @@ class HostForm : Form
     {
         if (Web.CoreWebView2 != null) Web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(o));
     }
+
+    // ---------- aimantation (Snap.cs) ----------
+    // Un déplacement ou un redimensionnement est confié à Windows (WM_NCLBUTTONDOWN, Host.WindowCommand) ; pendant le geste, WM_MOVING / WM_SIZING
+    // proposent un rectangle que l'on corrige : la fenêtre colle aux autres fenêtres de la suite (cdx-*, KIRC, AudioLinker) et aux bords de la zone de
+    // travail de son écran. Les voisines sont relevées une fois, à l'entrée du geste (WM_ENTERSIZEMOVE).
+    List<Rectangle> snapOthers;
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        switch (m.Msg)
+        {
+            case 0x0231: /* WM_ENTERSIZEMOVE */ snapOthers = SuiteWindows(Handle); break;
+            case 0x0232: /* WM_EXITSIZEMOVE */ snapOthers = null; break;
+            case 0x0216: /* WM_MOVING */
+            case 0x0214: /* WM_SIZING */
+                if (snapOthers == null || WindowState != FormWindowState.Normal) break;
+                var rc = Marshal.PtrToStructure<RECT>(m.LParam); var r = Rectangle.FromLTRB(rc.Left, rc.Top, rc.Right, rc.Bottom);
+                double k = DeviceDpi / 96.0; int dist = (int)Math.Round(Snap.Dist * k), gap = (int)Math.Round(Snap.Gap * k);
+                var area = Screen.FromRectangle(r).WorkingArea;
+                var s = m.Msg == 0x0216 ? new Rectangle(Snap.Move(r, snapOthers, area, dist, gap), r.Size)
+                    : Snap.Size(r, (int)m.WParam, snapOthers, area, dist, gap, Math.Max(1, MinimumSize.Width), Math.Max(1, MinimumSize.Height));
+                if (s != r) Marshal.StructureToPtr(new RECT { Left = s.Left, Top = s.Top, Right = s.Right, Bottom = s.Bottom }, m.LParam, false);
+                m.Result = (IntPtr)1;
+                break;
+        }
+    }
+
+    // Les fenêtres visibles de la suite (cdx-*.exe, KIRC, AudioLinker) autres que `self`, en pixels d'écran. Une fenêtre réduite ou vide ne compte pas.
+    static readonly string[] SuiteExes = { "kirc.exe", "audiolinker.exe" };
+    public static List<Rectangle> SuiteWindows(IntPtr self)
+    {
+        var list = new List<Rectangle>();
+        N.EnumWindows((h, _) =>
+        {
+            if (h == self || !N.IsWindowVisible(h) || N.IsIconic(h)) return true;
+            if (!N.GetWindowRect(h, out var rc) || rc.Right <= rc.Left || rc.Bottom <= rc.Top) return true;
+            var exe = Path.GetFileName(N.ExePathOf(h) ?? "").ToLowerInvariant();
+            if (exe.StartsWith("cdx-") || SuiteExes.Contains(exe)) list.Add(Rectangle.FromLTRB(rc.Left, rc.Top, rc.Right, rc.Bottom));
+            return true;
+        }, IntPtr.Zero);
+        return list;
+    }
 }
