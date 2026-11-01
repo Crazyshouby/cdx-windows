@@ -205,7 +205,7 @@ static class SelfTest
         try
         {
             var s = new PinStore(file);
-            Check("fichier absent : 11 épingles par défaut (dont Notes et Terminal CDX), 5 dans la barre", s.Items.Count == 11 && s.OnBar.Count == 5 && s.Items.All(p => p.Tile));
+            Check("fichier absent : 12 épingles par défaut (dont Notes, Terminal CDX et Agenda), 5 dans la barre", s.Items.Count == 12 && s.OnBar.Count == 5 && s.Items.All(p => p.Tile));
             Check("la barre commence par l'Explorateur et finit par le Navigateur CDX", s.OnBar[0].Target == "cdx:explorer" && s.OnBar[^1].Target == "cdx:navigateur");
 
             Check("ajout d'un fichier existant", s.AddToBar("Essai", exe) && s.OnBar.Count == 6 && s.OnBar[^1].Target == exe);
@@ -256,9 +256,9 @@ static class SelfTest
 
             File.WriteAllText(file, "{{{ abîmé");
             var s3 = new PinStore(file);
-            Check("fichier abîmé : valeurs par défaut, aucune exception", s3.Items.Count == 11 && s3.OnBar.Count == 5);
+            Check("fichier abîmé : valeurs par défaut, aucune exception", s3.Items.Count == 12 && s3.OnBar.Count == 5);
             File.WriteAllText(file, "{\"version\":2,\"pins\":[]}");
-            Check("version inconnue : valeurs par défaut", new PinStore(file).Items.Count == 11);
+            Check("version inconnue : valeurs par défaut", new PinStore(file).Items.Count == 12);
             string allSeen = "\"seen\":[" + string.Join(",", PinStore.Defaults.Select(d => "\"" + d.Target + "\"")) + "],";   // toutes les épingles par défaut déjà proposées : rien à ajouter
             File.WriteAllText(file, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Bon\",\"target\":\"cdx:repos\",\"bar\":true,\"tile\":false},{\"name\":\"Mauvais\",\"target\":\"C:\\\\nexiste\\\\pas.exe\",\"bar\":true},{\"name\":\"Doublon\",\"target\":\"CDX:REPOS\",\"bar\":true},{\"name\":\"Rien\",\"target\":\"cdx:explorer\"},42]}");
             var s4 = new PinStore(file);
@@ -270,8 +270,8 @@ static class SelfTest
             string legacy = Path.Combine(dir, "ancien.json");
             File.WriteAllText(legacy, "{\"version\":1,\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"ic\":\"dossier\",\"bar\":true,\"tile\":true,\"barIndex\":0},{\"name\":\"Calculatrice\",\"target\":\"calc.exe\",\"ic\":\"apps\",\"bar\":false,\"tile\":true,\"barIndex\":-1}]}");
             var lg = new PinStore(legacy);
-            Check("ancien fichier (sans « seen ») : seules les tuiles Notes et Terminal CDX sont ajoutées (hors barre), les neuf d'origine ne reviennent pas", lg.Items.Select(p => p.Target).SequenceEqual(new[] { "cdx:explorer", "calc.exe", "cdx:notes", "cdx:terminal" }) && lg.Find("cdx:notes") is { Tile: true, Bar: false } && lg.Find("cdx:terminal") is { Tile: true, Bar: false } && lg.OnBar.Count == 1);
-            Check("la migration est écrite : « seen » contient cdx:notes, une relecture ne la refait pas", File.ReadAllText(legacy).Contains("\"seen\"") && File.ReadAllText(legacy).Contains("cdx:notes") && File.ReadAllText(legacy).Contains("cdx:terminal") && new PinStore(legacy).Items.Count == 4);
+            Check("ancien fichier (sans « seen ») : seules les tuiles Notes, Terminal CDX et Agenda sont ajoutées (hors barre), les neuf d'origine ne reviennent pas", lg.Items.Select(p => p.Target).SequenceEqual(new[] { "cdx:explorer", "calc.exe", "cdx:notes", "cdx:terminal", "cdx:agenda" }) && lg.Find("cdx:notes") is { Tile: true, Bar: false } && lg.Find("cdx:terminal") is { Tile: true, Bar: false } && lg.OnBar.Count == 1);
+            Check("la migration est écrite : « seen » contient cdx:notes, une relecture ne la refait pas", File.ReadAllText(legacy).Contains("\"seen\"") && File.ReadAllText(legacy).Contains("cdx:notes") && File.ReadAllText(legacy).Contains("cdx:terminal") && File.ReadAllText(legacy).Contains("cdx:agenda") && new PinStore(legacy).Items.Count == 5);
             File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"bar\":true,\"tile\":true,\"barIndex\":0}]}");
             Check("tuile Notes retirée par l'utilisateur (déjà dans « seen ») : elle ne revient pas", new PinStore(legacy).Items.Count == 1);
 

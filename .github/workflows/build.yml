@@ -54,7 +54,7 @@ jobs:
           foreach ($pass in 1, 2) {
             $p = Start-Process $setup -ArgumentList $a -Wait -PassThru
             if ($p.ExitCode -ne 0) { if (Test-Path $log) { Get-Content $log | Select-Object -Last 40 }; throw "Installation (passage $pass) : code $($p.ExitCode)" }
-            foreach ($exe in 'cdx-shell', 'cdx-explorer', 'cdx-browser', 'cdx-transfers', 'cdx-repos', 'cdx-notes', 'cdx-notes-mcp', 'cdx-terminal') { if (-not (Test-Path "$dir\$exe.exe")) { throw "$exe.exe absent après installation" } }
+            foreach ($exe in 'cdx-shell', 'cdx-explorer', 'cdx-browser', 'cdx-transfers', 'cdx-repos', 'cdx-notes', 'cdx-notes-mcp', 'cdx-terminal', 'cdx-agenda') { if (-not (Test-Path "$dir\$exe.exe")) { throw "$exe.exe absent après installation" } }
             if (-not (Test-Path "$dir\web\cdx\cdx-ui.css")) { throw 'les pages (web\) manquent' }
             if (Test-Path "$dir\web\explorer\_test-explorer.html") { throw 'une page de test a été installée' }
           }

@@ -15,6 +15,7 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 | `bin\cdx-explorer.exe [--theme t] [dossier]` | l'Explorateur : une fenêtre par dossier ouvert, s'arrête avec la dernière ; **glisser-déposer** (voir ci-dessous) | une (un second lancement ouvre une fenêtre dans la première) | `journal-explorer.log` |
 | `bin\cdx-browser.exe [--theme t] [adresse]` | le navigateur : onglets, groupes d'onglets, pages scindées, plusieurs fenêtres, session retrouvée, extensions (antipub), réglages, import depuis Chrome (voir « Navigateur, lot 4 ») | une (un second lancement ouvre un onglet) | `journal-browser.log`, profil `navigateur\` |
 | `bin\cdx-repos.exe [--theme t]` | **Dépôts** : tous les projets git du PC (ce qui reste à enregistrer ou à envoyer sur GitHub), en lecture seule | une (un second lancement passe devant) | `journal-repos.log`, `repos.json` (dossiers explorés, projets masqués) |
+| `bin\cdx-agenda.exe [--theme t]` | **Agenda** : calendrier et tâches du compte Google relié à la suite (voir « Agenda et brique Google ») | une (un second lancement passe devant) | `journal-agenda.log` |
 | `bin\cdx-terminal.exe [--theme t] [dossier]` | **Terminal** : un shell (PowerShell 7 s'il est installé, sinon Windows PowerShell) dans une fenêtre de la charte : cadre CDX, fond noir, texte à la couleur d'accent, aucun coin arrondi. Pseudo-console Windows (ConPTY) côté C#, xterm.js dans la page. **Onglets** (Ctrl+Maj+T / W, Ctrl+Tab, Ctrl+Alt+1..9), **volets** côte à côte ou l'un sous l'autre (Alt+Maj+D, menu clic droit, séparateurs déplaçables, Alt+flèches), un shell par volet ; police pixel à chasse fixe de la charte (KIRC Pixel Mono, case de 7 px), texte dessiné par WebGL. Lancé avec un dossier (ou, s'il tourne déjà, un second lancement) : un onglet dans ce dossier. **Win+T** l'ouvre depuis le shell ; la tuile « Terminal CDX » du menu Démarrer le lance ; « Ouvrir dans un terminal » de l'Explorateur l'utilise (Windows Terminal puis cmd en repli) | une (un second lancement passe devant) | `journal-terminal.log` |
 
 Le shell lance les autres (`cdx:explorer`, `cdx:navigateur`, `cdx:repos`, `cdx:terminal`, Win+E, Win+T) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
@@ -94,6 +95,16 @@ d'attraction, 2 px d'écart entre deux fenêtres, aucun au bord de l'écran, à 
 - **Vers une autre application** : quand le pointeur quitte la fenêtre avec des éléments saisis, la page envoie `fs.dragout` et Windows prend le relais (`DoDragDrop`, fichiers réels) ; la liste est relue ensuite.
 - **Essais** : `cdx-explorer --selftest-fs` (déplacer, copier, refus, noms uniques) et `tests\dnd.ps1` (la page pilotée par des événements de pointeur fabriqués, jamais la vraie souris ; conflits de noms compris). **Pas essayés automatiquement** :
   le glisser depuis et vers une autre application (il demande un vrai glisser de Windows) ; à essayer à la main.
+
+## Agenda et brique Google (lot 5, 01/11/2026)
+`src\Cdx.Host\Google.cs` (**GoogleAuth**) : le compte Google de la suite, relié une fois (OAuth 2.0 « application de bureau », PKCE, redirection sur 127.0.0.1, page de
+consentement ouverte dans le navigateur CDX), jeton gardé chiffré DPAPI dans `%APPDATA%\CDX\google-token.bin` (`Dpapi.cs`), rafraîchi tout seul, `ApiAsync` pour les API (401 → rafraîchi
+une fois, message d'erreur de Google remonté). L'identifiant client vient de `%APPDATA%\CDX\google-client.json` (le `client_secret_….json` de la console Google Cloud, jamais commité) ;
+les portées se cumulent (une nouvelle refait passer par le consentement). `CDX_GOOGLE_API` remplace googleapis.com pour les essais.
+`src\Cdx.Agenda\` (**cdx-agenda**, neuvième programme, tuile « Agenda », `cdx:agenda`) : mois, semaine, liste des 31 jours ; événements de tous les agendas (masquables par le menu
+Réglages, `agenda.json`), fiche, création (bouton, Ctrl+N, double-clic sur un jour), modification, suppression (agendas en écriture seulement) ; tâches Google par liste (ajouter,
+cocher, renommer, échéance, supprimer, nouvelle liste) ; cache `agenda-cache.json` montré hors ligne. Essai `tests\agenda.ps1` (22 vérifications) contre `tests\fake_google.py`
+(OAuth, Calendar et Tasks en mémoire) : rien ne touche au vrai compte.
 
 ## Navigateur, lot 4 (01/11/2026)
 `src\Cdx.Browser\` : `Browser.cs` (une fenêtre : onglets, groupes, pages scindées), `BrowserApp.cs` (les fenêtres, la session, le bus, le canal de test), `BrowserData.cs`

@@ -197,32 +197,14 @@ static class Passwords
     static string F => Path.Combine(Host.DataDir, "motsdepasse.bin");
     public static readonly List<Credential> All = Load();
 
-    [StructLayout(LayoutKind.Sequential)] struct DATA_BLOB { public int cbData; public IntPtr pbData; }
-    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool CryptProtectData(ref DATA_BLOB i, string descr, IntPtr entropy, IntPtr reserved, IntPtr prompt, int flags, out DATA_BLOB o);
-    [DllImport("crypt32.dll", SetLastError = true)] static extern bool CryptUnprotectData(ref DATA_BLOB i, IntPtr descr, IntPtr entropy, IntPtr reserved, IntPtr prompt, int flags, out DATA_BLOB o);
-    [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr h);
-
-    static byte[] Dpapi(byte[] data, bool protect)
-    {
-        var inb = new DATA_BLOB { cbData = data.Length, pbData = Marshal.AllocHGlobal(data.Length) };
-        try
-        {
-            Marshal.Copy(data, 0, inb.pbData, data.Length);
-            bool ok = protect ? CryptProtectData(ref inb, "CDX navigateur", IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0, out var o) : CryptUnprotectData(ref inb, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, 0, out o);
-            if (!ok) throw new InvalidOperationException("DPAPI : " + Marshal.GetLastWin32Error());
-            try { var r = new byte[o.cbData]; Marshal.Copy(o.pbData, r, 0, o.cbData); return r; } finally { LocalFree(o.pbData); }
-        }
-        finally { Marshal.FreeHGlobal(inb.pbData); }
-    }
-
     static List<Credential> Load()
     {
-        try { if (!File.Exists(F)) return new(); return JsonSerializer.Deserialize<List<Credential>>(Encoding.UTF8.GetString(Dpapi(File.ReadAllBytes(F), false))) ?? new(); }
+        try { if (!File.Exists(F)) return new(); return JsonSerializer.Deserialize<List<Credential>>(Encoding.UTF8.GetString(Dpapi.Unprotect(File.ReadAllBytes(F)))) ?? new(); }
         catch (Exception ex) { Host.Log("mots de passe illisibles : " + ex.Message); return new(); }
     }
     public static void Save()
     {
-        try { if (All.Count == 0) { File.Delete(F); return; } File.WriteAllBytes(F, Dpapi(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(All)), true)); }
+        try { if (All.Count == 0) { File.Delete(F); return; } File.WriteAllBytes(F, Dpapi.Protect(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(All)), "CDX navigateur")); }
         catch (Exception ex) { Host.Log("mots de passe : " + ex.Message); }
     }
 

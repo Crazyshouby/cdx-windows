@@ -68,6 +68,7 @@ Name: "browser"; Description: "Navigateur"; Types: full
 Name: "repos"; Description: "Dépôts (vos projets git, en lecture seule)"; Types: full
 Name: "notes"; Description: "Notes (coffre Markdown) et son serveur MCP pour Claude"; Types: full
 Name: "terminal"; Description: "Terminal"; Types: full
+Name: "agenda"; Description: "Agenda (calendrier et tâches du compte Google)"; Types: full
 
 [Tasks]
 Name: "startup"; Description: "Lancer la barre {#AppName} à l'ouverture de session Windows"; Components: shell; Flags: unchecked
@@ -91,6 +92,7 @@ Source: "{#BinDir}\cdx-notes-mcp.*"; DestDir: "{app}"; Excludes: "*.pdb"; Compon
 Source: "{#BinDir}\Cdx.Vault.dll"; DestDir: "{app}"; Components: notes; Flags: ignoreversion
 Source: "{#BinDir}\Cdx.Vault.deps.json"; DestDir: "{app}"; Components: notes; Flags: ignoreversion
 Source: "{#BinDir}\cdx-terminal.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: terminal; Flags: ignoreversion
+Source: "{#BinDir}\cdx-agenda.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: agenda; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}\Barre {#AppName}"; Filename: "{app}\{#ShellExe}"; Components: shell
@@ -100,6 +102,7 @@ Name: "{autoprograms}\{#AppName}\Navigateur {#AppName}"; Filename: "{app}\cdx-br
 Name: "{autoprograms}\{#AppName}\Dépôts {#AppName}"; Filename: "{app}\cdx-repos.exe"; Components: repos
 Name: "{autoprograms}\{#AppName}\Notes {#AppName}"; Filename: "{app}\cdx-notes.exe"; Components: notes
 Name: "{autoprograms}\{#AppName}\Terminal {#AppName}"; Filename: "{app}\cdx-terminal.exe"; Components: terminal
+Name: "{autoprograms}\{#AppName}\Agenda {#AppName}"; Filename: "{app}\cdx-agenda.exe"; Components: agenda
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#ShellExe}"""; Tasks: startup; Flags: uninsdeletevalue
@@ -206,7 +209,7 @@ var
   Shell: String;
 begin
   if NoStop then exit;
-  Names := ['cdx-shell.exe', 'cdx-explorer.exe', 'cdx-browser.exe', 'cdx-transfers.exe', 'cdx-repos.exe', 'cdx-notes.exe', 'cdx-notes-mcp.exe', 'cdx-terminal.exe'];
+  Names := ['cdx-shell.exe', 'cdx-explorer.exe', 'cdx-browser.exe', 'cdx-transfers.exe', 'cdx-repos.exe', 'cdx-notes.exe', 'cdx-notes-mcp.exe', 'cdx-terminal.exe', 'cdx-agenda.exe'];
   for I := 0 to GetArrayLength(Names) - 1 do
     Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM ' + Names[I] + ' /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Shell := AppDir + '\{#ShellExe}';
