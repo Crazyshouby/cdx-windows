@@ -98,6 +98,12 @@ try {
   Js "const e = document.getElementById('ed'); e.value = 'Un zorglub en minuscule.'; e.blur(); e.dispatchEvent(new Event('input'))" | Out-Null
   Start-Sleep -Milliseconds 800
   Check "un mot du dictionnaire personnel n'est plus souligné, même en minuscules" ((Js "document.querySelectorAll('.cdx-spell mark').length") -eq '0')
+  # la correction automatique : à l'espace, « bonjuor » (lettres inversées, une seule candidate proche) devient « bonjour » ; « marchée » (plusieurs candidates) reste souligné
+  Js "const e = document.getElementById('ed'); e.focus(); e.value = 'Je dis bonjuor'; e.setSelectionRange(14, 14); e.value += ' '; e.setSelectionRange(15, 15); e.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ' ', bubbles: true }))" | Out-Null
+  Check "correction automatique à l'espace : « bonjuor » devient « bonjour », marqué en pointillé, curseur après l'espace" ((Until { (Js "document.getElementById('ed').value") -eq 'Je dis bonjour ' } 6000) -and ((Js "[...document.querySelectorAll('.cdx-spell mark.a')].map(m => m.textContent).join(',')") -eq 'bonjour') -and ((Js "document.getElementById('ed').selectionStart") -eq '15'))
+  Js "const e = document.getElementById('ed'); e.focus(); e.value = 'Je dis marchée'; e.setSelectionRange(14, 14); e.value += ' '; e.setSelectionRange(15, 15); e.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ' ', bubbles: true }))" | Out-Null
+  Start-Sleep -Milliseconds 1200
+  Check "« marchée » (matchée, marchés, marché : plusieurs candidates) n'est pas corrigé tout seul, il reste souligné en faute" (((Js "document.getElementById('ed').value") -eq 'Je dis marchée ') -and (Until { (Js "document.querySelectorAll('.cdx-spell mark:not(.a)').length") -eq '1' } 5000))
   # la grammaire : Grammalecte dans le worker de la page (web/cdx/grammaire-worker.js, lexique chargé en une à deux secondes)
   Js "const e = document.getElementById('ed'); e.value = 'Les chat mange des croquettes.'; e.blur(); e.dispatchEvent(new Event('input'))" | Out-Null
   Until { (Js "document.querySelectorAll('.cdx-spell mark.g').length") -gt 0 } 25000 | Out-Null; Start-Sleep -Milliseconds 1500

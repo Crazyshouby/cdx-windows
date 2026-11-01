@@ -572,7 +572,10 @@ static class SelfTest
             string j1 = JsonSerializer.Serialize(r1);
             Check("sp.check : seuls les mots inconnus reviennent, avec l'identifiant", j1.Contains("\"type\":\"sp.result\"") && j1.Contains("\"id\":\"sp1\"") && Bad(r1).SequenceEqual(new[] { "marchée", "Orthografe" }));
             var r2 = JsonSerializer.Serialize(Spell.Reply("""{"cmd":"sp.suggest","id":"sp2","word":"orthografe"}"""));
-            Check("sp.suggest : la liste des suggestions", r2.Contains("\"type\":\"sp.suggestions\"") && r2.Contains("\"id\":\"sp2\"") && r2.Contains("orthographe"));
+            Check("sp.suggest : la liste des suggestions, et le mot est dit inconnu", r2.Contains("\"type\":\"sp.suggestions\"") && r2.Contains("\"id\":\"sp2\"") && r2.Contains("orthographe") && r2.Contains("\"known\":false"));
+            Check("sp.suggest d'un mot connu : dit connu (la correction automatique n'y touche pas)", JsonSerializer.Serialize(Spell.Reply("""{"cmd":"sp.suggest","id":"sp2b","word":"bonjour"}""")).Contains("\"known\":true"));
+            var sug3 = Spell.Suggest("bonjuor"); lines.Add("        suggestions pour « bonjuor » : " + string.Join(", ", sug3));
+            Check("suggestion pour « bonjuor » (lettres inversées) : bonjour", sug3.Contains("bonjour"));
             var r3 = JsonSerializer.Serialize(Spell.Reply("""{"cmd":"sp.add","word":"Valentinois"}"""));
             Check("sp.add : le mot est ajouté et confirmé", r3.Contains("\"type\":\"sp.added\"") && Spell.Check("Valentinois") && File.ReadAllText(perso).Contains("Valentinois"));
             Check("sp.add d'un mot vide : rien", Spell.Reply("""{"cmd":"sp.add","word":"  "}""") == null);

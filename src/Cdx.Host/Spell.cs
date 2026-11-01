@@ -105,7 +105,7 @@ static class Spell
                     return new { type = "sp.result", id, bad };
                 case "sp.suggest":
                     string word = r.TryGetProperty("word", out var wd) ? wd.GetString() ?? "" : "";
-                    return new { type = "sp.suggestions", id, word, list = Suggest(word) };
+                    return new { type = "sp.suggestions", id, word, list = Suggest(word), known = Check(word) };   // known : la correction automatique ne touche pas un mot connu
                 case "sp.add":
                     string add = (r.TryGetProperty("word", out var ad) ? ad.GetString() ?? "" : "").Trim();
                     if (add.Length == 0) return null;

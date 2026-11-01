@@ -43,7 +43,7 @@ tests\              pilote.ps1 (Pilote contre fake_claude.py et fake_gmail.py : 
 
 ## Essais (aucune entrée simulée)
 
-- Auto-tests, sans fenêtre visible : `cdx-explorer --selftest-fs`, `--selftest-web` ; `cdx-shell --selftest-sys`, `--selftest-audio`, `--selftest-snap` (19 vérifications de l'aimantation), `--selftest-spell` (21 vérifications du correcteur orthographique) ; `cdx-browser --selftest-browser` ; `cdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables) ; `cdx-terminal --selftest-pty` (10 vérifications de la pseudo-console : sortie, code de sortie, UTF-8, redimensionnement, arrêt) ; `tests\terminal.ps1 -Bin <dossier>` (43 vérifications dans la vraie fenêtre isolée : shells, police et WebGL, couleurs de la charte, accent, onglets, volets, raccourcis, redimensionnement, titre, fermeture, dossier de départ, et avec `-ExplorerBin` l'Explorateur qui ouvre un onglet puis relance le terminal).
+- Auto-tests, sans fenêtre visible : `cdx-explorer --selftest-fs`, `--selftest-web` ; `cdx-shell --selftest-sys`, `--selftest-audio`, `--selftest-snap` (19 vérifications de l'aimantation), `--selftest-spell` (24 vérifications du correcteur orthographique) ; `cdx-browser --selftest-browser` ; `cdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables) ; `cdx-terminal --selftest-pty` (10 vérifications de la pseudo-console : sortie, code de sortie, UTF-8, redimensionnement, arrêt) ; `tests\terminal.ps1 -Bin <dossier>` (43 vérifications dans la vraie fenêtre isolée : shells, police et WebGL, couleurs de la charte, accent, onglets, volets, raccourcis, redimensionnement, titre, fermeture, dossier de départ, et avec `-ExplorerBin` l'Explorateur qui ouvre un onglet puis relance le terminal).
   Résultats dans `%LOCALAPPDATA%\CdxShell\selftest*.txt`.
 - Canal de contrôle : si `%LOCALAPPDATA%\CdxShell\debug.txt` existe au lancement, chaque programme ouvre un tube réservé à l'utilisateur courant
   (`cdx.shell.ctl`, `cdx.explorer.ctl`, `cdx.browser.ctl`, `cdx.repos.ctl`) pour lire son état et exécuter du JavaScript dans ses pages. `tests\navigateur.ps1` et
@@ -153,6 +153,11 @@ ContextMenuRequested n'est jamais levé (c'est écrit dans sa spécification), d
   lettres seules, le mot en cours de frappe, et avec l'option `markdown` le code, les liens `[[…]]` et `[…](…)`, les #étiquettes. Clic droit sur un mot souligné : les suggestions
   (huit au plus), « Ajouter au dictionnaire », « Ignorer ici », puis Annuler / Rétablir / Couper / Copier / Tout sélectionner (ces actions seules ailleurs dans la zone).
   Un mot choisi remplace l'autre par `insertText` (l'historique Annuler est gardé).
+- **La correction automatique** (QCM du 01/11/2026 : orthographe à la fin du mot ; seulement si la suggestion est sûre ; Ctrl+Z et un rappel visible) : à l'espace, à la ponctuation
+  ou au retour à la ligne, le mot qui précède est vérifié (`sp.suggest`, qui dit aussi s'il est connu) ; s'il est inconnu et qu'une seule candidate est à une lettre d'écart (ou, dès six
+  lettres, une seule à deux lettres : « orthografe » → « orthographe »), elle le remplace par `insertText`, le curseur reste où il était. « marchée » (matchée, marchés, marché) n'est pas touché.
+  Le mot corrigé reste souligné en pointillé « ok » (`--green`) huit secondes ; clic droit : « Rétablir « … » », « Ajouter « … » au dictionnaire ». Ctrl+Z rend le mot tapé, qui n'est plus
+  corrigé dans la fenêtre. Jamais corrigés tout seuls : mots avec apostrophe ou trait d'union, majuscule interne. Réglage « Correction automatique à la fin du mot » (grisé sans le correcteur).
 - **La grammaire** (demande du 01/11/2026 : « ajoute ce qu'il faut pour la conjugaison ») : Grammalecte 2.3.0 (Olivier R., GPL 3), le moteur de l'extension Firefox, dans un worker de la
   page (`web\cdx\grammaire-worker.js`, fichiers sous `web\third_party\grammalecte` : moteur, règles, lexique de 4 Mo, conjugaisons ; ni thésaurus ni tests ; le lint de la charte ignore
   `third_party`). Chargé en une à deux secondes à la première zone de texte, hors du fil de la page ; le texte entier (parties masquées en espaces) est vérifié 600 ms après la dernière
@@ -162,9 +167,10 @@ ContextMenuRequested n'est jamais levé (c'est écrit dans sa spécification), d
   (« Les chat mange » : « chat » d'abord ; « mange » une fois « chats » écrit, puisqu'il s'accordait avec le singulier).
 - **Où** : l'éditeur de Notes (Réglages > Affichage > Correcteur orthographique, Grammaire), le message de Courrier et la zone de saisie de Pilote (Réglages > Correcteur orthographique,
   Grammaire) ; réglages gardés par programme, en marche par défaut.
-- **Essais** : `cdx-shell --selftest-spell` (21 vérifications : mots, formes fausses, élisions, traits d'union, suggestions, dictionnaire personnel jetable, contrat des pages) et
-  `tests/spell.test.html` de cdx-ui (32 vérifications dans Chrome headless contre un faux hôte et un faux worker : découpage, calque, mot du curseur, menus, remplacement, ajout, grammaire,
-  « Ignorer ici », arrêt, retrait, sp.off) ; `tests\notes.ps1` vérifie la chaîne entière dans la vraie fenêtre (Hunspell et Grammalecte : soulignement, menu, correction, dictionnaire personnel).
+- **Essais** : `cdx-shell --selftest-spell` (24 vérifications : mots, formes fausses, élisions, traits d'union, suggestions, dictionnaire personnel jetable, contrat des pages) et
+  `tests/spell.test.html` de cdx-ui (44 vérifications dans Chrome headless contre un faux hôte et un faux worker : découpage, calque, mot du curseur, menus, remplacement, ajout, correction
+  automatique, grammaire, « Ignorer ici », arrêt, retrait, sp.off) ; `tests\notes.ps1` vérifie la chaîne entière dans la vraie fenêtre (Hunspell et Grammalecte : soulignement, menu, correction
+  automatique, dictionnaire personnel).
 
 ## Courrier (lot 5, 01/11/2026)
 `src\Cdx.Mail\` (**cdx-mail**, dixième programme, tuile « Courrier », `cdx:courrier`, portée Google `gmail.modify` ajoutée au compte de la suite) : `Gmail.cs` (lecture d'un message de
