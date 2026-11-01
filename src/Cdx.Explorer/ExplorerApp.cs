@@ -162,6 +162,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
             case "state": return windows.Count + " fenêtre(s)";
             case "open": Open(a); return "ok";
             case "eval": return windows.Count == 0 ? "pas de fenêtre" : await windows[0].Web.CoreWebView2.ExecuteScriptAsync(a);
+            case "cmd": if (windows.Count > 0) OnMessage(windows[0], a); return "ok";
             default: return "commande inconnue";
         }
     }

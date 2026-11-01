@@ -95,6 +95,7 @@ sealed class ReposApp : ApplicationContext, IHostApp
         {
             case "state": return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", " + infos.Count + " dépôt(s), " + roots.Count + " dossier(s)";
             case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
+            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";
         }
     }

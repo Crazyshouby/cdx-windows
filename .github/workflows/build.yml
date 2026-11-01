@@ -28,7 +28,7 @@ jobs:
       - name: Self-tests (bus, AudioLinker link, snapping, files, git)
         shell: pwsh
         run: |
-          foreach ($t in @(@('cdx-shell', '--selftest-bus'), @('cdx-shell', '--selftest-audio'), @('cdx-shell', '--selftest-snap'), @('cdx-explorer', '--selftest-fs'), @('cdx-repos', '--selftest-git'))) {
+          foreach ($t in @(@('cdx-shell', '--selftest-bus'), @('cdx-shell', '--selftest-audio'), @('cdx-shell', '--selftest-snap'), @('cdx-shell', '--selftest-pilote'), @('cdx-explorer', '--selftest-fs'), @('cdx-repos', '--selftest-git'))) {
             $p = Start-Process "bin\$($t[0]).exe" -ArgumentList $t[1] -Wait -PassThru
             "$($t[0]) $($t[1]) : code $($p.ExitCode)"
             if ($p.ExitCode -ne 0) { Get-Content "$env:LOCALAPPDATA\CdxShell\selftest*.txt"; throw "$($t[1]) en échec" }
@@ -54,7 +54,7 @@ jobs:
           foreach ($pass in 1, 2) {
             $p = Start-Process $setup -ArgumentList $a -Wait -PassThru
             if ($p.ExitCode -ne 0) { if (Test-Path $log) { Get-Content $log | Select-Object -Last 40 }; throw "Installation (passage $pass) : code $($p.ExitCode)" }
-            foreach ($exe in 'cdx-shell', 'cdx-explorer', 'cdx-browser', 'cdx-transfers', 'cdx-repos', 'cdx-notes', 'cdx-notes-mcp', 'cdx-terminal', 'cdx-agenda', 'cdx-mail') { if (-not (Test-Path "$dir\$exe.exe")) { throw "$exe.exe absent après installation" } }
+            foreach ($exe in 'cdx-shell', 'cdx-explorer', 'cdx-browser', 'cdx-transfers', 'cdx-repos', 'cdx-notes', 'cdx-notes-mcp', 'cdx-terminal', 'cdx-agenda', 'cdx-mail', 'cdx-pilote', 'cdx-pilote-mcp') { if (-not (Test-Path "$dir\$exe.exe")) { throw "$exe.exe absent après installation" } }
             if (-not (Test-Path "$dir\web\cdx\cdx-ui.css")) { throw 'les pages (web\) manquent' }
             if (Test-Path "$dir\web\explorer\_test-explorer.html") { throw 'une page de test a été installée' }
           }

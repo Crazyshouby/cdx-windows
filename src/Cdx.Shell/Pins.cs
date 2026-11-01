@@ -25,7 +25,7 @@ sealed class PinStore
         new("Explorateur", "cdx:explorer", "dossier", true, true), new("Paramètres", "ms-settings:", "reglages", true, true), new("Terminal", "wt.exe", "console", true, true),
         new("Chrome", "chrome.exe", "serveur", true, true), new("Navigateur CDX", "cdx:navigateur", "kirc", true, true), new("Dépôts", "cdx:repos", "liste", false, true),
         new("Calculatrice", "calc.exe", "apps", false, true), new("Bloc-notes", "notepad.exe", "journal", false, true), new("Images", "shell:My Pictures", "image", false, true),
-        new("Notes", "cdx:notes", "carnet", false, true), new("Terminal CDX", "cdx:terminal", "console", false, true), new("Agenda", "cdx:agenda", "horloge", false, true), new("Courrier", "cdx:courrier", "message", false, true),
+        new("Notes", "cdx:notes", "carnet", false, true), new("Terminal CDX", "cdx:terminal", "console", false, true), new("Agenda", "cdx:agenda", "horloge", false, true), new("Courrier", "cdx:courrier", "message", false, true), new("Pilote", "cdx:pilote", "processeur", false, true),
     };
 
     public PinStore(string file) { this.file = file; SetItems(Defaults.ToList()); foreach (var d in Defaults) seen.Add(d.Target); Load(); }

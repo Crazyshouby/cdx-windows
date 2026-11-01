@@ -23,6 +23,7 @@ static class Program
             Suite.RegisterApp("mail", Environment.ProcessPath);
             app.Anchor.BeginInvoke(new Action(() => app.Open()));   // dans la boucle de messages : WebView2 en a besoin
             Host.StartControlPipe("mail", app.Anchor, app.HandleControl, () => app.Closing);
+            Host.StartPilotPipe("mail", app.Anchor, app.HandleControl, () => app.Closing);
             Application.Run(app);
         }
     }

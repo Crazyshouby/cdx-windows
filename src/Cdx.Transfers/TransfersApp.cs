@@ -248,6 +248,7 @@ sealed class TransfersApp : ApplicationContext, IHostApp
             case "state": return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", " + entries.Count + " transfert(s), " + entries.Values.Count(e => e.Live) + " en cours";
             case "entries": return JsonSerializer.Serialize(entries.Values.Select(e => new { e.Key, e.Kind, e.Title, e.State, e.Done, e.Total, e.Hist }));
             case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
+            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";
         }
     }

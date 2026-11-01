@@ -17,6 +17,7 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 | `bin\cdx-repos.exe [--theme t]` | **Dépôts** : tous les projets git du PC (ce qui reste à enregistrer ou à envoyer sur GitHub), en lecture seule | une (un second lancement passe devant) | `journal-repos.log`, `repos.json` (dossiers explorés, projets masqués) |
 | `bin\cdx-agenda.exe [--theme t]` | **Agenda** : calendrier et tâches du compte Google relié à la suite (voir « Agenda et brique Google ») | une (un second lancement passe devant) | `journal-agenda.log` |
 | `bin\cdx-mail.exe [--theme t]` | **Courrier** : la boîte Gmail du compte Google relié à la suite (voir « Courrier ») | une (un second lancement passe devant) | `journal-mail.log` |
+| `bin\cdx-pilote.exe [--theme t]` | **Pilote** : le chat avec Claude réservé à l'organisation et à la création des projets ; Claude Code en sous-processus, la suite en outils (voir « Pilote ») | une (un second lancement passe devant) | `journal-pilote.log`, `pilote.json`, `pilote\<conversation>.json` |
 | `bin\cdx-terminal.exe [--theme t] [dossier]` | **Terminal** : un shell (PowerShell 7 s'il est installé, sinon Windows PowerShell) dans une fenêtre de la charte : cadre CDX, fond noir, texte à la couleur d'accent, aucun coin arrondi. Pseudo-console Windows (ConPTY) côté C#, xterm.js dans la page. **Onglets** (Ctrl+Maj+T / W, Ctrl+Tab, Ctrl+Alt+1..9), **volets** côte à côte ou l'un sous l'autre (Alt+Maj+D, menu clic droit, séparateurs déplaçables, Alt+flèches), un shell par volet ; police pixel à chasse fixe de la charte (KIRC Pixel Mono, case de 7 px), texte dessiné par WebGL. Lancé avec un dossier (ou, s'il tourne déjà, un second lancement) : un onglet dans ce dossier. **Win+T** l'ouvre depuis le shell ; la tuile « Terminal CDX » du menu Démarrer le lance ; « Ouvrir dans un terminal » de l'Explorateur l'utilise (Windows Terminal puis cmd en repli) | une (un second lancement passe devant) | `journal-terminal.log` |
 
 Le shell lance les autres (`cdx:explorer`, `cdx:navigateur`, `cdx:repos`, `cdx:terminal`, Win+E, Win+T) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
@@ -31,12 +32,13 @@ src\Cdx.Shell\      cdx-shell : Program.cs (barre, Démarrer, centre, Alt+Tab, c
 src\Cdx.Explorer\   cdx-explorer : Fs.cs (fichiers), ExplorerForm.cs
 src\Cdx.Browser\    cdx-browser : Browser.cs (onglets, favoris, historique, téléchargements)
 src\Cdx.Repos\      cdx-repos : Git.cs (recherche et lecture de git, jamais d'écriture), ReposApp.cs
+src\Cdx.Pilote\     cdx-pilote : Claude.cs (claude.exe en sous-processus, stream-json), PilotTools.cs (les outils de la suite, tube cdx.pilote.outils), PiloteApp.cs (conversations, accords, page) ; src\Cdx.PiloteMcp\ cdx-pilote-mcp (le relais MCP « cdx-suite ») ; dans Cdx.Host : ClaudeFlux.cs (l'analyseur du flux), PilotPolicy.cs (la politique d'autorisation)
 src\Cdx.Terminal\   cdx-terminal : ConPty.cs (la pseudo-console : lancer le shell, faire passer les octets, redimensionner), TerminalApp.cs (fenêtre, une session par volet, messages de la page, presse-papiers)
 web\terminal\       la page du terminal (terminal.html, terminal.css, terminal.js : onglets, arbre de volets) ; fonts\ = KIRC Pixel Mono (générée par cdx-ui\gen\gen_font_mono.py, copie à refaire si la police change) ; vendor\ = xterm.js 6.0.0, addon-fit 0.11.0 et addon-webgl 0.19.0 (MIT, copiés tels quels ; exceptions du lint dans charte-lint.allow)
 web\cdx\            la charte (copie exacte de cdx-ui/dist : node tools/charte-sync.mjs --write cdx-windows) et host.js, le pont des pages
 web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
 couche1\            le cadre des fenêtres de Windows aux couleurs de la charte (DWM), réversible
-tests\              navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
+tests\              pilote.ps1 (Pilote contre fake_claude.py : 33 vérifications), navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
 ```
 
 ## Essais (aucune entrée simulée)
@@ -106,6 +108,29 @@ les portées se cumulent (une nouvelle refait passer par le consentement). `CDX_
 Réglages, `agenda.json`), fiche, création (bouton, Ctrl+N, double-clic sur un jour), modification, suppression (agendas en écriture seulement) ; tâches Google par liste (ajouter,
 cocher, renommer, échéance, supprimer, nouvelle liste) ; cache `agenda-cache.json` montré hors ligne. Essai `tests\agenda.ps1` (22 vérifications) contre `tests\fake_google.py`
 (OAuth, Calendar et Tasks en mémoire) : rien ne touche au vrai compte.
+
+## Pilote (01/11/2026)
+`src\Cdx.Pilote\` (**cdx-pilote**, onzième programme, tuile « Pilote », `cdx:pilote`) : un chat avec Claude, réservé à l'organisation et à la création des projets (décisions du 01/11/2026 :
+Claude Code en sous-processus plutôt que l'API ; un projet = fiche dans Notes + dossier dans `Dev\` + dépôt git ; lecture libre, irréversible confirmé ; nom « Pilote »).
+- **Le cerveau** : `Claude.cs` lance `claude.exe -p` en stream-json dans les deux sens (le canal mis au point pour Tennis), un processus persistant par conversation, repris après un
+  redémarrage par `--resume` (la session garde tout son contexte) ; `--permission-prompt-tool stdio` fait passer les demandes d'accord par ce même flux (forme relevée en vrai, voir
+  `Cdx.Host\ClaudeFlux.cs`, l'analyseur : texte au fil de l'eau, outils, résultats, demandes d'accord, quota de l'abonnement, fin de tour). Facturé sur l'abonnement de Valentin, aucune clé API.
+  `claude.exe` est cherché dans `CDX_CLAUDE_EXE`, puis `~\.local\bin`, puis le PATH ; `CDX_CLAUDE_ARGS` (essais) place des arguments devant.
+- **Les outils** : `PilotTools.cs` tient le tube `cdx.pilote.outils` ; `src\Cdx.PiloteMcp\` (**cdx-pilote-mcp**, serveur MCP « cdx-suite ») n'est qu'un relais JSON-RPC vers ce tube, lancé par
+  Claude Code d'après le `--mcp-config` que Pilote écrit (`pilote-mcp.json` : cdx-suite et cdx-notes, `--strict-mcp-config`). Outils : `suite_state`, `app_open`, `app_state`, `app_command`,
+  `browser_tabs/open/navigate/read/find/click/fill/back/scroll/screenshot`, `notify`, `project_folder`. Les programmes sont commandés par leur **canal de pilotage** `cdx.<nom>.pilot`
+  (`Host.StartPilotPipe`, toujours ouvert, utilisateur courant : `state`, `cmd <json>` et, pour le navigateur, `page.text/find/click/fill/scroll/shot`, des scripts fixes sur l'onglet actif ;
+  jamais `eval`, réservé au canal de test). Un programme absent est lancé.
+- **Les accords** : `Cdx.Host\PilotPolicy.cs` décide seul ce qui peut l'être selon le niveau (Réglages > Autonomie : libre, prudent, auto) : lectures et outils de lecture toujours ; écritures dans
+  `Dev\` et le coffre, commandes sûres (git status/add/commit, npm install, dotnet build…), outils réversibles de la suite au niveau libre ; le reste (et toujours : git push, suppressions,
+  envoi de courrier, `notes_trash`) s'affiche dans le volet **Actions** avec Autoriser / Refuser (ou Refuser… avec un motif que Claude lit). Les questions à choix de Claude (AskUserQuestion)
+  s'y répondent aussi. Les outils de lecture sont en plus donnés par `--allowedTools`.
+- **La page** `web\pilote\pilote.html` : conversations à gauche (clic droit : renommer, supprimer), le fil au centre (Markdown rendu par `web\notes\js\md.js`, texte en direct, appels d'outils
+  avec leur état), la saisie (Entrée envoie, Maj+Entrée à la ligne, Échap ou « Arrêter » interrompt), le volet des actions à droite ; ligne d'état : quota de l'abonnement, contexte occupé.
+  Réglages : autonomie, modèle, effort (pris au message suivant, `--resume`). Une demande d'accord faite alors que la fenêtre n'a pas le focus est signalée à la barre.
+- **Essais** : `cdx-shell --selftest-pilote` (36 vérifications : l'analyseur sur des lignes réelles de Claude Code 2.1.316, la politique) ; `tests\pilote.ps1` (33 vérifications contre
+  `tests\fake_claude.py`, un faux `claude -p` qui lance les vrais serveurs MCP et rejoue les scénarios : outils, navigateur piloté, accords automatiques et demandés, refus, question à choix,
+  commande d'un programme, création d'un projet dans un coffre jetable, redémarrage et reprise, arrêt). Rien ne touche au vrai Claude Code ni aux vrais programmes.
 
 ## Courrier (lot 5, 01/11/2026)
 `src\Cdx.Mail\` (**cdx-mail**, dixième programme, tuile « Courrier », `cdx:courrier`, portée Google `gmail.modify` ajoutée au compte de la suite) : `Gmail.cs` (lecture d'un message de

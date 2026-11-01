@@ -23,6 +23,7 @@
     <InternalsVisibleTo Include="cdx-terminal" />
     <InternalsVisibleTo Include="cdx-agenda" />
     <InternalsVisibleTo Include="cdx-mail" />
+    <InternalsVisibleTo Include="cdx-pilote" />
   </ItemGroup>
 
 </Project>

@@ -191,7 +191,77 @@ sealed class BrowserApp : ApplicationContext, IHostApp
             case "eval": return b == null ? "pas de navigateur" : await b.EvalAsync(a, false);
             case "evalui": return b == null ? "pas de navigateur" : await b.EvalAsync(a, true);
             case "cmd": { using var d = JsonDocument.Parse(a); string cm = d.RootElement.GetProperty("cmd").GetString(); if (cm.StartsWith("win.") && b != null) Host.WindowCommand(b, cm, d.RootElement); else b?.Command(cm, d.RootElement); return "ok"; }
+            // ---- le pilotage d'une page (Pilote / Claude) : des scripts fixes sur l'onglet actif, jamais du JavaScript reçu ----
+            case "page.text": return b?.Active?.Web.CoreWebView2 == null ? "ERREUR pas de page" : await b.EvalAsync(PageText.Replace("MAX", (int.TryParse(a, out var mx) && mx > 0 ? Math.Min(mx, 200000) : 40000).ToString()), false);
+            case "page.find": return b?.Active?.Web.CoreWebView2 == null ? "ERREUR pas de page" : await b.EvalAsync(PageFind, false);
+            case "page.click": return b?.Active?.Web.CoreWebView2 == null ? "ERREUR pas de page" : await b.EvalAsync(PageClick.Replace("ARG", JsonSerializer.Serialize(a)), false);
+            case "page.fill": return b?.Active?.Web.CoreWebView2 == null ? "ERREUR pas de page" : await b.EvalAsync(PageFill.Replace("ARG", JsonSerializer.Serialize(a)), false);
+            case "page.scroll": return b?.Active?.Web.CoreWebView2 == null ? "ERREUR pas de page" : await b.EvalAsync("(() => { window.scrollBy(0, " + (int.TryParse(a, out var dy) ? dy : 600) + "); return JSON.stringify({ y: Math.round(window.scrollY), max: Math.round(document.documentElement.scrollHeight - window.innerHeight) }); })()", false);
+            case "page.shot":
+            {
+                var cw = b?.Active?.Web.CoreWebView2; if (cw == null) return "ERREUR pas de page";
+                using var ms = new MemoryStream();
+                await cw.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, ms);
+                return Convert.ToBase64String(ms.ToArray());
+            }
             default: return "commande inconnue";
         }
     }
+
+    // Les scripts de pilotage. Chacun rend une chaîne JSON (ExecuteScriptAsync rend la valeur sérialisée : une chaîne JSON dans une chaîne JSON).
+    const string PageText = """
+        (() => { const t = (document.body ? document.body.innerText : '').replace(/\n{3,}/g, '\n\n'); return JSON.stringify({ title: document.title, url: location.href, length: t.length, text: t.slice(0, MAX) }); })()
+        """;
+    // Les éléments sur lesquels on peut agir, numérotés (le numéro est posé sur l'élément : page.click / page.fill le retrouvent).
+    const string PageFind = """
+        (() => {
+          const out = []; let n = 0;
+          for (const e of document.querySelectorAll('a[href], button, input, select, textarea, [role=button], [role=link], [role=textbox], [contenteditable=true], summary, [onclick]')) {
+            if (n >= 400) break;
+            const r = e.getBoundingClientRect(); if (!r.width && !r.height) continue;
+            const st = getComputedStyle(e); if (st.visibility === 'hidden' || st.display === 'none') continue;
+            if (e.tagName === 'INPUT' && e.type === 'hidden') continue;
+            n++; e.dataset.cdxN = String(n);
+            const text = (e.innerText || e.value || e.placeholder || e.getAttribute('aria-label') || e.title || e.alt || e.name || '').trim().replace(/\s+/g, ' ').slice(0, 90);
+            const o = { n, tag: e.tagName.toLowerCase(), text };
+            if (e.type && e.tagName !== 'A') o.type = e.type;
+            if (e.href && e.tagName === 'A') o.href = String(e.href).slice(0, 300);
+            if (e.name || e.id) o.name = e.name || e.id;
+            if (e.tagName === 'SELECT') o.options = [...e.options].slice(0, 30).map(x => x.text.trim().slice(0, 60));
+            out.push(o);
+          }
+          return JSON.stringify({ count: n, elements: out });
+        })()
+        """;
+    // ARG : {"n":3} ou {"text":"Se connecter"} ou {"selector":"#ok"}. Clique l'élément (après l'avoir fait apparaître).
+    const string PageClick = """
+        (() => {
+          const a = JSON.parse(ARG); let e = null;
+          if (a.n) e = document.querySelector('[data-cdx-n="' + a.n + '"]');
+          else if (a.selector) { try { e = document.querySelector(a.selector); } catch (x) { return JSON.stringify({ ok: false, error: 'sélecteur invalide' }); } }
+          else if (a.text) { const want = String(a.text).trim().toLowerCase(); const all = [...document.querySelectorAll('a, button, input[type=submit], input[type=button], [role=button], [role=link], summary, label')]; e = all.find(x => (x.innerText || x.value || x.getAttribute('aria-label') || '').trim().toLowerCase() === want) || all.find(x => (x.innerText || x.value || x.getAttribute('aria-label') || '').trim().toLowerCase().includes(want)); }
+          if (!e) return JSON.stringify({ ok: false, error: 'élément introuvable' });
+          e.scrollIntoView({ block: 'center' }); e.focus && e.focus(); e.click();
+          return JSON.stringify({ ok: true, tag: e.tagName.toLowerCase(), text: (e.innerText || e.value || '').trim().slice(0, 80), href: e.href ? String(e.href).slice(0, 300) : undefined });
+        })()
+        """;
+    // ARG : {"n":3,"value":"…","submit":true} ou {"selector":"#q",…}. Remplit un champ comme une frappe (événements input/change), et valide (Entrée / formulaire) si demandé.
+    const string PageFill = """
+        (() => {
+          const a = JSON.parse(ARG); let e = null;
+          if (a.n) e = document.querySelector('[data-cdx-n="' + a.n + '"]');
+          else if (a.selector) { try { e = document.querySelector(a.selector); } catch (x) { return JSON.stringify({ ok: false, error: 'sélecteur invalide' }); } }
+          else if (a.name) e = document.querySelector('[name="' + a.name + '"], #' + CSS.escape(a.name));
+          if (!e) return JSON.stringify({ ok: false, error: 'champ introuvable' });
+          e.scrollIntoView({ block: 'center' }); e.focus && e.focus();
+          const v = String(a.value == null ? '' : a.value);
+          if (e.tagName === 'SELECT') { const o = [...e.options].find(x => x.value === v || x.text.trim() === v); if (!o) return JSON.stringify({ ok: false, error: 'option inconnue' }); e.value = o.value; }
+          else if (e.isContentEditable) { e.textContent = v; }
+          else if (e.type === 'checkbox' || e.type === 'radio') { e.checked = v === 'true' || v === '1' || v === 'on'; }
+          else { const proto = e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; const d = Object.getOwnPropertyDescriptor(proto, 'value'); if (d && d.set) d.set.call(e, v); else e.value = v; }
+          e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true }));
+          if (a.submit) { e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true })); e.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true })); if (e.form) { if (e.form.requestSubmit) e.form.requestSubmit(); else e.form.submit(); } }
+          return JSON.stringify({ ok: true, tag: e.tagName.toLowerCase(), name: e.name || e.id || '' });
+        })()
+        """;
 }

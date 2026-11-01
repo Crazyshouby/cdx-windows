@@ -196,8 +196,29 @@ static class Host
     // son état sans aucune entrée simulée. `handle` reçoit une ligne et rend la réponse ; il est appelé sur le fil de l'interface (`ui`).
     public static void StartControlPipe(string app, Control ui, Func<string, Task<string>> handle, Func<bool> done)
     {
-        string pipeName = Bus.PipeName(app) + ".ctl";
         if (!File.Exists(Path.Combine(DataDir, "debug.txt"))) return;
+        ServePipe(Bus.PipeName(app) + ".ctl", ui, handle, done, 30000, "canal de contrôle");
+        Log($"canal de contrôle actif ({Bus.PipeName(app)}.ctl, debug.txt)");
+    }
+
+    // ---------- canal de pilotage ----------
+    // Toujours ouvert (utilisateur courant seulement) : c'est par là que Pilote (Claude) commande un programme : « state », « cmd <json> » (les commandes de
+    // la page, validées par le programme comme si elles venaient d'elle) et ce que chaque programme ajoute (le navigateur : page.*). Jamais « eval » :
+    // le canal de test, lui, exécute du JavaScript, et n'existe qu'avec debug.txt. Une ligne dont le premier mot n'est pas dans `allowed` est refusée.
+    public static void StartPilotPipe(string app, Control ui, Func<string, Task<string>> handle, Func<bool> done, params string[] allowed)
+    {
+        var ok = new HashSet<string>(allowed.Length > 0 ? allowed : new[] { "state", "cmd" });
+        ServePipe(Bus.PipeName(app) + ".pilot", ui, line =>
+        {
+            int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp];
+            return ok.Contains(c) ? handle(line) : Task.FromResult("ERREUR commande refusée sur le canal de pilotage : " + c);
+        }, done, 90000, "canal de pilotage");
+        Log($"canal de pilotage actif ({Bus.PipeName(app)}.pilot)");
+    }
+
+    // Un tube de commande : une ligne reçue, une ligne rendue (sans saut de ligne), `handle` appelé sur le fil de l'interface. Un client à la fois.
+    static void ServePipe(string pipeName, Control ui, Func<string, Task<string>> handle, Func<bool> done, int timeoutMs, string what)
+    {
         new Thread(() =>
         {
             while (!done())
@@ -209,12 +230,27 @@ static class Host
                     using var rd = new StreamReader(srv); using var wr = new StreamWriter(srv) { AutoFlush = true };
                     string line = rd.ReadLine() ?? "", result = null; var fin = new ManualResetEventSlim();
                     ui.BeginInvoke(new Action(async () => { try { result = await handle(line); } catch (Exception ex) { result = "ERREUR " + ex.Message; } fin.Set(); }));
-                    fin.Wait(30000);
+                    fin.Wait(timeoutMs);
                     wr.WriteLine((result ?? "délai dépassé").Replace("\r", " ").Replace("\n", " "));
+                    try { srv.WaitForPipeDrain(); } catch (Exception) { }   // la réponse est lue par le client avant que le tube ne se ferme
                 }
-                catch (Exception ex) { Log("canal de contrôle : " + ex.Message); Thread.Sleep(500); }
+                catch (Exception ex) { Log(what + " : " + ex.Message); Thread.Sleep(500); }
             }
         }) { IsBackground = true }.Start();
-        Log($"canal de contrôle actif ({pipeName}, debug.txt)");
+    }
+
+    // Une ligne envoyée au canal de pilotage d'un programme de la suite, et sa réponse (null : programme absent ou muet). Appelable de n'importe quel fil.
+    public static string Pilot(string app, string line, int timeoutMs = 90000)
+    {
+        try
+        {
+            using var c = new NamedPipeClientStream(".", Bus.PipeName(app) + ".pilot", PipeDirection.InOut, PipeOptions.None);
+            c.Connect(timeoutMs);
+            var wr = new StreamWriter(c, new UTF8Encoding(false), 4096, leaveOpen: true) { AutoFlush = true }; using var rd = new StreamReader(c, new UTF8Encoding(false), false, 4096, leaveOpen: true);   // leaveOpen : voir cdx-pilote-mcp (Relay)
+            wr.WriteLine(line.Replace("\r", " ").Replace("\n", " "));
+            var t = rd.ReadLineAsync();
+            return t.Wait(timeoutMs) ? t.Result : null;
+        }
+        catch (Exception) { return null; }
     }
 }

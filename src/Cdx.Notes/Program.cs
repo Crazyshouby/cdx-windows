@@ -25,6 +25,7 @@ static class Program
             Suite.RegisterApp("notes", Environment.ProcessPath);
             app.Anchor.BeginInvoke(new Action(() => app.Open()));   // dans la boucle de messages : WebView2 en a besoin
             Host.StartControlPipe("notes", app.Anchor, app.HandleControl, () => app.Closing);
+            Host.StartPilotPipe("notes", app.Anchor, app.HandleControl, () => app.Closing);
             Application.Run(app);
         }
     }

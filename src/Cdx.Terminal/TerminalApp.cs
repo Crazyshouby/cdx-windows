@@ -104,6 +104,7 @@ sealed class TerminalApp : ApplicationContext, IHostApp
             case "state":
                 return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", " + (sessions.Count == 0 ? "pas de session" : sessions.Count + " session(s) : " + string.Join(", ", sessions.Values.Select(s => "session " + s.Sid + " (pid " + s.Pty.ProcessId + ")"))) + ", focus " + focusSid;
             case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
+            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default:
                 if (c == "write" || c.StartsWith("write@"))
                 {
