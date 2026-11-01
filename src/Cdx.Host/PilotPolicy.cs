@@ -21,6 +21,7 @@ static class PilotPolicy
         "Read", "Glob", "Grep", "WebSearch", "WebFetch", "LSP", "TodoWrite", "ToolSearch",
         "mcp__cdx-notes__vault_info", "mcp__cdx-notes__notes_list", "mcp__cdx-notes__notes_search", "mcp__cdx-notes__notes_read", "mcp__cdx-notes__notes_links", "mcp__cdx-notes__notes_tags", "mcp__cdx-notes__projects_list", "mcp__cdx-notes__tasks_list",
         "mcp__cdx-suite__suite_state", "mcp__cdx-suite__app_state", "mcp__cdx-suite__browser_tabs", "mcp__cdx-suite__browser_read", "mcp__cdx-suite__browser_find", "mcp__cdx-suite__browser_screenshot",
+        "mcp__cdx-suite__mail_search", "mcp__cdx-suite__mail_read", "mcp__cdx-suite__agenda_events", "mcp__cdx-suite__agenda_tasks",
     };
     // Ce qui est permis sans demander au niveau « libre » (réversible, ou dans les dossiers de travail).
     static readonly string[] FreeTools =

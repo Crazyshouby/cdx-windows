@@ -310,6 +310,7 @@ sealed class MailApp : ApplicationContext, IHostApp
     }
 
     // Canal de test (debug.txt) : state · eval <js> · cmd <json> · google-url · poll (relevé immédiat).
+    static readonly JsonSerializerOptions PilotJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public async Task<string> HandleControl(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
@@ -318,6 +319,30 @@ sealed class MailApp : ApplicationContext, IHostApp
             case "state": return JsonSerializer.Serialize(new { connected = Ready, email = GoogleAuth.Email, hasClient = GoogleAuth.HasClient, busy, error = lastError, label = curLabel, q = curQuery, unread = lastUnread });
             case "google-url": return GoogleAuth.PendingUrl ?? "";
             case "poll": try { await PollAsync(); return "ok"; } catch (Exception ex) { return "erreur : " + ex.Message; }
+            // ---- le pilotage (Pilote / Claude) : chercher des fils et lire un fil, sans rien changer (le fil n'est pas marqué lu) ----
+            case "search":
+            {
+                if (!Ready) return "ERREUR compte Google non relié dans Courrier (relie-le dans la fenêtre Courrier)";
+                if (QuotaHold()) return "ERREUR quota Google dépassé : réessayer dans une minute";
+                string q = "", label = "INBOX"; int max = 20;
+                try { using var d = JsonDocument.Parse(a); var r = d.RootElement; q = r.TryGetProperty("q", out var qv) && qv.ValueKind == JsonValueKind.String ? qv.GetString() : ""; label = r.TryGetProperty("label", out var lv) && lv.ValueKind == JsonValueKind.String && lv.GetString().Length > 0 ? lv.GetString() : "INBOX"; max = r.TryGetProperty("max", out var mv) && mv.TryGetInt32(out var mi) ? Math.Clamp(mi, 1, 50) : 20; }
+                catch (Exception) { return "ERREUR arguments illisibles"; }
+                try { var items = await FetchThreadsAsync(label, q, max); return JsonSerializer.Serialize(items, PilotJson); }
+                catch (Exception ex) { IsQuota(ex); return "ERREUR " + ex.Message; }
+            }
+            case "thread":
+            {
+                if (!Ready) return "ERREUR compte Google non relié dans Courrier";
+                if (QuotaHold()) return "ERREUR quota Google dépassé : réessayer dans une minute";
+                if (string.IsNullOrWhiteSpace(a)) return "ERREUR identifiant de fil manquant";
+                try
+                {
+                    using var t = await GoogleAuth.ApiAsync(HttpMethod.Get, Gmail.Me + "/threads/" + Uri.EscapeDataString(a.Trim()) + "?format=full");
+                    var msgs = t.RootElement.TryGetProperty("messages", out var ms) ? ms.EnumerateArray().Select(Gmail.Parse).OrderBy(m => m.Date).ToList() : new();
+                    return JsonSerializer.Serialize(msgs.Select(m => { string tx = Gmail.TextOf(m); return new { id = m.Id, from = m.From, to = m.To, cc = m.Cc, subject = m.Subject, date = m.Date, unread = m.Unread, labels = m.Labels, text = tx.Length > 12000 ? tx[..12000] + "…" : tx, attachments = m.Attachments.Select(x => x.Name) }; }), PilotJson);
+                }
+                catch (Exception ex) { IsQuota(ex); return "ERREUR " + ex.Message; }
+            }
             case "eval": return form == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
             case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";

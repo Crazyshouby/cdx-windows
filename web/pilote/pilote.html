@@ -18,6 +18,8 @@
   .convs { flex: none; width: 230px; }
   .chat { flex: 1; }
   .acts { flex: none; width: 320px; }
+  /* dans une colonne flex, chaque entrée garde sa taille : c'est la colonne qui défile, le texte ne s'écrase pas */
+  .msgs > *, .list > *, .jr > *, .asks > * { flex: none; }
   .list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
   .cv { display: flex; flex-direction: column; gap: 2px; padding: 5px 8px 3px; border-bottom: 1px solid var(--line); cursor: default; }
   .cv:hover { background: var(--row-hover); }

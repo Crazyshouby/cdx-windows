@@ -104,6 +104,11 @@ static class PilotTools
         new("browser_back", "Revient à la page précédente de l'onglet actif.", Obj(), false, a => Ok(BrowserCmd("{\"cmd\":\"br.back\"}", true))),
         new("browser_scroll", "Fait défiler la page active (vers le bas par défaut) et rend la position.", Obj(("dy", "integer", "(facultatif) Pixels, négatif pour remonter (600 par défaut).")), false, a => Ok(Browser("page.scroll " + I(a, "dy", 600)))),
         new("browser_screenshot", "Une capture (PNG) de la page active du navigateur CDX, pour la voir telle qu'elle est.", Obj(), true, a => Screenshot()),
+        new("mail_search", "Cherche des fils dans le courrier (Gmail du compte relié à la suite, par le programme Courrier, lancé au besoin) : objet, expéditeurs, extrait, date (ms), identifiant pour mail_read. « q » suit la syntaxe de recherche Gmail (from:, subject:, newer_than:3d, has:attachment…).",
+            Obj(("q", "string", "(facultatif) Recherche Gmail ; vide : les derniers fils du libellé."), ("label", "string", "(facultatif) Libellé : INBOX par défaut, SENT, STARRED, ALL (tout), ou l'identifiant d'un libellé."), ("max", "integer", "(facultatif) Nombre de fils (20 par défaut, 50 au plus).")), true, a => Ok(MailSearch(a))),
+        new("mail_read", "Lit un fil du courrier : chaque message avec expéditeur, destinataires, date, texte (HTML converti) et noms des pièces jointes. Ne marque rien comme lu.", Obj(("id", "string", "Identifiant du fil donné par mail_search.")), true, a => Ok(MailRead(S(a, "id")))),
+        new("agenda_events", "Les événements de l'agenda Google (programme Agenda, lancé au besoin) entre deux jours : agendas, événements (titre, début, fin, lieu, description).", Obj(("from", "string", "Premier jour, AAAA-MM-JJ."), ("to", "string", "Jour de fin (exclu), AAAA-MM-JJ.")), true, a => Ok(AgendaEvents(S(a, "from"), S(a, "to")))),
+        new("agenda_tasks", "Les listes de tâches Google (programme Agenda) avec leurs tâches, échéances et état.", Obj(), true, a => Ok(AgendaTasks())),
         new("notify", "Une notification dans la barre CDX (titre court, texte).", Obj(("title", "string", "Titre (80 caractères au plus)."), ("text", "string", "(facultatif) Texte (400 caractères au plus).")), false, a => Ok(Notify(S(a, "title"), S(a, "text", false)))),
         new("project_folder", "Crée le dossier d'un projet dans le dossier des projets de Valentin (Dev\\), avec un dépôt git initialisé, et rend son chemin. S'il existe déjà, le dit sans rien toucher. La fiche du projet se crée à part avec projects_create (notes).",
             Obj(("name", "string", "Nom du projet (deviendra le nom du dossier)."), ("git", "boolean", "(facultatif) Initialiser un dépôt git (oui par défaut).")), false, a => Ok(ProjectFolder(S(a, "name"), !(a["git"] is JsonValue gv && gv.TryGetValue<bool>(out var g)) || g))),
@@ -127,7 +132,8 @@ static class PilotTools
     static int I(JsonObject a, string k, int def) => a[k] is JsonValue jv && jv.TryGetValue<int>(out var n) ? n : def;
 
     // ---------- la suite ----------
-    static bool PipeExists(string app) { try { string n = Bus.PipeName(app); return Directory.GetFiles(@"\\.\pipe\").Any(f => Path.GetFileName(f) == n); } catch (Exception) { return false; } }
+    static bool PipeExists(string app) => PipeExistsFull(Bus.PipeName(app));
+    static bool PipeExistsFull(string name) { try { return Directory.GetFiles(@"\\.\pipe\").Any(f => Path.GetFileName(f) == name); } catch (Exception) { return false; } }
     static string BusName(string app) => app == "courrier" ? "mail" : app;
     static string ExeOf(string app) => app switch { "mail" => "cdx-mail.exe", _ => "cdx-" + app + ".exe" };
 
@@ -154,6 +160,7 @@ static class PilotTools
     {
         string a = BusName(app); if (!AppNames.Contains(app) && app != "mail") return "ERREUR programme inconnu : " + app;
         if (!PipeExists(a)) return "ERREUR " + app + " ne tourne pas (app_open le lance).";
+        if (!PipeExistsFull(Bus.PipeName(a) + ".pilot")) return "ERREUR " + app + " tourne dans une version antérieure, sans canal de pilotage : il faut le fermer et le relancer.";
         return Host.Pilot(a, line) ?? "ERREUR " + app + " ne répond pas";
     }
 
@@ -168,7 +175,7 @@ static class PilotTools
             if (!(exe.StartsWith("cdx-") || exe == "kirc.exe" || exe == "audiolinker.exe")) return true;
             string title = N.TitleOf(h); if (title.Length == 0) return true;
             N.GetWindowRect(h, out var rc);
-            wins.Add(new { app = exe.Replace(".exe", ""), title, x = rc.Left, y = rc.Top, w = rc.Right - rc.Left, h = rc.Bottom - rc.Top, minimized = N.IsIconic(h) });
+            wins.Add(new { app = Regex.Replace(exe, @"\.exe(\..*)?$", ""), title, x = rc.Left, y = rc.Top, w = rc.Right - rc.Left, h = rc.Bottom - rc.Top, minimized = N.IsIconic(h) });
             return true;
         }, IntPtr.Zero);
         return JsonSerializer.Serialize(new { running, windows = wins, projectsRoot = app.RootDir, notesVault = app.VaultDir, conversation = app.CurrentTitle }, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
@@ -243,6 +250,22 @@ static class PilotTools
         Host.Log("dossier de projet créé : " + path);
         return JsonSerializer.Serialize(new { path, exists = false, git = gitOk });
     }
+
+    // ---------- le courrier et l'agenda (lecture par leur canal de pilotage ; le programme est lancé au besoin) ----------
+    static void Ensure(string app, string label) { if (!EnsureRunning(app, null)) throw new ArgException("Impossible de lancer " + label + "."); }
+    static string MailSearch(JsonObject a)
+    {
+        Ensure("mail", "Courrier");
+        var arg = new JsonObject { ["q"] = S(a, "q", false), ["label"] = S(a, "label", false), ["max"] = I(a, "max", 20) };
+        return Pilot("courrier", "search " + arg.ToJsonString());
+    }
+    static string MailRead(string id) { Ensure("mail", "Courrier"); return Pilot("courrier", "thread " + id); }
+    static string AgendaEvents(string from, string to)
+    {
+        if (!Regex.IsMatch(from, @"^\d{4}-\d{2}-\d{2}$") || !Regex.IsMatch(to, @"^\d{4}-\d{2}-\d{2}$")) throw new ArgException("Dates attendues en AAAA-MM-JJ.");
+        Ensure("agenda", "Agenda"); return Pilot("agenda", "events " + from + " " + to);
+    }
+    static string AgendaTasks() { Ensure("agenda", "Agenda"); return Pilot("agenda", "tasks"); }
 
     // ---------- le navigateur ----------
     static string Browser(string line) { string r = Pilot("browser", line); return r != null && r.StartsWith("\"") ? Unquote(r) : r; }

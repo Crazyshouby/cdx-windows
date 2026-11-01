@@ -7,13 +7,16 @@ param([string]$Bin)
 $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot
 if (-not $Bin) { $Bin = "$root\bin" }
-$id = "$PID"; $port = 8771
+$id = "$PID"; $port = 8771; $gmailPort = 8772
 $suite = Join-Path $env:TEMP "cdx-pl-suite-$id"; $data = Join-Path $env:TEMP "cdx-pl-data-$id"; $vault = Join-Path $env:TEMP "cdx-pl-coffre-$id"; $dev = Join-Path $env:TEMP "cdx-pl-dev-$id"; $www = Join-Path $env:TEMP "cdx-pl-www-$id"
 New-Item -ItemType Directory $suite, $data, $vault, $dev, $www -Force | Out-Null
 New-Item "$data\debug.txt" -ItemType File | Out-Null
 $prefix = "cdxpl$id."
 $env:CDX_PIPE_PREFIX = $prefix; $env:CDX_SUITE_DIR = $suite; $env:CDX_DATA_DIR = $data; $env:CDX_NOTES_DIR = $vault; $env:CDX_PILOTE_ROOT = $dev; $env:CDX_NO_FOCUS = '1'
 $env:CDX_CLAUDE_EXE = (Get-Command python).Source; $env:CDX_CLAUDE_ARGS = "-I $PSScriptRoot\fake_claude.py"
+# le courrier : un faux Gmail (tests\fake_gmail.py) que Courrier, lancé par Pilote, atteindra par CDX_GOOGLE_API ; l'identifiant client pointe dessus
+$env:CDX_GOOGLE_API = "http://127.0.0.1:$gmailPort"; $env:CDX_GOOGLE_NO_BROWSER = '1'
+"{`"installed`":{`"client_id`":`"essai.apps.googleusercontent.com`",`"client_secret`":`"secret-essai`",`"auth_uri`":`"http://127.0.0.1:$gmailPort/auth`",`"token_uri`":`"http://127.0.0.1:$gmailPort/token`",`"redirect_uris`":[`"http://localhost`"]}}" | Set-Content "$suite\google-client.json" -Encoding utf8
 '<!doctype html><html><head><title>Page d essai</title></head><body><h1>Bonjour Pilote</h1><p>Ceci est la page lue par le faux Claude.</p><a href="/deux.html">Suite</a></body></html>' | Set-Content "$www\index.html" -Encoding utf8
 '<!doctype html><html><head><title>Deux</title></head><body><p>Deuxieme page.</p></body></html>' | Set-Content "$www\deux.html" -Encoding utf8
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
@@ -33,7 +36,8 @@ function WaitIdle([int]$ms = 30000) { Until { $s = St; $s.current -and -not ($s.
 function LastAssistant { ($(Items) | Where-Object { $_.kind -eq 'assistant' } | Select-Object -Last 1).text }
 $started = @(); $launchedBefore = @()
 try {
-  $srv = Start-Process python -ArgumentList '-m', 'http.server', $port, '--bind', '127.0.0.1', '--directory', $www -PassThru -WindowStyle Hidden; $started += $srv; Start-Sleep 1
+  $srv = Start-Process python -ArgumentList '-m', 'http.server', $port, '--bind', '127.0.0.1', '--directory', $www -PassThru -WindowStyle Hidden; $started += $srv
+  $gm = Start-Process python -ArgumentList '-I', "$PSScriptRoot\fake_gmail.py", $gmailPort -PassThru -WindowStyle Hidden; $started += $gm; Start-Sleep 1
 
   "1. ouverture et première conversation"
   $app = Open-Pilote; $started += $app
@@ -104,6 +108,25 @@ try {
   Send 'projet Omega'
   Check "project_folder crée le dossier avec git, projects_create la fiche dans le coffre d'essai" ((WaitIdle 40000) -and (Test-Path "$dev\Omega\.git") -and (Test-Path "$vault\Projets\Omega.md") -and ((Get-Content "$vault\Projets\Omega.md" -Raw) -match 'type: projet'))
   Check "la fiche porte le chemin du dossier" ((Get-Content "$vault\Projets\Omega.md" -Raw) -match [regex]::Escape("$dev\Omega"))
+
+  "7b. lire le courrier (Courrier lancé par Pilote, compte relié au faux Gmail)"
+  Send 'courrier facture'
+  Check "compte non relié : Pilote lance Courrier, l'outil le dit, le faux Claude le répète" ((WaitIdle 40000) -and ((LastAssistant) -match 'non relié') -and (Until { (Get-Process cdx-mail -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*bin-test2*" -or $_.Path -like "*$Bin*" }).Count -ge 1 } 5000))
+  function MailCtl([string]$line) {
+    $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', "${prefix}mail.ctl", [System.IO.Pipes.PipeDirection]::InOut)
+    try { $c.Connect(5000) } catch { return $null }
+    $w = New-Object System.IO.StreamWriter($c); $w.AutoFlush = $true; $r = New-Object System.IO.StreamReader($c)
+    $w.WriteLine($line); $res = $r.ReadLine(); $c.Dispose(); $res
+  }
+  Until { (MailCtl 'state') -ne $null } 10000 | Out-Null
+  MailCtl 'cmd {"cmd":"ml.connect"}' | Out-Null
+  $url = ''; Until { $script:url = MailCtl 'google-url'; $script:url -like 'http://127.0.0.1:*' } 8000 | Out-Null
+  try { Invoke-WebRequest $url -UseBasicParsing | Out-Null } catch { "   retour : $($_.Exception.Message)" }
+  Check "le compte est relié au faux Gmail dans Courrier" (Until { (MailCtl 'state' | ConvertFrom-Json).connected } 10000)
+  Send 'courrier facture'
+  Check "mail_search puis mail_read : le faux Claude rend l'objet « Facture octobre » et le texte du dernier message (« Merci, reçu »)" ((WaitIdle 40000) -and ((LastAssistant) -match 'Facture octobre') -and ((LastAssistant) -match 'Merci, re') -and ((LastAssistant) -match '2 message'))
+  Check "les deux appels sont des outils de lecture : aucune demande d'accord" ((($(Items) | Where-Object { $_.kind -eq 'tool' -and $_.name -eq 'Suite · mail_read' -and $_.ok }).Count -ge 1) -and ((($(Items) | Where-Object { $_.kind -eq 'ask' -and $_.title -match 'mail_' }).Count) -eq 0))
+  Check "lire un fil ne le marque pas lu (le faux Gmail garde UNREAD sur m1)" (((Invoke-WebRequest "http://127.0.0.1:$gmailPort/_state" -UseBasicParsing).Content | ConvertFrom-Json).messages.m1.labels -contains 'UNREAD')
 
   "8. redémarrage : la conversation et la session sont retrouvées (--resume)"
   $conv = (St).conversations[0]; $turnsFile = "$data\fake-claude-$($conv.session).txt"

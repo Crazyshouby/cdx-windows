@@ -8,6 +8,7 @@
 #   « question »                pose une question à choix (AskUserQuestion) et répond avec le choix
 #   « commande <app> <json> »   app_command (outil non pré-autorisé : demande d'accord d'abord, comme le ferait Claude Code)
 #   « projet <nom> »            project_folder puis (notes) projects_create
+#   « courrier <recherche> »    mail_search puis mail_read du premier fil ; répond avec l'objet et le début du texte
 #   « attends »                 ne répond rien pendant 60 s (pour l'essai de l'arrêt)
 #   autre                       répète le texte, en morceaux
 # Il note chaque tour dans <dossier des données>\fake-claude-<session>.txt (le nombre de tours prouve la reprise --resume).
@@ -151,6 +152,18 @@ def turn(msg):
         except Exception: pass
         res2, err2 = mcp("cdx-notes", "projects_create", {"name": name, "repo": path, "summary": "Projet créé par le faux Claude"})
         reply = f"Projet {name} : dossier {path} ; fiche : {res2[:80]}"
+    elif low.startswith("courrier "):
+        q = msg.strip()[9:].strip()
+        res, err = mcp("cdx-suite", "mail_search", {"q": q, "max": 5})
+        if err: reply = "Courrier impossible : " + res[:160]
+        else:
+            try: fils = json.loads(res)
+            except Exception: fils = []
+            if not fils: reply = "Aucun fil pour « %s »." % q
+            else:
+                txt, err2 = mcp("cdx-suite", "mail_read", {"id": fils[0]["id"]})
+                try: msgs = json.loads(txt); reply = "Courrier : %s — %s (%d message(s))" % (fils[0].get("subject"), (msgs[-1].get("text") or "").strip()[:60], len(msgs))
+                except Exception: reply = "Courrier lu : " + txt[:160]
     elif low == "attends":
         time.sleep(60); reply = "J'ai attendu."
     else:

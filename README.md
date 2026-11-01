@@ -38,7 +38,7 @@ web\terminal\       la page du terminal (terminal.html, terminal.css, terminal.j
 web\cdx\            la charte (copie exacte de cdx-ui/dist : node tools/charte-sync.mjs --write cdx-windows) et host.js, le pont des pages
 web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
 couche1\            le cadre des fenêtres de Windows aux couleurs de la charte (DWM), réversible
-tests\              pilote.ps1 (Pilote contre fake_claude.py : 33 vérifications), navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
+tests\              pilote.ps1 (Pilote contre fake_claude.py et fake_gmail.py : 37 vérifications), navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
 ```
 
 ## Essais (aucune entrée simulée)
@@ -118,8 +118,8 @@ Claude Code en sous-processus plutôt que l'API ; un projet = fiche dans Notes +
   `claude.exe` est cherché dans `CDX_CLAUDE_EXE`, puis `~\.local\bin`, puis le PATH ; `CDX_CLAUDE_ARGS` (essais) place des arguments devant.
 - **Les outils** : `PilotTools.cs` tient le tube `cdx.pilote.outils` ; `src\Cdx.PiloteMcp\` (**cdx-pilote-mcp**, serveur MCP « cdx-suite ») n'est qu'un relais JSON-RPC vers ce tube, lancé par
   Claude Code d'après le `--mcp-config` que Pilote écrit (`pilote-mcp.json` : cdx-suite et cdx-notes, `--strict-mcp-config`). Outils : `suite_state`, `app_open`, `app_state`, `app_command`,
-  `browser_tabs/open/navigate/read/find/click/fill/back/scroll/screenshot`, `notify`, `project_folder`. Les programmes sont commandés par leur **canal de pilotage** `cdx.<nom>.pilot`
-  (`Host.StartPilotPipe`, toujours ouvert, utilisateur courant : `state`, `cmd <json>` et, pour le navigateur, `page.text/find/click/fill/scroll/shot`, des scripts fixes sur l'onglet actif ;
+  `browser_tabs/open/navigate/read/find/click/fill/back/scroll/screenshot`, `mail_search`, `mail_read` (le courrier, lu par Courrier sans rien marquer), `agenda_events`, `agenda_tasks` (par Agenda), `notify`, `project_folder`. Les programmes sont commandés par leur **canal de pilotage** `cdx.<nom>.pilot`
+  (`Host.StartPilotPipe`, toujours ouvert, utilisateur courant : `state`, `cmd <json>` et, pour le navigateur, `page.text/find/click/fill/scroll/shot`, des scripts fixes sur l'onglet actif ; Courrier : `search`, `thread` ; Agenda : `events`, `tasks` ;
   jamais `eval`, réservé au canal de test). Un programme absent est lancé.
 - **Les accords** : `Cdx.Host\PilotPolicy.cs` décide seul ce qui peut l'être selon le niveau (Réglages > Autonomie : libre, prudent, auto) : lectures et outils de lecture toujours ; écritures dans
   `Dev\` et le coffre, commandes sûres (git status/add/commit, npm install, dotnet build…), outils réversibles de la suite au niveau libre ; le reste (et toujours : git push, suppressions,
@@ -128,9 +128,9 @@ Claude Code en sous-processus plutôt que l'API ; un projet = fiche dans Notes +
 - **La page** `web\pilote\pilote.html` : conversations à gauche (clic droit : renommer, supprimer), le fil au centre (Markdown rendu par `web\notes\js\md.js`, texte en direct, appels d'outils
   avec leur état), la saisie (Entrée envoie, Maj+Entrée à la ligne, Échap ou « Arrêter » interrompt), le volet des actions à droite ; ligne d'état : quota de l'abonnement, contexte occupé.
   Réglages : autonomie, modèle, effort (pris au message suivant, `--resume`). Une demande d'accord faite alors que la fenêtre n'a pas le focus est signalée à la barre.
-- **Essais** : `cdx-shell --selftest-pilote` (36 vérifications : l'analyseur sur des lignes réelles de Claude Code 2.1.316, la politique) ; `tests\pilote.ps1` (33 vérifications contre
+- **Essais** : `cdx-shell --selftest-pilote` (36 vérifications : l'analyseur sur des lignes réelles de Claude Code 2.1.316, la politique) ; `tests\pilote.ps1` (37 vérifications contre
   `tests\fake_claude.py`, un faux `claude -p` qui lance les vrais serveurs MCP et rejoue les scénarios : outils, navigateur piloté, accords automatiques et demandés, refus, question à choix,
-  commande d'un programme, création d'un projet dans un coffre jetable, redémarrage et reprise, arrêt). Rien ne touche au vrai Claude Code ni aux vrais programmes.
+  commande d'un programme, création d'un projet dans un coffre jetable, lecture du courrier contre un faux Gmail, redémarrage et reprise, arrêt). Rien ne touche au vrai Claude Code ni aux vrais programmes.
 
 ## Courrier (lot 5, 01/11/2026)
 `src\Cdx.Mail\` (**cdx-mail**, dixième programme, tuile « Courrier », `cdx:courrier`, portée Google `gmail.modify` ajoutée au compte de la suite) : `Gmail.cs` (lecture d'un message de
