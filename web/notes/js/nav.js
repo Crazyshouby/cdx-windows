@@ -111,7 +111,10 @@
       sel = 0; paint();
     };
     const paint = () => { list.innerHTML = items.length ? items.map((n, i) => `<div class="row-item${i === sel ? ' sel' : ''}" data-i="${i}"><span class="grow">${esc(n.t)}</span><span class="sub">${esc(folderOf(n.p))}</span></div>`).join('') : `<div class="empty">Aucune note ne s'appelle ainsi.<br>Entrée crée « ${esc(inp.value.trim())} ».</div>`; const s = list.querySelector('.sel'); if (s) s.scrollIntoView({ block: 'nearest' }); };
-    const done = () => v.remove();
+    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(); } };
+    document.addEventListener('keydown', onKey, true);   // Échap ferme même quand la saisie n'a plus le focus (bouton « Aller à… » cliqué, puis clic ailleurs)
+    const done = () => { document.removeEventListener('keydown', onKey, true); v.remove(); };
+    v.addEventListener('pointerdown', e => { if (e.target === v) done(); });   // un clic sur le voile, hors de la boîte, annule
     const go = () => { if (items.length) { openNote(items[sel].p); done(); } else { const name = inp.value.trim(); const parts = name.split('/').map(cleanName).filter(Boolean); if (!parts.length) return; done(); post({ cmd: 'n.create', path: parts.join('/') + '.md', text: '# ' + parts[parts.length - 1] + '\n\n' }); } };
     inp.oninput = fill;
     v.addEventListener('keydown', e => {

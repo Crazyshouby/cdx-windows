@@ -3,9 +3,18 @@
 # example.com (accès réseau), télécharge un fichier depuis un serveur Python local temporaire, et nettoie derrière lui. Supprimer debug.txt ensuite.
 param([string]$Bin)
 $ErrorActionPreference = 'Continue'
-# Isolé si CDX_DATA_DIR / CDX_PIPE_PREFIX sont posés (comme bus.ps1) : ni le vrai profil du navigateur ni le vrai bus ne sont touchés.
-$data = if ($env:CDX_DATA_DIR) { $env:CDX_DATA_DIR } else { "$env:LOCALAPPDATA\CdxShell" }
-$pipe = $(if ($env:CDX_PIPE_PREFIX) { $env:CDX_PIPE_PREFIX } else { 'cdx.' }) + 'browser.ctl'
+# TOUJOURS isolé (comme cadre.ps1) : données, réglages de la suite, bus et canal de contrôle d'essai à part, créés ici si l'appelant ne les a pas posés.
+# Ni le vrai profil du navigateur, ni le vrai bus, ni le navigateur de l'utilisateur ne sont touchés : le test ne ferme que le navigateur qu'il a lancé.
+# (Le 01/11/2026, lancé sans ces variables, l'ancien test tuait tous les cdx-browser et relançait le sien sur le vrai profil.)
+$own = -not $env:CDX_PIPE_PREFIX
+if ($own) {
+  $env:CDX_PIPE_PREFIX = "cdxnav$PID."
+  $env:CDX_DATA_DIR = Join-Path $env:TEMP "cdx-nav-data-$PID"; $env:CDX_SUITE_DIR = Join-Path $env:TEMP "cdx-nav-suite-$PID"
+  New-Item -ItemType Directory $env:CDX_DATA_DIR, $env:CDX_SUITE_DIR -Force | Out-Null
+}
+$data = $env:CDX_DATA_DIR
+New-Item "$data\debug.txt" -ItemType File -Force | Out-Null   # ouvre le canal de contrôle du navigateur lancé ci-dessous
+$pipe = $env:CDX_PIPE_PREFIX + 'browser.ctl'
 if (-not $Bin) { $Bin = Join-Path $PSScriptRoot '..\bin' }
 function Ctl([string]$line) {
   $c = New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipe, [System.IO.Pipes.PipeDirection]::InOut)
@@ -17,14 +26,13 @@ function St { $s = Ctl 'state' | ConvertFrom-Json; $s }
 function Show-Tabs($s) { foreach ($t in $s.tabs) { "   onglet $($t.Id)$(if ($t.Id -eq $s.active) {' *'}) : « $($t.Title) » $($t.Url) chargement=$($t.Loading) zoom=$($t.zoom) favori=$($t.starred) icône=$($t.favicon)" } }
 function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCHEC ' })), $what }
 
-# --- le navigateur est (re)lancé par le test, après le dépôt de l'extension de test (chargée à l'ouverture)
-Get-Process cdx-browser -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 1
+# --- le navigateur est lancé par le test (le sien, isolé par le préfixe), après le dépôt de l'extension de test (chargée à l'ouverture)
 $ext = "$data\extensions\cdx-test"; New-Item -ItemType Directory $ext -Force | Out-Null
 '{"manifest_version":3,"name":"cdx-test","version":"1.0","content_scripts":[{"matches":["https://example.org/*"],"js":["c.js"],"run_at":"document_start"}]}' | Set-Content "$ext\manifest.json" -Encoding ascii
 "document.documentElement.setAttribute('data-cdx-ext','ok');" | Set-Content "$ext\c.js" -Encoding ascii
 
 "1. ouverture"
-Start-Process (Join-Path $Bin 'cdx-browser.exe') -ArgumentList '--theme', 'rouge'; Start-Sleep 7
+$brp = Start-Process (Join-Path $Bin 'cdx-browser.exe') -ArgumentList '--theme', 'rouge' -PassThru; Start-Sleep 7
 $s = St; Show-Tabs $s
 Check "un onglet, page « Nouvel onglet » interne" (@($s.tabs).Count -eq 1 -and $s.tabs[0].Url -like '*interne.html?p=newtab*')
 
@@ -92,8 +100,10 @@ Check "le cadre liste les onglets ($((Ctl 'evalui document.querySelectorAll("#ta
 Ctl 'cmd {"cmd":"br.close","id":1}' | Out-Null; Start-Sleep 1
 $s = St; Check "onglet 1 fermé" (@($s.tabs | Where-Object { $_.Id -eq 1 }).Count -eq 0)
 Ctl 'cmd {"cmd":"win.close"}' | Out-Null; Start-Sleep 2
-Check "fenêtre fermée : le programme s'arrête avec sa dernière fenêtre" (-not (Get-Process cdx-browser -ErrorAction SilentlyContinue))
+Check "fenêtre fermée : le programme s'arrête avec sa dernière fenêtre" $brp.HasExited
 Check "session enregistrée (session.json)" (Test-Path "$data\session.json")
 Remove-Item $ext -Recurse -Force -ErrorAction SilentlyContinue
 Get-Content "$data\journal-browser.log" | Where-Object { $_ -match 'extension|navigateur|refus|exception|échou' } | Select-Object -Last 8
+try { if (-not $brp.HasExited) { $brp.Kill() } } catch { }
+if ($own) { Start-Sleep 1; Remove-Item $env:CDX_DATA_DIR, $env:CDX_SUITE_DIR -Recurse -Force -ErrorAction SilentlyContinue }
 

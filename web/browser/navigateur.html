@@ -27,7 +27,8 @@
   #findbar[hidden] { display: none; }
   #viewport { flex: 1; min-height: 0; background: #000; border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
   .badge { color: var(--warn); }
-  .status .z { margin-left: auto; cursor: default; }
+  .status #st { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* une adresse trop longue finit par « … » */
+  .status .z { margin-left: auto; flex: none; cursor: default; }
 </style>
 <script src="/cdx/icons.js"></script>
 <script src="/cdx/cdx-bridge.js"></script>

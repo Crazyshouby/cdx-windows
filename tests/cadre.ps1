@@ -29,7 +29,7 @@ try {
     "$($app.n)"
     $e = $app.ev; $p = $app.pipe
     Check "le pont de la charte est détecté (cdx.host = webview2)" ((Ctl $p "$e window.cdx && cdx.host") -eq '"webview2"')
-    Check "CdxFrame est chargé et la barre de titre est branchée (data-act sur les trois boutons)" ((Ctl $p "$e typeof CdxFrame.init + ' ' + document.querySelectorAll('.tb-btn[data-act]').length") -eq '"function 3"')
+    Check "CdxFrame est chargé et la barre de titre est branchée (data-act sur les quatre boutons, dont Réglages)" ((Ctl $p "$e typeof CdxFrame.init + ' ' + document.querySelectorAll('.tb-btn[data-act]').length") -eq '"function 4"')
     Check "la barre se double-clique pour agrandir (data-dblclick = max)" ((Ctl $p "$e document.getElementById('tb').dataset.dblclick") -eq '"max"')
     if ($app.n -eq 'Explorateur') {
       # colonnes redimensionnables (cdx-columns.js) : poignées, bord tiré, lignes alignées, retour aux largeurs d'origine

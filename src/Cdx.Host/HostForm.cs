@@ -54,7 +54,14 @@ class HostForm : Form
     }
 
     // Sans MaximizedBounds, une fenêtre sans cadre agrandie couvrirait aussi la barre : on la limite à la zone de travail.
-    public void Maximize() { MaximizedBounds = Screen.FromControl(this).WorkingArea; WindowState = FormWindowState.Maximized; }
+    // MaximizedBounds part dans WM_GETMINMAXINFO (ptMaxPosition), que Windows lit RELATIF au moniteur : en coordonnées absolues, une fenêtre d'un
+    // écran secondaire était agrandie à (origine de l'écran x 2), hors de tout écran (« la fenêtre disparaît », 01/11/2026).
+    public void Maximize()
+    {
+        var s = Screen.FromControl(this); var wa = s.WorkingArea;
+        MaximizedBounds = new Rectangle(wa.X - s.Bounds.X, wa.Y - s.Bounds.Y, wa.Width, wa.Height);
+        WindowState = FormWindowState.Maximized;
+    }
 
     public void Send(object o)
     {

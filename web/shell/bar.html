@@ -28,7 +28,6 @@
   .tk.pin { flex: none; min-width: 0; width: 30px; padding: 0; justify-content: center; }
   .tk img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; -webkit-user-drag: none; }
   .tsep { flex: none; width: 2px; height: 22px; border-left: 1px solid #111; border-right: 1px solid #555; }
-  .tsearch { flex: none; width: 210px; height: 26px; display: flex; align-items: center; gap: 8px; padding: 0 8px; cursor: default; }
   .ph { color: var(--faint) !important; }
   .pins { display: flex; gap: 6px; flex: none; }
   .tasks { display: flex; gap: 6px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
@@ -64,7 +63,6 @@
 <body>
 <div class="taskbar">
   <button class="tk start" id="start"><span class="pix" data-ic="demarrer"></span><span>Démarrer</span></button>
-  <div class="text-input ph tsearch" id="search"><span class="pix" data-ic="recherche"></span><span>Rechercher…</span></div>
   <i class="tsep"></i>
   <div class="pins" id="pins"></div>
   <i class="tsep"></i>
@@ -84,7 +82,6 @@
   fillPix();
   const $ = id => document.getElementById(id);
   $('start').onclick = () => post({ cmd: 'toggleStart' });
-  $('search').onclick = () => post({ cmd: 'toggleStart' });
 
   // Les applications épinglées à la barre : la liste vient du programme (epingles.json) ; clic = lancer, clic droit = menu (retirer, déplacer).
   let lastPins = '';

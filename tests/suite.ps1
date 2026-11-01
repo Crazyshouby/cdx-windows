@@ -13,6 +13,10 @@ function Check($what, $ok) { "{0}  {1}" -f ($(if ($ok) { 'OK    ' } else { 'ÉCH
 function Count($n) { @(Get-Process $n -ErrorAction SilentlyContinue).Count }
 $dir = Split-Path $PSScriptRoot
 $enc = { param($p) [Uri]::EscapeDataString($p) }
+# Garde-fou : ce test tue les navigateurs et Explorateurs CDX en cours (étape 4). Il refuse de partir s'il en existe déjà qu'il n'a pas lancés :
+# le 01/11/2026, un essai lancé sans y penser a fermé le navigateur de l'utilisateur et ses onglets.
+$deja = @(Get-Process cdx-browser, cdx-explorer -ErrorAction SilentlyContinue)
+if ($deja.Count) { throw "suite.ps1 : fermez d'abord $($deja.ProcessName -join ', ') (pid $($deja.Id -join ', ')) : ce test les tuerait." }
 
 "1. le shell répond"
 Check "le shell tient son canal de contrôle (debug.txt présent au lancement)" ((Ctl 'cdx.shell.ctl' 'audio') -ne $null)
