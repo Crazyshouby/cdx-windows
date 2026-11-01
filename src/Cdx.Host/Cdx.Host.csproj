@@ -22,6 +22,7 @@
     <InternalsVisibleTo Include="cdx-notes" />
     <InternalsVisibleTo Include="cdx-terminal" />
     <InternalsVisibleTo Include="cdx-agenda" />
+    <InternalsVisibleTo Include="cdx-mail" />
   </ItemGroup>
 
 </Project>

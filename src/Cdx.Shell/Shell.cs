@@ -591,6 +591,7 @@ class Shell : IHostApp
         if (target.StartsWith("cdx:navigateur")) { StartApp("cdx-browser.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
         if (target.StartsWith("cdx:repos")) { StartApp("cdx-repos.exe", null); return; }
         if (target.StartsWith("cdx:agenda")) { StartApp("cdx-agenda.exe", null); return; }
+        if (target.StartsWith("cdx:courrier")) { StartApp("cdx-mail.exe", null); return; }
         if (target.StartsWith("cdx:terminal")) { StartApp("cdx-terminal.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
         if (target.StartsWith("cdx:notes")) { StartApp("cdx-notes.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
         if (target.StartsWith("cdx:explorer")) { StartApp("cdx-explorer.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }

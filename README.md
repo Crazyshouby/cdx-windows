@@ -16,6 +16,7 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 | `bin\cdx-browser.exe [--theme t] [adresse]` | le navigateur : onglets, groupes d'onglets, pages scindées, plusieurs fenêtres, session retrouvée, extensions (antipub), réglages, import depuis Chrome (voir « Navigateur, lot 4 ») | une (un second lancement ouvre un onglet) | `journal-browser.log`, profil `navigateur\` |
 | `bin\cdx-repos.exe [--theme t]` | **Dépôts** : tous les projets git du PC (ce qui reste à enregistrer ou à envoyer sur GitHub), en lecture seule | une (un second lancement passe devant) | `journal-repos.log`, `repos.json` (dossiers explorés, projets masqués) |
 | `bin\cdx-agenda.exe [--theme t]` | **Agenda** : calendrier et tâches du compte Google relié à la suite (voir « Agenda et brique Google ») | une (un second lancement passe devant) | `journal-agenda.log` |
+| `bin\cdx-mail.exe [--theme t]` | **Courrier** : la boîte Gmail du compte Google relié à la suite (voir « Courrier ») | une (un second lancement passe devant) | `journal-mail.log` |
 | `bin\cdx-terminal.exe [--theme t] [dossier]` | **Terminal** : un shell (PowerShell 7 s'il est installé, sinon Windows PowerShell) dans une fenêtre de la charte : cadre CDX, fond noir, texte à la couleur d'accent, aucun coin arrondi. Pseudo-console Windows (ConPTY) côté C#, xterm.js dans la page. **Onglets** (Ctrl+Maj+T / W, Ctrl+Tab, Ctrl+Alt+1..9), **volets** côte à côte ou l'un sous l'autre (Alt+Maj+D, menu clic droit, séparateurs déplaçables, Alt+flèches), un shell par volet ; police pixel à chasse fixe de la charte (KIRC Pixel Mono, case de 7 px), texte dessiné par WebGL. Lancé avec un dossier (ou, s'il tourne déjà, un second lancement) : un onglet dans ce dossier. **Win+T** l'ouvre depuis le shell ; la tuile « Terminal CDX » du menu Démarrer le lance ; « Ouvrir dans un terminal » de l'Explorateur l'utilise (Windows Terminal puis cmd en repli) | une (un second lancement passe devant) | `journal-terminal.log` |
 
 Le shell lance les autres (`cdx:explorer`, `cdx:navigateur`, `cdx:repos`, `cdx:terminal`, Win+E, Win+T) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
@@ -105,6 +106,15 @@ les portées se cumulent (une nouvelle refait passer par le consentement). `CDX_
 Réglages, `agenda.json`), fiche, création (bouton, Ctrl+N, double-clic sur un jour), modification, suppression (agendas en écriture seulement) ; tâches Google par liste (ajouter,
 cocher, renommer, échéance, supprimer, nouvelle liste) ; cache `agenda-cache.json` montré hors ligne. Essai `tests\agenda.ps1` (22 vérifications) contre `tests\fake_google.py`
 (OAuth, Calendar et Tasks en mémoire) : rien ne touche au vrai compte.
+
+## Courrier (lot 5, 01/11/2026)
+`src\Cdx.Mail\` (**cdx-mail**, dixième programme, tuile « Courrier », `cdx:courrier`, portée Google `gmail.modify` ajoutée au compte de la suite) : `Gmail.cs` (lecture d'un message de
+l'API en forme simple : en-têtes, texte, HTML, pièces jointes ; fabrication d'un message RFC 2822 : UTF-8, pièces jointes en multipart/mixed, en-têtes RFC 2047), `MailApp.cs`
+(libellés et compteurs, fils par libellé ou recherche Gmail, fil ouvert marqué lu, archiver / corbeille / spam / non lu / favori, pièces jointes enregistrées dans Téléchargements,
+envoi par `/upload/…/messages/send`, relevé toutes les 90 s qui signale un nouveau courrier à la barre, cache `courrier-cache.json`). Page `web\mail\courrier.html` : libellés,
+fils, fil ouvert ; **chaque corps HTML est dans un cadre isolé sans script** (sandbox), **images distantes bloquées** par CSP jusqu'au clic « Afficher les images », liens ouverts
+dans le navigateur CDX ; écrire (Ctrl+N), répondre (R), répondre à tous (Maj+R), transférer (avec les pièces jointes relues chez Google), pièces jointes par la boîte de Windows.
+Essai `tests\courrier.ps1` (29 vérifications) contre `tests\fake_gmail.py` (OAuth, libellés, fils, envoi relu, pièces jointes, courrier injecté).
 
 ## Navigateur, lot 4 (01/11/2026)
 `src\Cdx.Browser\` : `Browser.cs` (une fenêtre : onglets, groupes, pages scindées), `BrowserApp.cs` (les fenêtres, la session, le bus, le canal de test), `BrowserData.cs`

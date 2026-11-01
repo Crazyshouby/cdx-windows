@@ -138,6 +138,7 @@ static class GoogleAuth
     }
 
     // Un jeton d'accès valable (rafraîchi s'il expire dans la minute). Lève si le compte n'est pas relié.
+    public static void Expire() { lock (gate) { if (token != null) token.Expires = 0; } }   // force un rafraîchissement au prochain appel (après un 401)
     static readonly SemaphoreSlim refreshing = new(1, 1);   // deux appels concurrents ne rafraîchissent qu'une fois
     public static async Task<string> AccessTokenAsync(CancellationToken ct = default)
     {
@@ -184,6 +185,32 @@ static class GoogleAuth
                 throw new GoogleApiException(msg, (int)res.StatusCode);
             }
             return JsonDocument.Parse(text.Length == 0 ? "{}" : text);
+        }
+    }
+}
+
+static class GoogleAuthRaw
+{
+    static readonly HttpClient http = new() { Timeout = TimeSpan.FromMinutes(5) };
+    // Un envoi avec un corps brut (message RFC 2822 vers /upload/gmail/v1/…) ou une lecture brute (pièce jointe) ; mêmes règles que ApiAsync.
+    public static async Task<string> SendAsync(HttpMethod method, string path, byte[] content, string contentType, CancellationToken ct = default)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            string tok = await GoogleAuth.AccessTokenAsync(ct);
+            using var req = new HttpRequestMessage(method, path.StartsWith("http") ? path : GoogleAuth.ApiBase + path);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tok);
+            if (content != null) { req.Content = new ByteArrayContent(content); req.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType); }
+            using var res = await http.SendAsync(req, ct);
+            string text = await res.Content.ReadAsStringAsync(ct);
+            if (res.StatusCode == HttpStatusCode.Unauthorized && attempt == 0) { GoogleAuth.Expire(); continue; }
+            if (!res.IsSuccessStatusCode)
+            {
+                string msg = "HTTP " + (int)res.StatusCode;
+                try { using var d = JsonDocument.Parse(text); if (d.RootElement.TryGetProperty("error", out var e)) msg = e.ValueKind == JsonValueKind.Object && e.TryGetProperty("message", out var m) ? m.GetString() : e.ToString(); } catch { }
+                throw new GoogleApiException(msg, (int)res.StatusCode);
+            }
+            return text;
         }
     }
 }

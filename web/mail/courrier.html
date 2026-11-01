@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>CDX — Courrier</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/cdx/page.css">
+<style>
+  /* « Courrier » : la boîte Gmail du compte relié. Libellés à gauche, fils au milieu, le fil ouvert à droite ; les corps HTML sont dans un cadre isolé (sans script, images distantes bloquées). */
+  .top { display: flex; gap: 5px; align-items: center; flex: none; }
+  .top .text-input { flex: 1; max-width: 480px; }
+  .split { flex: 1; min-height: 0; display: flex; gap: 5px; }
+  .col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 5px; }
+  #labels { flex: none; width: 200px; }
+  #list { flex: none; width: 380px; }
+  #view { flex: 1; }
+  .lbl { display: flex; align-items: center; gap: 6px; padding: 5px 8px 3px; cursor: default; border-left: 6px solid transparent; }
+  .lbl:hover { background: var(--row-hover); }
+  .lbl.on { background: var(--row-sel); box-shadow: inset 0 0 0 1px var(--row-sel-ring); color: #fff; }
+  .lbl .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lbl .u { color: var(--warn); }
+  .lbl.sep { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px; }
+  .th { display: grid; grid-template-columns: 18px 1fr auto; gap: 2px 8px; padding: 6px 8px 4px 4px; border-bottom: 1px solid var(--line); border-left: 6px solid transparent; cursor: default; }
+  .th:hover { background: var(--row-hover); }
+  .th.on { background: var(--row-sel); box-shadow: inset 0 0 0 1px var(--row-sel-ring); }
+  .th.unread { border-left-color: var(--accent); }
+  .th.unread .f, .th.unread .s { color: #fff; }
+  .th .st { grid-row: span 2; color: var(--faint); cursor: pointer; text-align: center; }
+  .th .st.on { color: var(--warn); }
+  .th .f, .th .s, .th .sn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .th .f { color: var(--text); }
+  .th .d { color: var(--faint); white-space: nowrap; }
+  .th .s { color: var(--text); grid-column: 2 / 4; }
+  .th .sn { color: var(--faint); grid-column: 2 / 4; }
+  .th .c { color: var(--faint); }
+  .vh { flex: none; display: flex; flex-direction: column; gap: 5px; }
+  .vh .subj { color: #fff; letter-spacing: 1px; padding: 2px 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acts { display: flex; gap: 5px; flex-wrap: wrap; }
+  .msgs { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+  .msg { background: var(--card-2); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; }
+  .msg .hd { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
+  .msg .hd .fr { color: #fff; }
+  .msg .hd .to, .msg .hd .cc { color: var(--faint); grid-column: 1 / 3; }
+  .msg .hd .dt { color: var(--faint); white-space: nowrap; }
+  .msg .att { display: flex; gap: 5px; flex-wrap: wrap; }
+  .msg .att .btn { padding: 0 9px; }
+  .msg iframe { border: 1px solid var(--line); background: var(--ink); width: 100%; height: 120px; display: block; }
+  .msg .imgs { color: var(--faint); display: flex; gap: 8px; align-items: center; }
+  .hello { flex: 1; display: grid; place-items: center; text-align: center; color: var(--text); }
+  .hello .box { display: flex; flex-direction: column; gap: 12px; align-items: center; max-width: 520px; }
+  .hello .faint { line-height: 1.5; }
+  .hello code { font-family: var(--font-log); color: var(--field-ink); user-select: text; }
+  .err { color: var(--warn); }
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .5); }
+  .veil .win { position: relative; inset: auto; width: 720px; }
+  .veil .cb { gap: 6px; }
+  .f { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; align-items: center; }
+  .f label { color: var(--faint); }
+  .f textarea { height: 260px; resize: none; font-family: var(--font-log); line-height: 16px; }
+  .chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 1px 6px 0 8px; background: var(--card-2); border: 1px solid var(--line); color: var(--text); }
+  .chip i { color: var(--faint); cursor: pointer; font-style: normal; }
+</style>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/cdx-frame.js"></script>
+<script src="/cdx/cdx-split.js"></script>
+<script src="/cdx/host.js"></script>
+</head>
+<body>
+<div class="win active" id="win">
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Courrier</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="cb">
+    <div class="top">
+      <button class="btn" id="new" title="Nouveau message (Ctrl+N)"><span class="pix" data-ic="editer"></span> Nouveau message</button>
+      <input id="q" class="text-input" type="text" placeholder="Rechercher (syntaxe Gmail : from:, subject:, has:attachment…) — Entrée" spellcheck="false" autocomplete="off">
+      <button class="btn" id="refresh" title="Relever (F5)"><span class="pix" data-ic="maj"></span></button>
+    </div>
+    <div class="split" id="split">
+      <div class="col" id="labels"><div class="list" id="lbls"></div></div>
+      <div class="col" id="list"><div class="list" id="ths" tabindex="0"></div></div>
+      <div class="col" id="view"></div>
+    </div>
+    <div class="status"><span class="orb" id="orb"></span><span id="st1"></span><span class="faint" id="st2"></span><span style="margin-left:auto" class="faint" id="st3"></span></div>
+  </div>
+</div>
+<i class="rz l" data-e="10"></i><i class="rz r" data-e="11"></i><i class="rz t" data-e="12"></i><i class="rz tl" data-e="13"></i><i class="rz tr" data-e="14"></i><i class="rz b" data-e="15"></i><i class="rz bl" data-e="16"></i><i class="rz br" data-e="17"></i>
+<script>
+  fillPix();
+  const $ = id => document.getElementById(id);
+  let state = { connected: false, email: '', hasClient: false, busy: false, error: '' };
+  let labels = [], threads = { label: 'INBOX', q: '', items: [], fresh: false }, thread = null, cur = null, showImages = new Set();
+  const two = n => String(n).padStart(2, '0');
+  const fmtDate = ms => { const d = new Date(ms), t = new Date(); const same = d.toDateString() === t.toDateString(); return same ? `${two(d.getHours())}:${two(d.getMinutes())}` : d.getFullYear() === t.getFullYear() ? `${two(d.getDate())}/${two(d.getMonth() + 1)}` : `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()}`; };
+  const fmtLong = ms => { const d = new Date(ms); return `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
+  const size = b => { if (!b) return ''; const u = ['o', 'Ko', 'Mo']; let i = 0, v = b; while (v >= 1024 && i < 2) { v /= 1024; i++; } return (i === 0 || v >= 10 ? Math.round(v) : v.toFixed(1).replace('.', ',')) + ' ' + u[i]; };
+  const addrOf = h => { const m = /<([^>]+)>/.exec(h || ''); return (m ? m[1] : h || '').trim().toLowerCase(); };
+  const nameOf = h => { const m = /^"?([^"<]+?)"?\s*</.exec(h || ''); return m ? m[1].trim() : (h || ''); };
+  function setStatus(t, cls) { $('st1').textContent = t; $('orb').className = 'orb ' + (cls || (state.connected ? 'green' : '')); }
+
+  // ---- rendu ----
+  function renderLabels() {
+    $('lbls').innerHTML = labels.map((l, i) => `<div class="lbl ${l.id === threads.label && !threads.q ? 'on' : ''} ${!l.system && (i === 0 || labels[i - 1].system) ? 'sep' : ''}" data-l="${esc(l.id)}"><span class="pix">${pix(l.id === 'INBOX' ? 'message' : l.id === 'STARRED' ? 'cloche' : l.id === 'SENT' ? 'connecter' : l.id === 'TRASH' ? 'supprimer' : l.id === 'SPAM' ? 'avertissement' : l.id === 'DRAFT' ? 'editer' : l.system ? 'liste' : 'dossier', 16)}</span><span class="n">${esc(l.name)}</span>${l.unread ? `<span class="u">${l.unread}</span>` : ''}</div>`).join('');
+  }
+  function renderThreads() {
+    const t = threads.items;
+    $('ths').innerHTML = t.length ? t.map(x => `<div class="th ${x.unread ? 'unread' : ''} ${x.id === cur ? 'on' : ''}" data-t="${esc(x.id)}"><span class="st ${x.starred ? 'on' : ''}" data-star="${esc(x.id)}" title="${x.starred ? 'Retirer des favoris' : 'Favori'}">${x.starred ? '★' : '☆'}</span><span class="f">${esc(x.from)}${x.count > 1 ? ` <span class="c">(${x.count})</span>` : ''}</span><span class="d">${fmtDate(x.date)}</span><span class="s">${esc(x.subject)}</span><span class="sn">${esc(x.snippet)}</span></div>`).join('') : `<div class="empty">${threads.fresh ? (threads.q ? 'Aucun résultat.' : 'Rien ici.') : 'Lecture…'}</div>`;
+    const l = labels.find(k => k.id === threads.label); $('st2').textContent = (threads.q ? `Recherche « ${threads.q} »` : l ? l.name : '') + (threads.fresh ? '' : ' · dernier relevé (hors ligne)');
+  }
+  function frameDoc(m, images) {
+    const csp = `default-src 'none'; img-src ${images ? '* data: cid:' : 'data: cid:'}; style-src 'unsafe-inline'; font-src data:`;
+    const body = m.html != null ? m.html : `<pre style="white-space:pre-wrap;font:14px/18px Consolas,monospace;margin:0">${esc(m.text || '')}</pre>`;
+    const cs = getComputedStyle(document.documentElement), tok = n => cs.getPropertyValue(n).trim();   // les couleurs de la charte, passées au cadre (qui n'a pas nos feuilles de style)
+    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><base target="_blank"><style>body{margin:8px;background:${tok('--ink')};color:${tok('--text')};font-family:Segoe UI,sans-serif;font-size:14px}a{color:${tok('--field-ink')}}img{max-width:100%}</style></head><body>${body}</body></html>`;
+  }
+  const hasRemoteImages = m => /<img[^>]+src\s*=\s*["']?https?:/i.test(m.html || '');
+  function renderThread() {
+    const v = $('view');
+    if (!thread) { v.innerHTML = `<div class="empty">${state.connected ? 'Choisis un fil.' : ''}</div>`; return; }
+    const last = thread.messages[thread.messages.length - 1];
+    const inTrash = thread.messages.some(m => m.labels.includes('TRASH')), inInbox = thread.messages.some(m => m.labels.includes('INBOX')), starred = thread.messages.some(m => m.starred);
+    v.innerHTML = `<div class="vh"><div class="subj">${esc(last.subject || '(sans objet)')}</div><div class="acts">
+        <button class="btn" data-a="reply">Répondre</button><button class="btn" data-a="replyAll">Répondre à tous</button><button class="btn" data-a="forward">Transférer</button><span class="grow"></span>
+        ${inInbox ? '<button class="btn" data-act="archive" title="Retirer de la boîte de réception (E)">Archiver</button>' : inTrash ? '<button class="btn" data-act="inbox">Restaurer</button>' : '<button class="btn" data-act="inbox">Boîte de réception</button>'}
+        <button class="btn" data-act="unread" title="Marquer non lu">Non lu</button><button class="btn" data-act="${starred ? 'unstar' : 'star'}">${starred ? 'Retirer des favoris' : 'Favori'}</button>${inInbox ? '<button class="btn" data-act="spam">Spam</button>' : ''}<button class="btn" data-act="trash" title="Supprimer (Suppr)">Supprimer</button></div></div>
+      <div class="msgs">${thread.messages.map(m => `<div class="msg" data-m="${esc(m.id)}"><div class="hd"><span class="fr">${esc(m.from)}</span><span class="dt">${fmtLong(m.date)}</span><span class="to">À : ${esc(m.to)}</span>${m.cc ? `<span class="cc">Cc : ${esc(m.cc)}</span>` : ''}</div>
+        ${m.attachments.length ? `<div class="att">${m.attachments.map(a => `<button class="btn" data-att="${esc(a.id)}" data-msg="${esc(m.id)}" data-name="${esc(a.name)}" title="Enregistrer dans Téléchargements (${size(a.size)})"><span class="pix">${pix('fichier', 16)}</span> ${esc(a.name)} <span class="faint">${size(a.size)}</span></button>`).join('')}</div>` : ''}
+        ${hasRemoteImages(m) && !showImages.has(m.id) ? `<div class="imgs">Les images distantes sont bloquées.<button class="btn" data-img="${esc(m.id)}">Afficher les images</button></div>` : ''}
+        <iframe sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" srcdoc="${esc(frameDoc(m, showImages.has(m.id)))}"></iframe></div>`).join('')}</div>`;
+    v.querySelectorAll('iframe').forEach(f => { f.onload = () => { try { f.style.height = Math.min(1400, Math.max(60, f.contentDocument.documentElement.scrollHeight + 20)) + 'px'; } catch (e) { } }; });
+  }
+  function render() {
+    if (!state.connected) {
+      $('view').innerHTML = `<div class="hello"><div class="box"><div style="letter-spacing:3px">COURRIER</div><div class="faint">Ta boîte Gmail, à la charte. Relie le compte Google de la suite (ou étends-le au courrier) : la suite garde un jeton chiffré pour ton compte Windows.</div>
+        ${state.hasClient ? `<button class="primary" id="connect" ${state.busy ? 'disabled' : ''}>${state.busy ? 'Attente du consentement dans le navigateur…' : 'Relier le compte Google'}</button>` : `<div class="err">Il manque l’identifiant client Google : dépose le fichier « client_secret_….json » sous <code>${esc(state.clientFile || '%APPDATA%\\CDX\\google-client.json')}</code>, puis relance.</div>`}
+        ${state.error ? `<div class="err">${esc(state.error)}</div>` : ''}</div></div>`;
+      $('lbls').innerHTML = ''; $('ths').innerHTML = '';
+      if ($('connect')) $('connect').onclick = () => post({ cmd: 'ml.connect' });
+      return;
+    }
+    renderLabels(); renderThreads(); renderThread();
+  }
+
+  // ---- messages du programme ----
+  handlers.state = m => { state = m; setStatus(m.busy ? 'Lecture…' : (m.error || (m.connected ? 'Relié à ' + m.email : 'Compte Google non relié')), m.busy ? 'amber pulse' : m.error ? 'red' : m.connected ? 'green' : ''); $('st3').textContent = m.connected ? m.email : ''; render(); };
+  handlers.labels = m => { labels = m.items; renderLabels(); };
+  handlers.threads = m => { threads = m; if (cur && !m.items.some(t => t.id === cur)) { cur = null; thread = null; renderThread(); } renderThreads(); renderLabels(); };
+  handlers.thread = m => { thread = m; cur = m.id; renderThread(); renderThreads(); };
+  handlers.flag = m => { const t = threads.items.find(x => x.id === m.id); if (t) { t.unread = m.unread; renderThreads(); } };
+  handlers.error = m => setStatus(m.text, 'red');
+  handlers.done = m => setStatus({ archive: 'Archivé', trash: 'Supprimé', spam: 'Marqué comme spam', inbox: 'Remis dans la boîte de réception', unread: 'Marqué non lu', read: 'Marqué lu', star: 'Favori', unstar: 'Retiré des favoris' }[m.what] || 'Fait', 'green');
+  handlers.saved = m => { setStatus('Enregistré : ' + m.path, 'green'); lastSaved = m.path; };
+  handlers.sent = () => { closeVeil(); setStatus('Message envoyé.', 'green'); };
+  handlers.picked = m => { for (const f of m.files) if (!attachments.some(a => a.path === f.path)) attachments.push(f); renderChips(); };
+  let lastSaved = '';
+
+  // ---- actions ----
+  const list = (label, q) => { cur = null; thread = null; post({ cmd: 'ml.list', label, q: q || '' }); threads = { label, q: q || '', items: threads.label === label && threads.q === (q || '') ? threads.items : [], fresh: false }; render(); };
+  $('lbls').onclick = e => { const l = e.target.closest('[data-l]'); if (l) { $('q').value = ''; list(l.dataset.l, ''); } };
+  $('ths').onclick = e => {
+    const s = e.target.closest('[data-star]'); if (s) { const t = threads.items.find(x => x.id === s.dataset.star); if (t) post({ cmd: 'ml.act', id: t.id, what: t.starred ? 'unstar' : 'star' }); return; }
+    const r = e.target.closest('[data-t]'); if (r) { cur = r.dataset.t; renderThreads(); post({ cmd: 'ml.open', id: cur }); }
+  };
+  $('view').addEventListener('click', e => {
+    const a = e.target.closest('[data-act]'); if (a && cur) { post({ cmd: 'ml.act', id: cur, what: a.dataset.act }); return; }
+    const c = e.target.closest('[data-a]'); if (c && thread) { compose(c.dataset.a); return; }
+    const t = e.target.closest('[data-att]'); if (t) { post({ cmd: 'ml.attach', msg: t.dataset.msg, id: t.dataset.att, name: t.dataset.name }); return; }
+    const i = e.target.closest('[data-img]'); if (i) { showImages.add(i.dataset.img); renderThread(); }
+  });
+  $('q').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') list(threads.label, $('q').value.trim()); else if (e.key === 'Escape') { $('q').value = ''; list(threads.label, ''); } };
+  $('refresh').onclick = () => { post({ cmd: 'ml.labels' }); list(threads.label, threads.q); };
+  $('new').onclick = () => compose('new');
+
+  // ---- écrire : nouveau, répondre, répondre à tous, transférer ----
+  let veil = null, attachments = [], forward = [];
+  const closeVeil = () => { if (veil) { veil.remove(); veil = null; } };
+  function renderChips() { const c = $('chips'); if (!c) return; c.innerHTML = [...forward.map((a, i) => `<span class="chip" title="Pièce jointe du message transféré">${esc(a.name)}<i data-fw="${i}">✕</i></span>`), ...attachments.map((a, i) => `<span class="chip">${esc(a.name)} <span class="faint">${size(a.size)}</span><i data-rm="${i}">✕</i></span>`)].join(''); }
+  function compose(kind, prefill = {}) {
+    const last = thread ? thread.messages[thread.messages.length - 1] : null; const me = (state.email || '').toLowerCase();
+    let to = prefill.to || '', cc = '', subject = prefill.subject || '', text = prefill.text || '', inReplyTo = '', references = '', threadId = '';
+    attachments = []; forward = [];
+    if (kind !== 'new' && last) {
+      const quote = `\n\nLe ${fmtLong(last.date)}, ${last.from} a écrit :\n` + (last.text || stripHtml(last.html || '')).split('\n').map(l => '> ' + l).join('\n');
+      if (kind === 'reply' || kind === 'replyAll') {
+        to = last.from; inReplyTo = last.messageId; references = last.references; threadId = last.threadId; subject = /^re\s*:/i.test(last.subject) ? last.subject : 'Re: ' + last.subject; text = quote;
+        if (kind === 'replyAll') { const others = (last.to + ',' + (last.cc || '')).split(',').map(s => s.trim()).filter(s => s && addrOf(s) !== me && addrOf(s) !== addrOf(last.from)); cc = others.join(', '); }
+      } else {
+        subject = /^(fwd?|tr)\s*:/i.test(last.subject) ? last.subject : 'Fwd: ' + last.subject;
+        text = `\n\n---------- Message transféré ----------\nDe : ${last.from}\nDate : ${fmtLong(last.date)}\nObjet : ${last.subject}\nÀ : ${last.to}\n\n` + (last.text || stripHtml(last.html || ''));
+        forward = last.attachments.map(a => ({ msg: last.id, id: a.id, name: a.name, mime: a.mime }));
+      }
+    }
+    closeVeil(); veil = document.createElement('div'); veil.className = 'veil';
+    veil.innerHTML = `<div class="win active"><div class="tb"><span class="tb-title">${kind === 'new' ? 'Nouveau message' : kind === 'forward' ? 'Transférer' : 'Répondre'}</span></div><div class="cb">
+      <div class="f"><label>À</label><input class="text-input" id="cto" value="${esc(to)}" spellcheck="false"><label>Cc</label><input class="text-input" id="ccc" value="${esc(cc)}" spellcheck="false"><label>Objet</label><input class="text-input" id="csub" value="${esc(subject)}" spellcheck="false"></div>
+      <textarea class="text-input" id="ctext" spellcheck="true">${esc(text)}</textarea>
+      <div class="chips" id="chips"></div>
+      <div class="btns"><button class="btn" id="cattach">Joindre…</button><span class="grow"></span><button class="primary" id="csend">Envoyer</button><button class="btn" id="ccancel">Annuler</button></div></div></div>`;
+    veil.dataset.threadId = threadId; veil.dataset.inReplyTo = inReplyTo; veil.dataset.references = references;
+    document.body.appendChild(veil); renderChips();
+    veil.querySelector(kind === 'new' ? '#cto' : '#ctext').focus(); if (kind !== 'new') { const ta = veil.querySelector('#ctext'); ta.setSelectionRange(0, 0); }
+    veil.querySelector('#ccancel').onclick = closeVeil; veil.querySelector('#cattach').onclick = () => post({ cmd: 'ml.pick' }); veil.querySelector('#csend').onclick = sendCompose;
+    veil.querySelector('#chips').onclick = e => { const r = e.target.closest('[data-rm]'); if (r) { attachments.splice(+r.dataset.rm, 1); renderChips(); } const f = e.target.closest('[data-fw]'); if (f) { forward.splice(+f.dataset.fw, 1); renderChips(); } };
+    veil.onkeydown = e => { e.stopPropagation(); if (e.key === 'Escape') closeVeil(); else if (e.key === 'Enter' && e.ctrlKey) sendCompose(); };
+  }
+  function attachFiles(files) { for (const f of files) attachments.push(f); renderChips(); }   // (essais : à la place de la boîte de choix de fichiers)
+  function sendCompose() {
+    if (!veil) return;
+    const to = veil.querySelector('#cto').value.trim(), cc = veil.querySelector('#ccc').value.trim(), subject = veil.querySelector('#csub').value.trim(), text = veil.querySelector('#ctext').value;
+    if (!to && !cc) { setStatus('Il manque un destinataire.', 'red'); return; }
+    setStatus('Envoi…', 'amber pulse');
+    post({ cmd: 'ml.send', to, cc, bcc: '', subject, text, threadId: veil.dataset.threadId, inReplyTo: veil.dataset.inReplyTo, references: veil.dataset.references, files: attachments.map(a => a.path), forward });
+  }
+  const stripHtml = h => { const d = document.createElement('div'); d.innerHTML = h.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '').replace(/<br\s*\/?>|<\/p>|<\/div>|<\/tr>|<\/li>/gi, '\n'); return (d.textContent || '').replace(/\n{3,}/g, '\n\n').trim(); };
+
+  // ---- réglages et raccourcis ----
+  windowSettings(() => [
+    ['Relever maintenant', () => $('refresh').click(), { key: 'F5', disabled: !state.connected }],
+    ['Nouveau message', () => compose('new'), { key: 'Ctrl+N', disabled: !state.connected }],
+    null,
+    state.connected ? ['Oublier le compte Google (' + state.email + ')', () => { if (confirm('Oublier le compte Google relié ? Agenda le perd aussi.')) post({ cmd: 'ml.disconnect' }); }] : ['Relier le compte Google', () => post({ cmd: 'ml.connect' }), { disabled: !state.hasClient }],
+  ]);
+  document.addEventListener('keydown', e => {
+    if (veil) return;
+    const inField = e.target.matches('input, textarea');
+    if (e.key === 'F5') { e.preventDefault(); $('refresh').click(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); if (state.connected) compose('new'); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('q').focus(); $('q').select(); }
+    else if (!inField && e.key === 'Delete' && cur) post({ cmd: 'ml.act', id: cur, what: 'trash' });
+    else if (!inField && e.key.toLowerCase() === 'e' && cur) post({ cmd: 'ml.act', id: cur, what: 'archive' });
+    else if (!inField && e.key.toLowerCase() === 'r' && thread) compose(e.shiftKey ? 'replyAll' : 'reply');
+  });
+
+  CdxFrame.init();
+  CdxSplit.init({ pane: $('labels'), side: 'left', key: 'courrier-libelles', min: 140, max: 400 });
+  CdxSplit.init({ pane: $('list'), side: 'left', key: 'courrier-liste', min: 260, max: 700, minOther: 320 });
+  render();
+  if (!hasHost) {
+    handlers.state({ connected: true, email: 'moi@example.org', hasClient: true, busy: false, error: '' });
+    handlers.labels({ fresh: true, items: [{ id: 'INBOX', name: 'Boîte de réception', system: true, unread: 2, total: 12 }, { id: 'STARRED', name: 'Favoris', system: true, unread: 0 }, { id: 'SENT', name: 'Envoyés', system: true, unread: 0 }, { id: 'Label_1', name: 'Factures', system: false, unread: 1 }] });
+    handlers.threads({ label: 'INBOX', q: '', fresh: true, items: [{ id: 't1', subject: 'Facture octobre', from: 'Alice, Bob', snippet: 'Voici la facture du mois…', date: Date.now(), count: 2, unread: true, starred: false, labels: ['INBOX'] }, { id: 't2', subject: 'Week-end', from: 'Chloé', snippet: 'On part samedi ?', date: Date.now() - 3e8, count: 1, unread: false, starred: true, labels: ['INBOX'] }] });
+    handlers.thread({ id: 't1', messages: [{ id: 'm1', threadId: 't1', from: 'Alice <alice@example.org>', to: 'moi@example.org', cc: '', subject: 'Facture octobre', date: Date.now() - 7e6, unread: false, starred: false, labels: ['INBOX'], text: 'Bonjour,\n\nVoici la facture.\n\nAlice', html: null, attachments: [{ id: 'a1', name: 'facture.pdf', mime: 'application/pdf', size: 48213 }], messageId: '<m1@example.org>', references: '' }, { id: 'm2', threadId: 't1', from: 'Bob <bob@example.org>', to: 'moi@example.org', cc: 'alice@example.org', subject: 'Re: Facture octobre', date: Date.now(), unread: true, starred: false, labels: ['INBOX', 'UNREAD'], html: '<p>Merci, <b>reçu</b>.</p><img src="http://example.org/pixel.png">', text: null, attachments: [], messageId: '<m2@example.org>', references: '<m1@example.org>' }] });
+  } else post({ cmd: 'ml.ready' });
+</script>
+</body>
+</html>
