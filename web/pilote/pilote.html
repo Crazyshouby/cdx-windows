@@ -250,15 +250,17 @@
 
   // ---- réglages de la fenêtre ----
   // le correcteur orthographique (cdx-spell.js) sur la zone de saisie ; réglage gardé
-  const spellKey = 'cdx.pilote.spell'; let spell = true; try { spell = localStorage.getItem(spellKey) !== 'off'; } catch (e) { }
-  const spellIn = window.CdxSpell ? CdxSpell.attach($('in'), { enabled: spell }) : null;
+  const spellKey = 'cdx.pilote.spell', gramKey = 'cdx.pilote.grammaire'; let spell = true, gram = true; try { spell = localStorage.getItem(spellKey) !== 'off'; gram = localStorage.getItem(gramKey) !== 'off'; } catch (e) { }
+  const spellIn = window.CdxSpell ? CdxSpell.attach($('in'), { enabled: spell, grammar: '/cdx/grammaire-worker.js', grammarEnabled: gram }) : null;
   const setSpell = on => { spell = on; try { localStorage.setItem(spellKey, on ? 'on' : 'off'); } catch (e) { } if (spellIn) spellIn.enable(on); };
+  const setGram = on => { gram = on; try { localStorage.setItem(gramKey, on ? 'on' : 'off'); } catch (e) { } if (spellIn) spellIn.grammar(on); };
   windowSettings(() => [
     ['Autonomie', null, { sub: LEVELS.map(([k, n]) => [n, () => post({ cmd: 'pl.level', value: k }), { check: state.level === k }]) }],
     ['Modèle', null, { sub: MODELS.map(([k, n]) => [n, () => post({ cmd: 'pl.model', value: k }), { check: (state.model || '') === k }]) }],
     ['Effort', null, { sub: EFFORTS.map(([k, n]) => [n, () => post({ cmd: 'pl.effort', value: k }), { check: (state.effort || '') === k }]) }],
     null,
     ['Correcteur orthographique', () => setSpell(!spell), { check: spell }],
+    ['Grammaire (accords, conjugaison)', () => setGram(!gram), { check: gram }],
     null,
     ['Ouvrir le dossier des projets', () => post({ cmd: 'pl.open-path', path: state.root })],
     ['Mémoire de Pilote (dans Notes)', () => post({ cmd: 'pl.memory' })],

@@ -136,7 +136,7 @@ Claude Code en sous-processus plutôt que l'API ; un projet = fiche dans Notes +
   `tests\fake_claude.py`, un faux `claude -p` qui lance les vrais serveurs MCP et rejoue les scénarios : outils, navigateur piloté, accords automatiques et demandés, refus, question à choix,
   commande d'un programme, création d'un projet dans un coffre jetable, lecture du courrier contre un faux Gmail, mémoire dans le coffre relue après reprise, redémarrage et reprise, arrêt). Rien ne touche au vrai Claude Code ni aux vrais programmes.
 
-## Correcteur orthographique (01/11/2026)
+## Correcteur orthographique et grammatical (01/11/2026)
 
 Décision du 01/11/2026 : un correcteur à nous plutôt que celui de Chromium. Celui de WebView2 s'appuie sur le correcteur de Windows et sa langue suit celle de
 l'environnement, pas le texte (bogue WebView2 n° 5294, suivi chez Microsoft) ; surtout, avec nos menus (AreDefaultContextMenusEnabled = false) l'événement
@@ -153,10 +153,18 @@ ContextMenuRequested n'est jamais levé (c'est écrit dans sa spécification), d
   lettres seules, le mot en cours de frappe, et avec l'option `markdown` le code, les liens `[[…]]` et `[…](…)`, les #étiquettes. Clic droit sur un mot souligné : les suggestions
   (huit au plus), « Ajouter au dictionnaire », « Ignorer ici », puis Annuler / Rétablir / Couper / Copier / Tout sélectionner (ces actions seules ailleurs dans la zone).
   Un mot choisi remplace l'autre par `insertText` (l'historique Annuler est gardé).
-- **Où** : l'éditeur de Notes (Réglages > Affichage > Correcteur orthographique), le message de Courrier et la zone de saisie de Pilote (Réglages > Correcteur orthographique) ;
-  réglage gardé par programme, en marche par défaut.
+- **La grammaire** (demande du 01/11/2026 : « ajoute ce qu'il faut pour la conjugaison ») : Grammalecte 2.3.0 (Olivier R., GPL 3), le moteur de l'extension Firefox, dans un worker de la
+  page (`web\cdx\grammaire-worker.js`, fichiers sous `web\third_party\grammalecte` : moteur, règles, lexique de 4 Mo, conjugaisons ; ni thésaurus ni tests ; le lint de la charte ignore
+  `third_party`). Chargé en une à deux secondes à la première zone de texte, hors du fil de la page ; le texte entier (parties masquées en espaces) est vérifié 600 ms après la dernière
+  frappe, paragraphe par paragraphe. Options : accords (genre et nombre), conjugaisons, infinitif, impératif, interrogatif, participes passés, modes verbaux, confusions, locutions ;
+  pas la typographie ni le style (apostrophes droites, espaces, majuscules… seraient du bruit). Les erreurs sont soulignées en pointillé « attention » (`--warn`) ; clic droit :
+  le message de Grammalecte en titre, les suggestions, « Ignorer ici » (règle + mot, le temps de la fenêtre). Grammalecte ne signale qu'une faute à la fois par accord
+  (« Les chat mange » : « chat » d'abord ; « mange » une fois « chats » écrit, puisqu'il s'accordait avec le singulier).
+- **Où** : l'éditeur de Notes (Réglages > Affichage > Correcteur orthographique, Grammaire), le message de Courrier et la zone de saisie de Pilote (Réglages > Correcteur orthographique,
+  Grammaire) ; réglages gardés par programme, en marche par défaut.
 - **Essais** : `cdx-shell --selftest-spell` (21 vérifications : mots, formes fausses, élisions, traits d'union, suggestions, dictionnaire personnel jetable, contrat des pages) et
-  `tests/spell.test.html` de cdx-ui (23 vérifications dans Chrome headless contre un faux hôte : découpage, calque, mot du curseur, menu, remplacement, ajout, arrêt, retrait, sp.off).
+  `tests/spell.test.html` de cdx-ui (32 vérifications dans Chrome headless contre un faux hôte et un faux worker : découpage, calque, mot du curseur, menus, remplacement, ajout, grammaire,
+  « Ignorer ici », arrêt, retrait, sp.off) ; `tests\notes.ps1` vérifie la chaîne entière dans la vraie fenêtre (Hunspell et Grammalecte : soulignement, menu, correction, dictionnaire personnel).
 
 ## Courrier (lot 5, 01/11/2026)
 `src\Cdx.Mail\` (**cdx-mail**, dixième programme, tuile « Courrier », `cdx:courrier`, portée Google `gmail.modify` ajoutée au compte de la suite) : `Gmail.cs` (lecture d'un message de

@@ -202,7 +202,7 @@
       <div class="btns"><button class="btn" id="cattach">Joindre…</button><span class="grow"></span><button class="primary" id="csend">Envoyer</button><button class="btn" id="ccancel">Annuler</button></div></div></div>`;
     veil.dataset.threadId = threadId; veil.dataset.inReplyTo = inReplyTo; veil.dataset.references = references;
     document.body.appendChild(veil); renderChips();
-    if (window.CdxSpell) CdxSpell.attach(veil.querySelector('#ctext'), { enabled: spell });   // le correcteur orthographique sur le message (calque retiré avec le voile)
+    if (window.CdxSpell) CdxSpell.attach(veil.querySelector('#ctext'), { enabled: spell, grammar: '/cdx/grammaire-worker.js', grammarEnabled: gram });   // le correcteur orthographique sur le message (calque retiré avec le voile)
     veil.querySelector(kind === 'new' ? '#cto' : '#ctext').focus(); if (kind !== 'new') { const ta = veil.querySelector('#ctext'); ta.setSelectionRange(0, 0); }
     veil.querySelector('#ccancel').onclick = closeVeil; veil.querySelector('#cattach').onclick = () => post({ cmd: 'ml.pick' }); veil.querySelector('#csend').onclick = sendCompose;
     veil.querySelector('#chips').onclick = e => { const r = e.target.closest('[data-rm]'); if (r) { attachments.splice(+r.dataset.rm, 1); renderChips(); } const f = e.target.closest('[data-fw]'); if (f) { forward.splice(+f.dataset.fw, 1); renderChips(); } };
@@ -219,12 +219,14 @@
   const stripHtml = h => { const d = document.createElement('div'); d.innerHTML = h.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '').replace(/<br\s*\/?>|<\/p>|<\/div>|<\/tr>|<\/li>/gi, '\n'); return (d.textContent || '').replace(/\n{3,}/g, '\n\n').trim(); };
 
   // ---- réglages et raccourcis ----
-  const spellKey = 'cdx.mail.spell'; let spell = true; try { spell = localStorage.getItem(spellKey) !== 'off'; } catch (e) { }
+  const spellKey = 'cdx.mail.spell', gramKey = 'cdx.mail.grammaire'; let spell = true, gram = true; try { spell = localStorage.getItem(spellKey) !== 'off'; gram = localStorage.getItem(gramKey) !== 'off'; } catch (e) { }
   const setSpell = on => { spell = on; try { localStorage.setItem(spellKey, on ? 'on' : 'off'); } catch (e) { } const ta = veil && veil.querySelector('#ctext'); if (ta && ta.__cdxSpell) ta.__cdxSpell.enable(on); };
+  const setGram = on => { gram = on; try { localStorage.setItem(gramKey, on ? 'on' : 'off'); } catch (e) { } const ta = veil && veil.querySelector('#ctext'); if (ta && ta.__cdxSpell) ta.__cdxSpell.grammar(on); };
   windowSettings(() => [
     ['Relever maintenant', () => $('refresh').click(), { key: 'F5', disabled: !state.connected }],
     ['Nouveau message', () => compose('new'), { key: 'Ctrl+N', disabled: !state.connected }],
     ['Correcteur orthographique', () => setSpell(!spell), { check: spell }],
+    ['Grammaire (accords, conjugaison)', () => setGram(!gram), { check: gram }],
     null,
     state.connected ? ['Oublier le compte Google (' + state.email + ')', () => { if (confirm('Oublier le compte Google relié ? Agenda le perd aussi.')) post({ cmd: 'ml.disconnect' }); }] : ['Relier le compte Google', () => post({ cmd: 'ml.connect' }), { disabled: !state.hasClient }],
   ]);

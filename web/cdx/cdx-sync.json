@@ -55,7 +55,7 @@
     },
     "web/cdx/cdx-spell.js": {
       "from": "cdx-spell.js",
-      "sha256": "c304545b412f6fc9ced1698f21609b62345ffe41d64195150a008ae593146c6b"
+      "sha256": "3699ab374b823a8c7d74fffeb188ebf45a6cc397c27706c2acf101a35a8c1039"
     }
   }
 }

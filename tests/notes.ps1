@@ -82,6 +82,7 @@ try {
   Check "cocher une tâche dans l'aperçu change la ligne du texte, puis le fichier" ((Until { Has (ReadV 'Alpha.md') '- [x] première' } 6000) -and (Has (Js "document.getElementById('ed').value") '- [x] première'))
 
   # ---------- correcteur orthographique (cdx-spell.js, Cdx.Host/Spell.cs, dictionnaire web/dict/fr) ----------
+  Js "window.__ed0 = document.getElementById('ed').value" | Out-Null   # le texte de la note, rendu à la fin (l'enregistrement automatique écrirait le texte d'essai)
   Js "const e = document.getElementById('ed'); e.value = 'Bonjour marchée hier.'; e.blur(); e.dispatchEvent(new Event('input'))" | Out-Null
   Check "un mot inconnu est souligné par le calque (le dictionnaire est chargé par l'hôte au premier mot), pas les mots connus" ((Until { (Js "document.querySelectorAll('.cdx-spell mark').length") -eq '1' } 10000) -and ((Js "document.querySelector('.cdx-spell mark').textContent") -eq 'marchée'))
   Js "const m = document.querySelector('.cdx-spell mark'), r = m.getBoundingClientRect(); document.getElementById('ed').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 3, clientY: r.top + r.height / 2 }))" | Out-Null
@@ -97,6 +98,21 @@ try {
   Js "const e = document.getElementById('ed'); e.value = 'Un zorglub en minuscule.'; e.blur(); e.dispatchEvent(new Event('input'))" | Out-Null
   Start-Sleep -Milliseconds 800
   Check "un mot du dictionnaire personnel n'est plus souligné, même en minuscules" ((Js "document.querySelectorAll('.cdx-spell mark').length") -eq '0')
+  # la grammaire : Grammalecte dans le worker de la page (web/cdx/grammaire-worker.js, lexique chargé en une à deux secondes)
+  Js "const e = document.getElementById('ed'); e.value = 'Les chat mange des croquettes.'; e.blur(); e.dispatchEvent(new Event('input'))" | Out-Null
+  Until { (Js "document.querySelectorAll('.cdx-spell mark.g').length") -gt 0 } 25000 | Out-Null; Start-Sleep -Milliseconds 1500
+  "        marques de grammaire : " + (Js "[...document.querySelectorAll('.cdx-spell mark.g')].map(m => m.textContent + ' (' + m.dataset.s + '-' + m.dataset.e + ')').join(' ; ')")
+  Check "la faute d'accord est soulignée par Grammalecte (marque g sur « chat » ; « mange » s'accorde avec ce singulier, la conjugaison viendra après)" (Until { (Js "[...document.querySelectorAll('.cdx-spell mark.g')].map(m => m.textContent).join(',')") -like '*chat' } 25000)
+  Js "const m = document.querySelector('.cdx-spell mark.g'), r = m.getBoundingClientRect(); document.getElementById('ed').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 3, clientY: r.top + r.height / 2 }))" | Out-Null
+  Check "clic droit sur « chat » : le message de Grammalecte en titre et « chats » en suggestion" ((Until { (Js "document.querySelectorAll('.menu[data-cdx] .menu-item').length") -gt 0 } 5000) -and ((Js "document.querySelector('.menu[data-cdx] .menu-title').textContent") -match 'nombre|pluriel|accord') -and ((Js "document.querySelector('.menu[data-cdx] .menu-item').textContent") -eq 'chats'))
+  Js "document.querySelector('.menu[data-cdx] .menu-item').click()" | Out-Null
+  Check "la suggestion corrige l'accord ; la conjugaison reste à corriger, puis « mangent » la corrige" ((Until { (Js "document.getElementById('ed').value") -eq 'Les chats mange des croquettes.' } 3000) -and (Until { (Js "[...document.querySelectorAll('.cdx-spell mark.g')].map(m => m.textContent).join(',')") -eq 'mange' } 10000))
+  Js "const m = document.querySelector('.cdx-spell mark.g'), r = m.getBoundingClientRect(); document.getElementById('ed').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 3, clientY: r.top + r.height / 2 }))" | Out-Null
+  Until { (Js "document.querySelectorAll('.menu[data-cdx] .menu-item').length") -gt 0 } 5000 | Out-Null
+  Js "[...document.querySelectorAll('.menu[data-cdx] .menu-item')].find(i => i.textContent === 'mangent').click()" | Out-Null
+  Check "« mangent » choisi : la phrase est juste, plus aucune marque" ((Until { (Js "document.getElementById('ed').value") -eq 'Les chats mangent des croquettes.' } 3000) -and (Until { (Js "document.querySelectorAll('.cdx-spell mark').length") -eq '0' } 10000))
+  Js "const e = document.getElementById('ed'); e.value = window.__ed0; e.dispatchEvent(new Event('input'))" | Out-Null
+  Check "le texte de la note est rendu et enregistré" ((Until { Has (ReadV 'Alpha.md') 'tags: [exemple]' } 6000) -or (("        état : " + (Js "document.getElementById('st1').textContent") + " ; non enregistrés : " + (Js "document.querySelectorAll('#tabs .dirty').length") + " ; cur=" + (Js "cur") + " ; disque=" + ((ReadV 'Alpha.md') -replace "`n", ' / ')) -eq $null))
 
   # ---------- aides d'écriture ----------
   Js "const e = document.getElementById('ed'); e.value = '- un'; e.focus(); e.setSelectionRange(4, 4); e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))" | Out-Null
