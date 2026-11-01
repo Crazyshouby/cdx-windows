@@ -47,7 +47,7 @@ sealed class ClaudeSession
         if (!string.IsNullOrEmpty(effort)) { a.Add("--effort"); a.Add(effort); }
         // Les outils intégrés que Pilote laisse à Claude ; les outils de la suite et des notes viennent des serveurs MCP (seulement ceux de notre fichier).
         a.AddRange(new[] { "--tools", "Read,Edit,Write,Glob,Grep,Bash,PowerShell,WebSearch,WebFetch,AskUserQuestion,Task" });
-        a.AddRange(new[] { "--permission-mode", "manual", "--permission-prompt-tool", "stdio", "--strict-mcp-config", "--mcp-config", mcpConfig });
+        a.AddRange(new[] { "--permission-mode", "manual", "--permission-prompt-tool", "stdio", "--strict-mcp-config", "--mcp-config", mcpConfig, "--system-prompt-snapshot", "off" });   // snapshot off : la consigne (avec la mémoire du jour) est relue à chaque lancement, même pour une session reprise
         a.Add("--allowedTools"); a.AddRange(allowedTools);
         foreach (var d in addDirs) { a.Add("--add-dir"); a.Add(d); }
         a.Add("--append-system-prompt"); a.Add(systemPrompt);

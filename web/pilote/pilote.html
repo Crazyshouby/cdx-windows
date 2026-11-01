@@ -254,6 +254,7 @@
     ['Effort', null, { sub: EFFORTS.map(([k, n]) => [n, () => post({ cmd: 'pl.effort', value: k }), { check: (state.effort || '') === k }]) }],
     null,
     ['Ouvrir le dossier des projets', () => post({ cmd: 'pl.open-path', path: state.root })],
+    ['Mémoire de Pilote (dans Notes)', () => post({ cmd: 'pl.memory' })],
   ]);
 
   CdxFrame.init();

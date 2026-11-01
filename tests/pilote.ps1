@@ -128,6 +128,13 @@ try {
   Check "les deux appels sont des outils de lecture : aucune demande d'accord" ((($(Items) | Where-Object { $_.kind -eq 'tool' -and $_.name -eq 'Suite · mail_read' -and $_.ok }).Count -ge 1) -and ((($(Items) | Where-Object { $_.kind -eq 'ask' -and $_.title -match 'mail_' }).Count) -eq 0))
   Check "lire un fil ne le marque pas lu (le faux Gmail garde UNREAD sur m1)" (((Invoke-WebRequest "http://127.0.0.1:$gmailPort/_state" -UseBasicParsing).Content | ConvertFrom-Json).messages.m1.labels -contains 'UNREAD')
 
+  "7c. la mémoire : des notes du coffre, lues au départ, écrites par Claude"
+  Check "les quatre notes Pilote/ ont été créées dans le coffre au premier lancement de Claude" ((Test-Path "$vault\Pilote\Profil.md") -and (Test-Path "$vault\Pilote\Décisions.md") -and (Test-Path "$vault\Pilote\Projets.md") -and (Test-Path "$vault\Pilote\Journal.md"))
+  $promptFile = "$data\fake-claude-prompt-$((St).conversations[0].session).txt"
+  Check "la consigne reçue par Claude contient la règle de mémoire et le contenu des notes ; la consigne est relue à chaque lancement (snapshot off)" ((Test-Path $promptFile) -and ((Get-Content $promptFile -Raw) -match 'TA MÉMOIRE') -and ((Get-Content $promptFile -Raw) -match '=== Pilote/Journal.md ===') -and ((Get-Content $promptFile -Raw) -match '--system-prompt-snapshot off'))
+  Send 'retiens Valentin préfère le thé'
+  Check "Claude écrit dans Pilote/Profil.md par les outils de notes, sans demande d'accord" ((WaitIdle) -and ((Get-Content "$vault\Pilote\Profil.md" -Raw) -match 'préfère le thé') -and ((($(Items) | Where-Object { $_.kind -eq 'ask' -and $_.title -match 'notes_append' -and $_.decision -ne 'auto' }).Count) -eq 0))
+
   "8. redémarrage : la conversation et la session sont retrouvées (--resume)"
   $conv = (St).conversations[0]; $turnsFile = "$data\fake-claude-$($conv.session).txt"
   $launchedBefore = @((St).launched)   # le nouveau Pilote ne connaîtra pas le navigateur lancé par l'ancien : on le note pour le fermer à la fin
@@ -139,6 +146,7 @@ try {
   Check "la page montre le fil retrouvé" (Until { (Js "document.querySelectorAll('.m.u').length") -ge 7 } 8000)
   Send 'encore'
   Check "le message suivant relance le faux Claude avec --resume sur la même session : un tour de plus dans son journal" ((WaitIdle) -and ((LastAssistant) -eq 'Tu as dit : encore') -and ((Get-Content $turnsFile).Count -eq $before + 1))
+  Check "la session reprise reçoit la mémoire du jour (le fait retenu est dans sa consigne)" ((Get-Content "$data\fake-claude-prompt-$($conv.session).txt" -Raw) -match 'préfère le thé')
 
   "9. arrêter Claude en plein tour"
   Send 'attends'

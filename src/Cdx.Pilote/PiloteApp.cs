@@ -171,9 +171,11 @@ sealed class PiloteApp : ApplicationContext, IHostApp
         string exe = ClaudeSession.FindExe() ?? throw new InvalidOperationException("Claude Code est introuvable (claude.exe) : installe-le, ou indique son chemin dans CDX_CLAUDE_EXE.");
         Directory.CreateDirectory(RootDir);
         WriteMcpConfig();
-        var args = ClaudeSession.Arguments(c.session, c.turns > 0, model, effort, McpFile, PilotPolicy.ReadTools, new[] { RootDir, VaultDir }.Where(Directory.Exists), SystemPrompt());
+        PilotMemory.Ensure(VaultDir);
+        var args = ClaudeSession.Arguments(c.session, c.turns > 0, model, effort, McpFile, PilotPolicy.ReadTools, new[] { RootDir, VaultDir }.Where(Directory.Exists), SystemPrompt() + PilotMemory.Prompt(VaultDir));
         s = new ClaudeSession(c.id, OnEvent, OnExit);
-        s.Start(exe, args, RootDir, new Dictionary<string, string> { ["CDX_PILOTE_CONV"] = c.id });
+        // la mémoire automatique de Claude Code (dossier ~/.claude, lié à Dev) est coupée : la mémoire de Pilote est dans le coffre (PilotMemory)
+        s.Start(exe, args, RootDir, new Dictionary<string, string> { ["CDX_PILOTE_CONV"] = c.id, ["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1" });
         sessions[c.id] = s;
         Host.Log($"claude {(c.turns > 0 ? "repris" : "ouvert")} pour la conversation {c.id} (session {c.session}, pid {s.Pid})");
         return s;
@@ -366,6 +368,7 @@ sealed class PiloteApp : ApplicationContext, IHostApp
                     foreach (var kv in sessions.ToList()) { if (kv.Value.Busy) restartAfterTurn.Add(kv.Key); else { kv.Value.Kill(); sessions.Remove(kv.Key); } }
                     PushState(); break;
                 }
+                case "pl.memory": PilotMemory.Ensure(VaultDir); _ = Task.Run(() => Bus.Send("notes", "open-note", new { path = PilotMemory.Folder + "/Profil.md" }, "pilote", launch: true)); break;
                 case "pl.open-path": if (St("path") is { Length: > 0 } p && Directory.Exists(p)) _ = Task.Run(() => Bus.Send("explorer", "open-path", new { path = p }, "pilote", launch: true)); break;
                 case "pl.open-url": if (St("url") is { Length: > 0 } u && (u.StartsWith("https://") || u.StartsWith("http://"))) _ = Task.Run(() => { if (!Bus.Send("browser", "open-url", new { url = u }, "pilote", launch: true)) System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(u) { UseShellExecute = true }); }); break;
                 default: Host.CommonMessage(from, cmd, r); break;

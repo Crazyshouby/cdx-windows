@@ -28,6 +28,8 @@ if "--allowedTools" in sys.argv:
 mcp_file = arg("--mcp-config")
 prompt_tool = arg("--permission-prompt-tool")
 data_dir = os.environ.get("CDX_DATA_DIR") or os.getcwd()
+# la consigne reçue (--append-system-prompt) et les arguments, pour que l'essai vérifie ce que Pilote donne à Claude
+open(os.path.join(data_dir, f"fake-claude-prompt-{session}.txt"), "w", encoding="utf-8").write(" ".join(sys.argv[1:]) + chr(10) + "=====" + chr(10) + (arg("--append-system-prompt") or ""))
 out_lock = threading.Lock()
 
 def emit(o):
@@ -164,6 +166,10 @@ def turn(msg):
                 txt, err2 = mcp("cdx-suite", "mail_read", {"id": fils[0]["id"]})
                 try: msgs = json.loads(txt); reply = "Courrier : %s — %s (%d message(s))" % (fils[0].get("subject"), (msgs[-1].get("text") or "").strip()[:60], len(msgs))
                 except Exception: reply = "Courrier lu : " + txt[:160]
+    elif low.startswith("retiens "):
+        fait = msg.strip()[8:].strip()
+        res, err = mcp("cdx-notes", "notes_append", {"path": "Pilote/Profil.md", "text": "- " + fait})
+        reply = ("Mémoire impossible : " if err else "Retenu : ") + fait
     elif low == "attends":
         time.sleep(60); reply = "J'ai attendu."
     else:
