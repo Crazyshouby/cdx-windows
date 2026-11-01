@@ -13,7 +13,7 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 |---|---|---|---|
 | `bin\cdx-shell.exe` | la barre, le menu Démarrer, le centre rapide, Alt+Tab, la touche Windows, la liaison avec AudioLinker | une | `journal.log` |
 | `bin\cdx-explorer.exe [--theme t] [dossier]` | l'Explorateur : une fenêtre par dossier ouvert, s'arrête avec la dernière ; **glisser-déposer** (voir ci-dessous) | une (un second lancement ouvre une fenêtre dans la première) | `journal-explorer.log` |
-| `bin\cdx-browser.exe [--theme t] [adresse]` | le navigateur à onglets | une (un second lancement ouvre un onglet) | `journal-browser.log`, profil `navigateur\` |
+| `bin\cdx-browser.exe [--theme t] [adresse]` | le navigateur : onglets, groupes d'onglets, pages scindées, plusieurs fenêtres, session retrouvée, extensions (antipub), réglages, import depuis Chrome (voir « Navigateur, lot 4 ») | une (un second lancement ouvre un onglet) | `journal-browser.log`, profil `navigateur\` |
 | `bin\cdx-repos.exe [--theme t]` | **Dépôts** : tous les projets git du PC (ce qui reste à enregistrer ou à envoyer sur GitHub), en lecture seule | une (un second lancement passe devant) | `journal-repos.log`, `repos.json` (dossiers explorés, projets masqués) |
 | `bin\cdx-terminal.exe [--theme t] [dossier]` | **Terminal** : un shell (PowerShell 7 s'il est installé, sinon Windows PowerShell) dans une fenêtre de la charte : cadre CDX, fond noir, texte à la couleur d'accent, aucun coin arrondi. Pseudo-console Windows (ConPTY) côté C#, xterm.js dans la page. **Onglets** (Ctrl+Maj+T / W, Ctrl+Tab, Ctrl+Alt+1..9), **volets** côte à côte ou l'un sous l'autre (Alt+Maj+D, menu clic droit, séparateurs déplaçables, Alt+flèches), un shell par volet ; police pixel à chasse fixe de la charte (KIRC Pixel Mono, case de 7 px), texte dessiné par WebGL. Lancé avec un dossier (ou, s'il tourne déjà, un second lancement) : un onglet dans ce dossier. **Win+T** l'ouvre depuis le shell ; la tuile « Terminal CDX » du menu Démarrer le lance ; « Ouvrir dans un terminal » de l'Explorateur l'utilise (Windows Terminal puis cmd en repli) | une (un second lancement passe devant) | `journal-terminal.log` |
 
@@ -34,7 +34,7 @@ web\terminal\       la page du terminal (terminal.html, terminal.css, terminal.j
 web\cdx\            la charte (copie exacte de cdx-ui/dist : node tools/charte-sync.mjs --write cdx-windows) et host.js, le pont des pages
 web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
 couche1\            le cadre des fenêtres de Windows aux couleurs de la charte (DWM), réversible
-tests\              navigateur.ps1 (22 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
+tests\              navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
 ```
 
 ## Essais (aucune entrée simulée)
@@ -94,6 +94,32 @@ d'attraction, 2 px d'écart entre deux fenêtres, aucun au bord de l'écran, à 
 - **Vers une autre application** : quand le pointeur quitte la fenêtre avec des éléments saisis, la page envoie `fs.dragout` et Windows prend le relais (`DoDragDrop`, fichiers réels) ; la liste est relue ensuite.
 - **Essais** : `cdx-explorer --selftest-fs` (déplacer, copier, refus, noms uniques) et `tests\dnd.ps1` (la page pilotée par des événements de pointeur fabriqués, jamais la vraie souris ; conflits de noms compris). **Pas essayés automatiquement** :
   le glisser depuis et vers une autre application (il demande un vrai glisser de Windows) ; à essayer à la main.
+
+## Navigateur, lot 4 (01/11/2026)
+`src\Cdx.Browser\` : `Browser.cs` (une fenêtre : onglets, groupes, pages scindées), `BrowserApp.cs` (les fenêtres, la session, le bus, le canal de test), `BrowserData.cs`
+(favoris, historique, téléchargements, réglages, mots de passe, session, extensions, import). Pages : `web\browser\navigateur.html` (le cadre) et `interne.html` (cdx://newtab,
+favoris, historique, telechargements, extensions, motsdepasse, reglages).
+- **Session** (`session.json`) : fenêtres (position, agrandie), onglets, onglet actif et groupes, réécrite un instant après chaque changement (plus seulement à la fermeture :
+  un plantage ne perd plus les onglets) ; retrouvée au lancement, même lancé avec une adresse (elle s'ajoute). Réglage « Rouvrir la dernière session ». **Ctrl+Maj+T** rouvre
+  l'onglet fermé (les dix derniers, par fenêtre). Ancien format (liste d'adresses) relu.
+- **Plusieurs fenêtres** : Ctrl+N, menu Réglages, « Ouvrir dans une nouvelle fenêtre » (menu de l'onglet : le contrôle WebView2 change de fenêtre, la page n'est pas rechargée).
+  Une adresse venue du bus ou d'un second lancement s'ouvre dans la dernière fenêtre active ; le programme s'arrête avec la dernière fenêtre. Canal de test : `use <n>`.
+- **Groupes d'onglets** (menu clic droit d'un onglet) : nom, couleur de la charte (accent, rouge, ambre, vert, gris), onglets contigus, pastille cliquable qui replie le groupe
+  (un onglet choisi dans un groupe replié le déplie), renommer, couleur, dégrouper, fermer le groupe ; gardés dans la session.
+- **Pages scindées** (Ctrl+\, menu) : deux onglets côte à côte sur deux rectangles (`#vpA`, `#vpB`, barre de volet cdx-split) ; cliquer dans une page la rend active (barre d'adresse) ;
+  choisir un autre onglet remplace le volet actif ; fermer l'un réunit.
+- **Extensions** (`cdx://extensions`, bouton bouclier) : liste du profil (nom, version, active), activer / désactiver, retirer (dossier supprimé), « Réglages » ouvre la page d'options
+  de l'extension dans un onglet, « Ajouter un dossier d'extension… » (non empaquetée, copiée sous `extensions\`), **« Installer uBlock Origin Lite »** : dernière archive Chromium
+  publiée sur GitHub (uBOL-home), téléchargée, dépliée sous `extensions\uBOLite`, chargée (vérifié : règles DNR actives dans WebView2, pisteurs bloqués). `extensions\index.json` : id → dossier.
+- **Réglages** (`cdx://reglages`, `reglages-navigateur.json`) : moteur de recherche de la barre d'adresse (Google, DuckDuckGo, Qwant, Bing, Brave, Startpage), dossier des
+  téléchargements et « demander où enregistrer », session au lancement, enregistrement des mots de passe et remplissage automatique (réglages du moteur), effacer les données des sites
+  (cookies, cache, stockage ; avec ou sans l'historique).
+- **Import** : favoris de Chrome et d'Edge lus dans leurs profils (`Bookmarks`, nom du profil dans `Local State`), ou tout fichier Bookmarks / export HTML (Netscape) ; mots de passe par
+  l'export CSV du navigateur d'origine (Chrome : chrome://password-manager/settings), gardés chiffrés DPAPI dans `motsdepasse.bin` (`cdx://motsdepasse` : liste sans les mots de passe,
+  retirer), **remplis dans les pages de connexion** du même site (script posé une fois par adresse, champ mot de passe et champ de texte qui le précède). La synchro Google de Chrome
+  n'existe pas dans WebView2 : c'est le remplacement. Les mots de passe de la base chiffrée de Chrome ne sont pas lus directement (chiffrement lié à l'application depuis Chrome 127).
+- Essai `tests\navigateur.ps1` (52 vérifications, isolé) : une extension de test en archive avec une règle DNR qui bloque un script servi en local, un fichier Bookmarks et un CSV fabriqués,
+  une page de connexion locale remplie.
 
 ## Synergies (phase 4)
 - **Notifications** : `notify` sur le bus du shell → une cloche et le nombre de notifications non vues dans la barre (place fixe), la liste dans le centre rapide (50 au plus, « Effacer »).

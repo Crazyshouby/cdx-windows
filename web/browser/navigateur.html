@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="/cdx/cdx-frame.css">
 <link rel="stylesheet" href="/cdx/page.css">
 <style>
-  /* Le cadre du navigateur : tout ce qui entoure la page web. Les pages sont des WebView2 posés par le programme sur le rectangle #viewport. */
+  /* Le cadre du navigateur : tout ce qui entoure la page web. Les pages sont des WebView2 posés par le programme sur les rectangles #vpA (et #vpB, pages scindées). */
   .tabs { cursor: default; gap: 0; overflow: hidden; }
   .tab { flex: 0 1 190px; min-width: 56px; max-width: 190px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 8px; cursor: default; }
   .tab .tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
@@ -18,6 +18,14 @@
   .tab img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; }
   .tab.new { flex: none; min-width: 0; max-width: none; padding: 0 9px; }
   .tab .spin { flex: none; }
+  .tab.sp .tt::before { content: '◧ '; color: var(--faint); }                /* l'autre volet des pages scindées */
+  /* groupes d'onglets : une pastille nommée devant les onglets du groupe, qui portent sa couleur en haut ; repliée, les onglets sont cachés */
+  .c-accent { --gc: var(--accent); } .c-rouge { --gc: var(--red); } .c-ambre { --gc: var(--warn); } .c-vert { --gc: var(--green); } .c-gris { --gc: var(--faint); }
+  .tab.g { box-shadow: inset 0 3px 0 var(--gc); }
+  .grp { flex: none; display: flex; align-items: center; gap: 5px; max-width: 160px; padding: 0 8px; margin: 3px 2px 0 4px; border: 1px solid var(--gc); color: var(--text); background: var(--card-2); cursor: default; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .grp i { display: inline-block; width: 8px; height: 8px; background: var(--gc); flex: none; }
+  .grp .n { color: var(--faint); }
+  .grp.collapsed { background: var(--ink); }
   .nav { display: flex; gap: 5px; flex: none; align-items: center; }
   .nav .btn { padding: 0 9px; display: flex; align-items: center; gap: 6px; }
   .nav .btn.on { background: #2a2a2a; box-shadow: var(--bevel-down); }
@@ -25,14 +33,23 @@
   #addr { height: 22px; }
   #findbar { display: flex; align-items: center; gap: 6px; flex: none; }
   #findbar[hidden] { display: none; }
-  #viewport { flex: 1; min-height: 0; background: #000; border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  #viewport { flex: 1; min-height: 0; display: flex; gap: 5px; }
+  .vp { flex: 1; min-width: 0; background: #000; border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  #vpB { flex: none; width: 50%; }
+  #vpB[hidden] { display: none; }
   .badge { color: var(--warn); }
   .status #st { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* une adresse trop longue finit par « … » */
   .status .z { margin-left: auto; flex: none; cursor: default; }
+  /* une question (nom d'un groupe) : les pages web sont masquées le temps de la boîte (win.overlay) */
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .5); }
+  .veil .win { position: relative; inset: auto; width: 380px; }
+  .veil .cb { gap: 10px; }
+  .veil .row { display: flex; gap: 8px; align-items: center; }
 </style>
 <script src="/cdx/icons.js"></script>
 <script src="/cdx/cdx-bridge.js"></script>
 <script src="/cdx/cdx-frame.js"></script>
+<script src="/cdx/cdx-split.js"></script>
 <script src="/cdx/host.js"></script>
 </head>
 <body>
@@ -49,13 +66,14 @@
       <button class="btn" id="favs" title="Favoris"><span class="pix" data-ic="liste"></span></button>
       <button class="btn" id="hist" title="Historique (Ctrl+H)"><span class="pix" data-ic="horloge"></span></button>
       <button class="btn" id="dl" title="Téléchargements (Ctrl+J)"><span class="pix" data-ic="telecharger"></span><span class="badge" id="dlb"></span></button>
+      <button class="btn" id="ext" title="Extensions (antipub…)"><span class="pix" data-ic="bouclier"></span></button>
     </div>
     <div id="findbar" hidden>
       <input id="find" class="text-input" type="text" placeholder="Rechercher dans la page…" spellcheck="false" autocomplete="off" style="flex:none;width:300px">
       <button class="btn" id="fprev" title="Précédent (Maj+Entrée)">↑</button><button class="btn" id="fnext" title="Suivant (Entrée)">↓</button>
       <span class="faint" id="fcount"></span><span style="flex:1"></span><button class="btn" id="fclose" title="Fermer (Échap)">Fermer</button>
     </div>
-    <div id="viewport"></div>
+    <div id="viewport"><div class="vp" id="vpA"></div><div class="vp" id="vpB" hidden></div></div>
     <div class="status"><span class="orb" id="orb"></span><span id="st"></span><span class="z" id="zoom" title="Cliquer pour revenir à 100 %"></span></div>
   </div>
 </div>
@@ -63,12 +81,38 @@
 <script>
   fillPix();
   const $ = id => document.getElementById(id);
-  let st = { active: 0, items: [] }, hover = '';
+  let st = { active: 0, split: 0, left: 0, items: [], groups: [], closed: 0, windows: 1 }, hover = '';
   const cur = () => st.items.find(t => t.id === st.active);
+  const groupOf = t => st.groups.find(g => g.id === t.group);
+  const COLORS = [['accent', 'Couleur d’accent'], ['rouge', 'Rouge'], ['ambre', 'Ambre'], ['vert', 'Vert'], ['gris', 'Gris']];
+
+  // Les pages web sont des vues natives posées sur la page : un menu ou une boîte passerait dessous. Le programme les masque le temps de l'ouverture (win.overlay).
+  function overlayWhile(open) { post({ cmd: 'win.overlay', on: true }); const watch = new MutationObserver(() => { if (!open()) { watch.disconnect(); post({ cmd: 'win.overlay', on: false }); } }); watch.observe(document.body, { childList: true }); }
+  function menu(items, x, y, title) { CdxFrame.menu(items, x, y, title); overlayWhile(() => document.querySelector('.menu[data-cdx]')); }
+  // Une question avec une zone de saisie (nom d'un groupe) : rend le texte, ou null.
+  function ask(title, placeholder, value = '') {
+    return new Promise(resolve => {
+      const v = document.createElement('div'); v.className = 'veil';
+      v.innerHTML = `<div class="win active"><div class="tb"><span class="tb-title">${esc(title)}</span></div><div class="cb"><input class="text-input" id="askIn" placeholder="${esc(placeholder)}" spellcheck="false" autocomplete="off" maxlength="40"><div class="btns"><button class="primary" id="askOk">OK</button><button class="btn" id="askNo">Annuler</button></div></div></div>`;
+      document.body.appendChild(v); const inp = v.querySelector('#askIn'); inp.value = value; inp.focus(); inp.select();
+      const done = r => { v.remove(); resolve(r); };
+      v.querySelector('#askOk').onclick = () => done(inp.value.trim()); v.querySelector('#askNo').onclick = () => done(null);
+      v.onkeydown = e => { e.stopPropagation(); if (e.key === 'Escape') done(null); else if (e.key === 'Enter') done(inp.value.trim()); };
+      overlayWhile(() => v.isConnected);
+    });
+  }
 
   function renderTabs() {
-    $('tabs').innerHTML = st.items.map(t => `<button class="tab ${t.id === st.active ? 'on' : ''}" data-id="${t.id}" title="${esc(t.title)}">${t.favicon ? `<img src="data:image/png;base64,${t.favicon}" alt="">` : `<span class="pix">${pix(t.internalPage ? 'kirc' : 'serveur', 16)}</span>`}<span class="tt">${esc(t.loading ? 'Chargement… ' + t.title : t.title)}</span><span class="x" data-x="${t.id}" title="Fermer (Ctrl+W)">×</span></button>`).join('')
-      + '<button class="tab new" data-new title="Nouvel onglet (Ctrl+T)">+</button>';
+    let html = '', lastGroup = 0;
+    for (const t of st.items) {
+      const g = groupOf(t);
+      if (g && g.id !== lastGroup) { const n = st.items.filter(x => x.group === g.id).length; html += `<span class="grp c-${g.color} ${g.collapsed ? 'collapsed' : ''}" data-g="${g.id}" title="${esc(g.name || 'Groupe')} · ${n} onglet${n > 1 ? 's' : ''} (clic : replier ou déplier)"><i></i>${esc(g.name || '')}<span class="n">${g.collapsed || !g.name ? n : ''}</span></span>`; }
+      lastGroup = g ? g.id : 0;
+      if (g && g.collapsed) continue;
+      const other = st.split && (t.id === st.split || t.id === st.left) && t.id !== st.active;
+      html += `<button class="tab ${t.id === st.active ? 'on' : ''} ${g ? 'g c-' + g.color : ''} ${other ? 'sp' : ''}" data-id="${t.id}" title="${esc(t.title)}">${t.favicon ? `<img src="data:image/png;base64,${t.favicon}" alt="">` : `<span class="pix">${pix(t.internalPage ? 'kirc' : 'serveur', 16)}</span>`}<span class="tt">${esc(t.loading ? 'Chargement… ' + t.title : t.title)}</span><span class="x" data-x="${t.id}" title="Fermer (Ctrl+W)">×</span></button>`;
+    }
+    $('tabs').innerHTML = html + '<button class="tab new" data-new title="Nouvel onglet (Ctrl+T)">+</button>';
   }
   function renderBar() {
     const t = cur(); if (!t) return;
@@ -80,6 +124,7 @@
     $('orb').className = 'orb ' + (t.loading ? 'amber pulse' : 'green');
     $('st').textContent = hover || (t.loading ? 'Chargement…' : 'Terminé');
     $('zoom').textContent = t.zoom !== 100 ? `Zoom ${t.zoom} %` : '';
+    const split = !!st.split; if ($('vpB').hidden === split) { $('vpB').hidden = !split; layout(); }
   }
   handlers.tabs = m => { st = m; renderTabs(); renderBar(); };
   handlers.status = m => { hover = m.text; const t = cur(); if (t) $('st').textContent = hover || (t.loading ? 'Chargement…' : 'Terminé'); };
@@ -90,18 +135,62 @@
   $('tabs').onclick = e => {
     const x = e.target.closest('[data-x]'); if (x) { post({ cmd: 'br.close', id: +x.dataset.x }); return; }
     if (e.target.closest('[data-new]')) { post({ cmd: 'br.newtab' }); return; }
+    const g = e.target.closest('[data-g]'); if (g) { const grp = st.groups.find(k => k.id === +g.dataset.g); post({ cmd: 'br.group', group: +g.dataset.g, what: 'collapse', on: !(grp && grp.collapsed) }); return; }
     const t = e.target.closest('[data-id]'); if (t) post({ cmd: 'br.select', id: +t.dataset.id });
   };
   $('tabs').onauxclick = e => { const t = e.target.closest('[data-id]'); if (e.button === 1 && t) post({ cmd: 'br.close', id: +t.dataset.id }); };
+  // ---- menus contextuels : un onglet, la pastille d'un groupe, le fond de la barre d'onglets ----
+  async function newGroupWith(id) { const name = await ask('Nouveau groupe', 'Nom du groupe (facultatif)'); if (name !== null) post({ cmd: 'br.group.new', ids: [id], name, color: 'accent' }); }
+  function tabMenu(t, x, y) {
+    const g = groupOf(t); const others = st.groups.filter(k => k.id !== t.group);
+    const groupItems = [['Nouveau groupe…', () => newGroupWith(t.id)], ...(others.length ? [null, ...others.map(k => [k.name || 'Groupe sans nom', () => post({ cmd: 'br.group.add', id: t.id, group: k.id })])] : [])];
+    menu([
+      ['Nouvel onglet', () => post({ cmd: 'br.newtab' }), { key: 'Ctrl+T' }],
+      ['Dupliquer l’onglet', () => post({ cmd: 'br.duplicate', id: t.id })],
+      ['Ouvrir dans une nouvelle fenêtre', () => post({ cmd: 'br.towindow', id: t.id }), { disabled: st.items.length < 2 }],
+      null,
+      ['Ajouter à un groupe', null, { sub: groupItems }],
+      ...(g ? [['Retirer du groupe', () => post({ cmd: 'br.group.leave', id: t.id })]] : []),
+      null,
+      ...(st.split ? [['Réunir les pages', () => post({ cmd: 'br.unsplit' }), { key: 'Ctrl+\\' }]] : [['Afficher à côté (pages scindées)', () => post({ cmd: 'br.split', id: t.id }), { key: 'Ctrl+\\', disabled: t.id === st.active && st.items.length < 2 }]]),
+      null,
+      ['Rouvrir l’onglet fermé', () => post({ cmd: 'br.reopen' }), { key: 'Ctrl+Maj+T', disabled: !st.closed }],
+      ['Fermer les autres onglets', () => post({ cmd: 'br.closeothers', id: t.id }), { disabled: st.items.length < 2 }],
+      ['Fermer l’onglet', () => post({ cmd: 'br.close', id: t.id }), { key: 'Ctrl+W' }],
+    ], x, y);
+  }
+  async function groupMenu(g, x, y) {
+    menu([
+      [g.collapsed ? 'Déplier' : 'Replier', () => post({ cmd: 'br.group', group: g.id, what: 'collapse', on: !g.collapsed })],
+      ['Renommer…', async () => { const name = await ask('Nom du groupe', 'Nom', g.name); if (name !== null) post({ cmd: 'br.group', group: g.id, what: 'rename', name }); }],
+      ['Couleur', null, { sub: COLORS.map(([c, n]) => [n, () => post({ cmd: 'br.group', group: g.id, what: 'color', color: c }), { check: g.color === c }]) }],
+      null,
+      ['Dégrouper', () => post({ cmd: 'br.group', group: g.id, what: 'ungroup' })],
+      ['Fermer le groupe', () => post({ cmd: 'br.group', group: g.id, what: 'close' })],
+    ], x, y, g.name || 'Groupe');
+  }
+  $('tabs').oncontextmenu = e => {
+    e.preventDefault();
+    const gEl = e.target.closest('[data-g]'); if (gEl) { const g = st.groups.find(k => k.id === +gEl.dataset.g); if (g) groupMenu(g, e.clientX, e.clientY); return; }
+    const tEl = e.target.closest('[data-id]'); if (tEl) { const t = st.items.find(k => k.id === +tEl.dataset.id); if (t) tabMenu(t, e.clientX, e.clientY); return; }
+    menu([['Nouvel onglet', () => post({ cmd: 'br.newtab' }), { key: 'Ctrl+T' }], ['Rouvrir l’onglet fermé', () => post({ cmd: 'br.reopen' }), { key: 'Ctrl+Maj+T', disabled: !st.closed }], null, ['Nouvelle fenêtre', () => post({ cmd: 'br.newwindow' }), { key: 'Ctrl+N' }]], e.clientX, e.clientY);
+  };
   $('back').onclick = () => post({ cmd: 'br.back' }); $('fwd').onclick = () => post({ cmd: 'br.fwd' });
   $('reload').onclick = () => post({ cmd: cur() && cur().loading ? 'br.stop' : 'br.reload' });
   $('star').onclick = () => post({ cmd: 'br.star' });
-  $('favs').onclick = () => post({ cmd: 'br.internal', p: 'favoris' }); $('hist').onclick = () => post({ cmd: 'br.internal', p: 'historique' }); $('dl').onclick = () => post({ cmd: 'br.internal', p: 'telechargements' });
-  // Les réglages de la fenêtre (bouton hachuré de la barre de titre) : les pages internes du navigateur et la fenêtre des transferts.
+  $('favs').onclick = () => post({ cmd: 'br.internal', p: 'favoris' }); $('hist').onclick = () => post({ cmd: 'br.internal', p: 'historique' }); $('dl').onclick = () => post({ cmd: 'br.internal', p: 'telechargements' }); $('ext').onclick = () => post({ cmd: 'br.internal', p: 'extensions' });
+  // Les réglages de la fenêtre (bouton hachuré de la barre de titre) : les pages internes du navigateur, les fenêtres, la fenêtre des transferts.
   windowSettings(() => [
     ['Favoris', () => post({ cmd: 'br.internal', p: 'favoris' })],
     ['Historique', () => post({ cmd: 'br.internal', p: 'historique' }), { key: 'Ctrl+H' }],
     ['Téléchargements', () => post({ cmd: 'br.internal', p: 'telechargements' }), { key: 'Ctrl+J' }],
+    ['Extensions', () => post({ cmd: 'br.internal', p: 'extensions' })],
+    ['Mots de passe', () => post({ cmd: 'br.internal', p: 'motsdepasse' })],
+    ['Réglages du navigateur', () => post({ cmd: 'br.internal', p: 'reglages' })],
+    null,
+    ['Nouvelle fenêtre', () => post({ cmd: 'br.newwindow' }), { key: 'Ctrl+N' }],
+    [st.split ? 'Réunir les pages' : 'Pages scindées (deux pages côte à côte)', () => post({ cmd: st.split ? 'br.unsplit' : 'br.split' }), { key: 'Ctrl+\\' }],
+    ['Rouvrir l’onglet fermé', () => post({ cmd: 'br.reopen' }), { key: 'Ctrl+Maj+T', disabled: !st.closed }],
     null,
     ['Fenêtre des transferts', () => post({ cmd: 'br.xfers' })],
   ]);
@@ -130,12 +219,14 @@
 
   // ---- cadre de la fenêtre ----
   CdxFrame.init();   // barre de titre, boutons et bords : cdx-frame.js (la barre se double-clique pour agrandir)
+  CdxSplit.init({ pane: $('vpB'), side: 'right', key: 'navigateur-scinde', min: 200, max: 4000, minOther: 200 });   // la barre entre les deux pages scindées
 
-  // ---- le rectangle des pages : le programme y pose les WebView2 des onglets ----
-  const layout = () => { const r = $('viewport').getBoundingClientRect(); post({ cmd: 'br.layout', x: Math.round(r.left) + 1, y: Math.round(r.top) + 1, w: Math.round(r.width) - 2, h: Math.round(r.height) - 2 }); };
-  new ResizeObserver(layout).observe($('viewport')); addEventListener('resize', layout); addEventListener('load', layout);
+  // ---- les rectangles des pages : le programme y pose les WebView2 des onglets (le second seulement quand les pages sont scindées) ----
+  const rect = el => { const r = el.getBoundingClientRect(); return { x: Math.round(r.left) + 1, y: Math.round(r.top) + 1, w: Math.round(r.width) - 2, h: Math.round(r.height) - 2 }; };
+  const layout = () => { const a = rect($('vpA')); const m = { cmd: 'br.layout', ...a }; if (!$('vpB').hidden) { const b = rect($('vpB')); m.x2 = b.x; m.y2 = b.y; m.w2 = b.w; m.h2 = b.h; } post(m); };
+  new ResizeObserver(layout).observe($('vpA')); new ResizeObserver(layout).observe($('vpB')); addEventListener('resize', layout); addEventListener('load', layout);
 
-  if (!hasHost) handlers.tabs({ active: 2, items: [{ id: 1, title: 'Nouvel onglet', url: '', favicon: '', canBack: false, canFwd: false, zoom: 100, internalPage: true }, { id: 2, title: 'Documentation WebView2', url: 'https://learn.microsoft.com/fr-fr/microsoft-edge/webview2/', favicon: '', loading: false, canBack: true, canFwd: false, zoom: 125, starred: true }, { id: 3, title: 'Chargement…', url: 'https://exemple.fr', loading: true, canBack: false, canFwd: false, zoom: 100 }] });
+  if (!hasHost) handlers.tabs({ active: 2, split: 0, left: 2, closed: 1, windows: 1, groups: [{ id: 1, name: 'Travail', color: 'vert', collapsed: false }], items: [{ id: 1, title: 'Nouvel onglet', url: '', favicon: '', canBack: false, canFwd: false, zoom: 100, internalPage: true, group: 0 }, { id: 2, title: 'Documentation WebView2', url: 'https://learn.microsoft.com/fr-fr/microsoft-edge/webview2/', favicon: '', loading: false, canBack: true, canFwd: false, zoom: 125, starred: true, group: 1 }, { id: 3, title: 'Chargement…', url: 'https://exemple.fr', loading: true, canBack: false, canFwd: false, zoom: 100, group: 1 }] });
   post({ cmd: 'br.ready' });
 </script>
 </body>

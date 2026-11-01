@@ -96,6 +96,108 @@ Stop-Process -Id $srv.Id -Force; Remove-Item $srvdir -Recurse -Force -ErrorActio
 "8. cadre : onglets affichés par la page du navigateur"
 Check "le cadre liste les onglets ($((Ctl 'evalui document.querySelectorAll("#tabs .tab").length')) boutons)" ([int](Ctl 'evalui document.querySelectorAll("#tabs .tab").length') -ge 3)
 
+"10. session continue et onglet rouvert"
+$sess = Get-Content "$data\session.json" -Raw | ConvertFrom-Json
+Check "session.json est écrit sans fermer la fenêtre, avec les onglets et l'actif" ($sess.Windows.Count -eq 1 -and @($sess.Windows[0].Tabs).Count -ge 2 -and $sess.Windows[0].Active -ge 0)
+$s = St; $n0 = @($s.tabs).Count; $closedUrl = $s.tabs[-1].Url; $closedId = $s.tabs[-1].Id
+Ctl "cmd {`"cmd`":`"br.close`",`"id`":$closedId}" | Out-Null; Start-Sleep 1
+Ctl 'cmd {"cmd":"br.reopen"}' | Out-Null; Start-Sleep 4
+$s = St; Check "Ctrl+Maj+T rouvre l'onglet fermé (même adresse)" (@($s.tabs).Count -eq $n0 -and $s.tabs[-1].Url -eq $closedUrl)
+
+"11. groupes d'onglets"
+$s = St; $ids = @($s.tabs | Select-Object -First 2 | ForEach-Object { $_.Id })
+Ctl ('cmd {"cmd":"br.group.new","ids":[' + ($ids -join ',') + '],"name":"Travail","color":"vert"}') | Out-Null; Start-Sleep 1
+$s = St; $g = @($s.groups)[0]
+Check "un groupe « Travail » vert avec deux onglets, contigus" ($g.Name -eq 'Travail' -and $g.Color -eq 'vert' -and @($s.tabs | Where-Object { $_.group -eq $g.Id }).Count -eq 2 -and $s.tabs[0].group -eq $g.Id -and $s.tabs[1].group -eq $g.Id)
+Check "le cadre montre la pastille du groupe et les onglets colorés" ((Ctl 'evalui document.querySelectorAll("#tabs .grp").length + "/" + document.querySelectorAll("#tabs .tab.g").length') -eq '"1/2"')
+Ctl "cmd {`"cmd`":`"br.group`",`"group`":$($g.Id),`"what`":`"collapse`",`"on`":true}" | Out-Null; Start-Sleep 1
+$s = St; Check "groupe replié : ses onglets disparaissent de la barre, l'onglet actif est hors du groupe" (([int](Ctl 'evalui document.querySelectorAll("#tabs .tab:not(.new)").length')) -eq (@($s.tabs).Count - 2) -and ($s.tabs | Where-Object { $_.Id -eq $s.active }).group -ne $g.Id)
+Ctl "cmd {`"cmd`":`"br.select`",`"id`":$($ids[0])}" | Out-Null; Start-Sleep 1
+$s = St; Check "choisir un onglet du groupe le déplie" (-not @($s.groups)[0].Collapsed -and $s.active -eq $ids[0])
+$sess = Get-Content "$data\session.json" -Raw | ConvertFrom-Json
+Check "la session garde le groupe et l'appartenance des onglets" (@($sess.Windows[0].Groups).Count -eq 1 -and @($sess.Windows[0].Tabs | Where-Object { $_.Group -eq $g.Id }).Count -eq 2)
+Ctl "cmd {`"cmd`":`"br.group`",`"group`":$($g.Id),`"what`":`"ungroup`"}" | Out-Null; Start-Sleep 1
+$s = St; Check "dégrouper : plus de groupe, les onglets restent" (@($s.groups).Count -eq 0 -and @($s.tabs).Count -ge 2)
+
+"12. pages scindées"
+Ctl 'cmd {"cmd":"br.split"}' | Out-Null; Start-Sleep 2
+$s = St; $l = $s.tabs | Where-Object { $_.Id -eq $s.active }; $r2 = $s.tabs | Where-Object { $_.Id -eq $s.split }
+Check "deux onglets visibles côte à côte, le second à droite du premier" ($s.split -and $l.visible -and $r2.visible -and $r2.bounds[0] -gt ($l.bounds[0] + $l.bounds[2] - 5) -and $l.bounds[2] -gt 100 -and $r2.bounds[2] -gt 100)
+Check "le cadre réserve le second rectangle (#vpB visible, avec sa barre de volet)" ((Ctl 'evalui String(document.getElementById("vpB").hidden) + "/" + String(document.getElementById("vpB").previousElementSibling.classList.contains("cdx-split"))') -eq '"false/true"')
+Ctl 'cmd {"cmd":"br.unsplit"}' | Out-Null; Start-Sleep 2
+$s = St; $l = $s.tabs | Where-Object { $_.Id -eq $s.active }
+Check "réunies : une seule page visible, pleine largeur" (-not $s.split -and @($s.tabs | Where-Object { $_.visible }).Count -eq 1 -and $l.bounds[2] -gt 700)
+
+"13. plusieurs fenêtres"
+Ctl 'cmd {"cmd":"br.newwindow","url":"https://example.com"}' | Out-Null; Start-Sleep 6
+$s = St
+Check "une seconde fenêtre, avec son onglet, devient la fenêtre courante" (@($s.windows).Count -eq 2 -and $s.window -eq 2 -and $s.tabs[0].Url -eq 'https://example.com/')
+$sess = Get-Content "$data\session.json" -Raw | ConvertFrom-Json
+Check "la session compte les deux fenêtres" (@($sess.Windows).Count -eq 2)
+Ctl 'use 1' | Out-Null; $s = St; $mv = $s.tabs[-1]
+Ctl "cmd {`"cmd`":`"br.towindow`",`"id`":$($mv.Id)}" | Out-Null; Start-Sleep 4
+Ctl 'use 0' | Out-Null; $s = St
+Check "« Ouvrir dans une nouvelle fenêtre » : une troisième fenêtre reçoit l'onglet sans le recharger (même adresse, même titre)" (@($s.windows).Count -eq 3 -and $s.tabs[0].Url -eq $mv.Url -and $s.tabs[0].Title -eq $mv.Title)
+$evm = Ctl 'eval document.title'
+Check "la page déplacée répond toujours ($evm)" ($evm -and $evm -ne 'null' -and $evm.Length -gt 2)
+Ctl 'cmd {"cmd":"win.close"}' | Out-Null; Start-Sleep 2; Ctl 'use 2' | Out-Null; Ctl 'cmd {"cmd":"win.close"}' | Out-Null; Start-Sleep 2; Ctl 'use 0' | Out-Null
+$s = St; Check "fermer deux fenêtres : le programme continue avec la première" (@($s.windows).Count -eq 1 -and -not $brp.HasExited)
+
+"14. réglages : moteur de recherche"
+Ctl 'cmd {"cmd":"br.internal","p":"reglages"}' | Out-Null; Start-Sleep 3
+Check "la page cdx://reglages liste les moteurs" ([int](Ctl 'eval document.querySelectorAll("#eng option").length') -ge 4)
+Ctl 'eval (() => { const e = document.getElementById("eng"); e.value = "duckduckgo"; e.dispatchEvent(new Event("change")); })()' | Out-Null; Start-Sleep 1
+Check "le choix est écrit dans reglages-navigateur.json" ((Get-Content "$data\reglages-navigateur.json" -Raw) -match '"Search":\s*"duckduckgo"')
+Ctl 'cmd {"cmd":"br.go","url":"charte pixel"}' | Out-Null; Start-Sleep 4
+$s = St; Check "une recherche part désormais sur DuckDuckGo" (($s.tabs | Where-Object { $_.Id -eq $s.active }).Url -like 'https://duckduckgo.com/?q=*')
+
+"15. extensions : installation depuis une archive, blocage (règle DNR), page d'options, désactivation, retrait"
+$srvdir2 = Join-Path $env:TEMP "cdx-ext-test-$PID"; New-Item -ItemType Directory "$srvdir2\ext" -Force | Out-Null
+'{"manifest_version":3,"name":"cdx-bloqueur","version":"1.2","permissions":["declarativeNetRequest"],"host_permissions":["<all_urls>"],"options_page":"options.html","declarative_net_request":{"rule_resources":[{"id":"r","enabled":true,"path":"rules.json"}]}}' | Set-Content "$srvdir2\ext\manifest.json" -Encoding ascii
+'[{"id":1,"priority":1,"action":{"type":"block"},"condition":{"urlFilter":"bloque.js","resourceTypes":["script"]}}]' | Set-Content "$srvdir2\ext\rules.json" -Encoding ascii
+'<!doctype html><title>Options cdx-bloqueur</title>' | Set-Content "$srvdir2\ext\options.html" -Encoding ascii
+Compress-Archive -Path "$srvdir2\ext\*" -DestinationPath "$srvdir2\ext.zip" -Force
+"document.title = 'SCRIPT-PASSE';" | Set-Content "$srvdir2\bloque.js" -Encoding ascii
+'<!doctype html><title>SCRIPT-ATTENDU</title><script src="bloque.js" onerror="document.title=''SCRIPT-BLOQUE''"></script>' | Set-Content "$srvdir2\page.html" -Encoding ascii
+'<!doctype html><title>Connexion</title><form><input name="u" type="text"><input name="p" type="password"></form>' | Set-Content "$srvdir2\login.html" -Encoding ascii
+$srv2 = Start-Process python -ArgumentList '-m', 'http.server', '8767', '--bind', '127.0.0.1', '--directory', $srvdir2 -PassThru -WindowStyle Hidden; Start-Sleep 2
+Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/page.html"}' | Out-Null; Start-Sleep 3
+Check "sans l'extension : le script passe" ((Ctl 'eval document.title') -eq '"SCRIPT-PASSE"')
+Ctl 'cmd {"cmd":"br.internal","p":"extensions"}' | Out-Null; Start-Sleep 3
+Check "cdx://extensions liste l'extension de test (cdx-test) chargée au démarrage" ((Ctl 'eval document.body.innerText') -match 'cdx-test')
+Ctl 'eval post({ cmd: "in.ext.install", url: "http://127.0.0.1:8767/ext.zip", name: "bloqueur" })' | Out-Null; Start-Sleep 6
+$lst = Ctl 'eval document.body.innerText'
+Check "l'archive est téléchargée, dépliée sous extensions\bloqueur et chargée (listée avec sa version)" ((Test-Path "$data\extensions\bloqueur\manifest.json") -and $lst -match 'cdx-bloqueur' -and $lst -match '1\.2')
+Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/page.html?2"}' | Out-Null; Start-Sleep 3
+Check "avec l'extension : la règle bloque le script" ((Ctl 'eval document.title') -eq '"SCRIPT-BLOQUE"')
+Ctl 'cmd {"cmd":"br.internal","p":"extensions"}' | Out-Null; Start-Sleep 2
+Ctl 'eval (() => { const b = [...document.querySelectorAll(".ri")].find(r => r.innerText.includes("cdx-bloqueur")); b.querySelector("[data-opt]").click(); })()' | Out-Null; Start-Sleep 3
+$s = St; Check "« Réglages » ouvre la page d'options de l'extension dans un onglet" ((($s.tabs | Where-Object { $_.Id -eq $s.active }).Url) -like 'chrome-extension://*/options.html')
+Ctl 'cmd {"cmd":"br.internal","p":"extensions"}' | Out-Null; Start-Sleep 2
+Ctl 'eval (() => { const b = [...document.querySelectorAll(".ri")].find(r => r.innerText.includes("cdx-bloqueur")); b.querySelector("[data-en]").click(); })()' | Out-Null; Start-Sleep 2
+Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/page.html?3"}' | Out-Null; Start-Sleep 3
+Check "désactivée : le script passe à nouveau" ((Ctl 'eval document.title') -eq '"SCRIPT-PASSE"')
+Ctl 'cmd {"cmd":"br.internal","p":"extensions"}' | Out-Null; Start-Sleep 2
+Ctl 'eval post({ cmd: "in.ext.remove", id: [...document.querySelectorAll("[data-rmx]")].find(b => b.closest(".ri").innerText.includes("cdx-bloqueur")).dataset.rmx })' | Out-Null; Start-Sleep 3
+Check "retirée : plus dans la liste, dossier supprimé" (-not (Test-Path "$data\extensions\bloqueur") -and ((Ctl 'eval document.body.innerText') -notmatch 'cdx-bloqueur'))
+
+"16. import des favoris et des mots de passe, remplissage automatique"
+'{"roots":{"bookmark_bar":{"children":[{"type":"url","name":"Exemple deux","url":"https://example.com/deux"},{"type":"folder","name":"Dossier","children":[{"type":"url","name":"Trois","url":"https://example.net/trois"}]}]},"other":{"children":[{"type":"url","name":"Déjà là","url":"https://example.org/?x=2"}]}}}' | Set-Content "$srvdir2\Bookmarks" -Encoding utf8
+Ctl 'cmd {"cmd":"br.internal","p":"reglages"}' | Out-Null; Start-Sleep 2
+Ctl ('eval post({ cmd: "in.import.bookmarks", path: ' + ("$srvdir2\Bookmarks" | ConvertTo-Json) + ' })') | Out-Null; Start-Sleep 2
+$fav = Get-Content "$data\favoris.json" -Raw
+Check "favoris importés d'un fichier Bookmarks (dossiers compris), sans doublon" ($fav -match 'example.com/deux' -and $fav -match 'example.net/trois' -and ([regex]::Matches($fav, 'https://example.org/[?]x=2"').Count -eq 1))
+Check "la page annonce le résultat (2 ajoutés, 1 déjà là)" ((Ctl 'eval document.getElementById("msg").textContent') -match '2 ajoutés, 1 déjà')
+"name,url,username,password,note`nTest,http://127.0.0.1:8767/login.html,moi,secret-1,`n" | Set-Content "$srvdir2\mdp.csv" -Encoding utf8
+Ctl ('eval post({ cmd: "in.import.passwords", path: ' + ("$srvdir2\mdp.csv" | ConvertTo-Json) + ' })') | Out-Null; Start-Sleep 2
+Check "mots de passe importés : chiffrés sur le disque (motsdepasse.bin, rien en clair)" ((Test-Path "$data\motsdepasse.bin") -and -not ([Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes("$data\motsdepasse.bin")) -match 'secret-1'))
+Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/login.html"}' | Out-Null; Start-Sleep 4
+Check "page de connexion du même site : identifiant et mot de passe remplis" ((Ctl 'eval document.querySelector("[name=u]").value + "/" + document.querySelector("[name=p]").value') -eq '"moi/secret-1"')
+Ctl 'cmd {"cmd":"br.internal","p":"motsdepasse"}' | Out-Null; Start-Sleep 3
+$pwt = Ctl 'eval document.body.innerText'
+Check "cdx://motsdepasse liste l'identifiant sans montrer le mot de passe" (($pwt -match 'moi') -and ($pwt -notmatch 'secret-1'))
+Stop-Process -Id $srv2.Id -Force; Remove-Item $srvdir2 -Recurse -Force -ErrorAction SilentlyContinue
+
 "9. fermeture d'onglet puis de la fenêtre"
 Ctl 'cmd {"cmd":"br.close","id":1}' | Out-Null; Start-Sleep 1
 $s = St; Check "onglet 1 fermé" (@($s.tabs | Where-Object { $_.Id -eq 1 }).Count -eq 0)
