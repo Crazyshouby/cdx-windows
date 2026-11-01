@@ -139,6 +139,13 @@ Claude Code en sous-processus plutôt que l'API ; un projet = fiche dans Notes +
   `tests\fake_claude.py`, un faux `claude -p` qui lance les vrais serveurs MCP et rejoue les scénarios : outils, navigateur piloté, accords automatiques et demandés, refus, question à choix,
   commande d'un programme, création d'un projet dans un coffre jetable, lecture du courrier contre un faux Gmail, mémoire dans le coffre relue après reprise, redémarrage et reprise, arrêt). Rien ne touche au vrai Claude Code ni aux vrais programmes.
 
+## Présentation animée (01/11/2026)
+
+`docs\presentation\cdx-presentation.html` : une animation de 14 secondes (1280 × 720) faite des éléments de la charte (polices pixel, icônes, jetons) : le logo, la barre et ses neuf
+programmes, puis Pilote qui reçoit une demande et agit dans Dépôts, Notes, Agenda et Courrier par ses outils, et la signature « Des outils faits pour l'IA ». Pilotée par le temps :
+ouverte telle quelle elle joue en boucle ; `?t=<ms>` rend l'image d'un instant. `python docs\presentationender.py` en fait `cdx-presentation.mp4` (Chrome headless image par image, puis
+ffmpeg ; non versionné, à regénérer).
+
 ## Icônes d'application (01/11/2026)
 
 Décision du 01/11/2026 : une icône pixel par application, d'une même famille, sans retouche des icônes existantes ; dessins approuvés par Valentin.
