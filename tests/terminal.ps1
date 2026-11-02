@@ -48,7 +48,7 @@ try {
   if (-not $okW) { "    écran du volet 1 :"; (Screen 1) -split "`n" | Select-Object -Last 12 | ForEach-Object { "    | $_" } }
 
   # --- police et rendu ---
-  Check "la police pixel à chasse fixe de la charte est chargée" ((Js "document.fonts.check('14px \""KIRC Pixel Mono\""')") -eq $true)
+  Check "la police pixel à chasse fixe de la charte est chargée" ((Js "document.fonts.check('14px \""CDX Pixel Mono\""')") -eq $true)
   $cell = Js "(() => { const t = window.__panes.get(1).term; return t.element.querySelector('.xterm-screen').getBoundingClientRect().width / t.cols; })()"
   Check "la case fait 7 pixels de large (avance de la police), sans fraction" ("$cell" -eq '7')
   Check "le texte est dessiné par le moteur WebGL (caractères de cadre exacts)" ((Js "!!window.__panes.get(1).gl") -eq $true)

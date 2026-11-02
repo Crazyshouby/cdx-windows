@@ -2,7 +2,7 @@
   // Les réglages de la fenêtre, derrière le bouton hachuré de la barre de titre (host.js : windowSettings) ; la suite y ajoute la couleur d'accent.
   // Le correcteur orthographique (cdx-spell.js, dictionnaire dans l'hôte) sur l'éditeur ; réglage gardé (Affichage > Correcteur orthographique).
   let spell = ls('spell', true), gram = ls('grammaire', true), autoc = ls('autocorrection', true);
-  const spellEd = window.CdxSpell ? CdxSpell.attach($('ed'), { markdown: true, enabled: spell, auto: autoc, grammar: '/cdx/grammaire-worker.js', grammarEnabled: gram }) : null;   // grammaire : Grammalecte dans un worker
+  const spellEd = window.CdxSpell ? CdxSpell.attach($('ed'), { markdown: true, enabled: spell, auto: autoc, grammar: '/host/grammaire-worker.js', grammarEnabled: gram }) : null;   // grammaire : Grammalecte dans un worker
   const setSpell = on => { spell = on; lsSet('spell', on); if (spellEd) spellEd.enable(on); };
   const setGram = on => { gram = on; lsSet('grammaire', on); if (spellEd) spellEd.grammar(on); };
   const setAuto = on => { autoc = on; lsSet('autocorrection', on); if (spellEd) spellEd.auto(on); };

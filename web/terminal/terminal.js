@@ -6,9 +6,9 @@ fillPix();
 const $ = id => document.getElementById(id);
 
 // ---------- police et couleurs ----------
-// KIRC Pixel Mono : la police console de la charte à chasse fixe (case de 7 pixels, 14 px). Les repli servent aux symboles qu'elle n'a pas (flèches, braille...) ;
+// CDX Pixel Mono : la police console de la charte à chasse fixe (case de 7 pixels, 14 px). Les repli servent aux symboles qu'elle n'a pas (flèches, braille...) ;
 // le moteur WebGL de xterm place chaque caractère dans sa case, un repli plus large ou plus étroit ne décale donc rien.
-const FONT = '"KIRC Pixel Mono", "Cascadia Mono", Consolas, "Lucida Console", monospace';
+const FONT = '"CDX Pixel Mono", "Cascadia Mono", Consolas, "Lucida Console", monospace';
 
 // Les seize couleurs ANSI viennent de la charte (cdx-ui.css, « genres de lignes d'une console ») : rouge = problème, ambre = annonce, vert sombre = présence,
 // bleu = sujet, rose = action, cyan = lien, gris = voix du serveur. La charte n'a qu'une teinte par sens : les variantes vives reprennent la même quand elle n'en a pas d'autre.
@@ -309,7 +309,7 @@ function demo() {
 
 CdxFrame.init();
 Promise.race([
-  Promise.all([document.fonts.load('14px "KIRC Pixel Mono"'), document.fonts.load('italic 14px "KIRC Pixel Mono"')]),
+  Promise.all([document.fonts.load('14px "CDX Pixel Mono"'), document.fonts.load('italic 14px "CDX Pixel Mono"')]),
   new Promise(r => setTimeout(r, 2000)),
 ]).then(async () => {
   if (!hasHost) { newTab(); demo(); return; }

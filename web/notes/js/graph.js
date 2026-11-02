@@ -72,7 +72,7 @@
       const a = toScreen(gById.get(e.from)), b = toScreen(gById.get(e.to));
       ctx.strokeStyle = hi && (e.from === gHover.id || e.to === gHover.id) ? c.text : c.edge; ctx.beginPath(); ctx.moveTo(a.x + .5, a.y + .5); ctx.lineTo(b.x + .5, b.y + .5); ctx.stroke();
     }
-    ctx.font = '14px "KIRC Pixel", sans-serif'; ctx.textBaseline = 'top';
+    ctx.font = '14px "CDX Pixel", sans-serif'; ctx.textBaseline = 'top';
     const labelsAll = gNodes.length <= 80 || gZoom >= 1.5;
     for (const n of gNodes) {
       const p = toScreen(n), s = nodeSize(n);

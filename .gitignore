@@ -1,7 +1,4 @@
 bin/
 obj/
 *.user
-couche1/cdx-frame.exe
-couche1/sauvegarde.json
 installer/Output/
-docs/presentation/*.mp4

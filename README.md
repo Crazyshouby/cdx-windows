@@ -18,7 +18,7 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 | `bin\cdx-agenda.exe [--theme t]` | **Agenda** : calendrier et tâches du compte Google relié à la suite (voir « Agenda et brique Google ») | une (un second lancement passe devant) | `journal-agenda.log` |
 | `bin\cdx-mail.exe [--theme t]` | **Courrier** : la boîte Gmail du compte Google relié à la suite (voir « Courrier ») | une (un second lancement passe devant) | `journal-mail.log` |
 | `bin\cdx-pilote.exe [--theme t]` | **Pilote** : le chat avec Claude réservé à l'organisation et à la création des projets ; Claude Code en sous-processus, la suite en outils (voir « Pilote ») | une (un second lancement passe devant) | `journal-pilote.log`, `pilote.json`, `pilote\<conversation>.json` |
-| `bin\cdx-terminal.exe [--theme t] [dossier]` | **Terminal** : un shell (PowerShell 7 s'il est installé, sinon Windows PowerShell) dans une fenêtre de la charte : cadre CDX, fond noir, texte à la couleur d'accent, aucun coin arrondi. Pseudo-console Windows (ConPTY) côté C#, xterm.js dans la page. **Onglets** (Ctrl+Maj+T / W, Ctrl+Tab, Ctrl+Alt+1..9), **volets** côte à côte ou l'un sous l'autre (Alt+Maj+D, menu clic droit, séparateurs déplaçables, Alt+flèches), un shell par volet ; police pixel à chasse fixe de la charte (KIRC Pixel Mono, case de 7 px), texte dessiné par WebGL. Lancé avec un dossier (ou, s'il tourne déjà, un second lancement) : un onglet dans ce dossier. **Win+T** l'ouvre depuis le shell ; la tuile « Terminal CDX » du menu Démarrer le lance ; « Ouvrir dans un terminal » de l'Explorateur l'utilise (Windows Terminal puis cmd en repli) | une (un second lancement passe devant) | `journal-terminal.log` |
+| `bin\cdx-terminal.exe [--theme t] [dossier]` | **Terminal** : un shell (PowerShell 7 s'il est installé, sinon Windows PowerShell) dans une fenêtre de la charte : cadre CDX, fond noir, texte à la couleur d'accent, aucun coin arrondi. Pseudo-console Windows (ConPTY) côté C#, xterm.js dans la page. **Onglets** (Ctrl+Maj+T / W, Ctrl+Tab, Ctrl+Alt+1..9), **volets** côte à côte ou l'un sous l'autre (Alt+Maj+D, menu clic droit, séparateurs déplaçables, Alt+flèches), un shell par volet ; police pixel à chasse fixe de la charte (CDX Pixel Mono, case de 7 px), texte dessiné par WebGL. Lancé avec un dossier (ou, s'il tourne déjà, un second lancement) : un onglet dans ce dossier. **Win+T** l'ouvre depuis le shell ; la tuile « Terminal CDX » du menu Démarrer le lance ; « Ouvrir dans un terminal » de l'Explorateur l'utilise (Windows Terminal puis cmd en repli) | une (un second lancement passe devant) | `journal-terminal.log` |
 
 Le shell lance les autres (`cdx:explorer`, `cdx:navigateur`, `cdx:repos`, `cdx:terminal`, Win+E, Win+T) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
 Toutes les données sont dans `%LOCALAPPDATA%\CdxShell\`.
@@ -34,10 +34,10 @@ src\Cdx.Browser\    cdx-browser : Browser.cs (onglets, favoris, historique, tél
 src\Cdx.Repos\      cdx-repos : Git.cs (recherche et lecture de git, jamais d'écriture), ReposApp.cs
 src\Cdx.Pilote\     cdx-pilote : Claude.cs (claude.exe en sous-processus, stream-json), PilotTools.cs (les outils de la suite, tube cdx.pilote.outils), PiloteApp.cs (conversations, accords, page) ; src\Cdx.PiloteMcp\ cdx-pilote-mcp (le relais MCP « cdx-suite ») ; dans Cdx.Host : ClaudeFlux.cs (l'analyseur du flux), PilotPolicy.cs (la politique d'autorisation)
 src\Cdx.Terminal\   cdx-terminal : ConPty.cs (la pseudo-console : lancer le shell, faire passer les octets, redimensionner), TerminalApp.cs (fenêtre, une session par volet, messages de la page, presse-papiers)
-web\terminal\       la page du terminal (terminal.html, terminal.css, terminal.js : onglets, arbre de volets) ; fonts\ = KIRC Pixel Mono (générée par cdx-ui\gen\gen_font_mono.py, copie à refaire si la police change) ; vendor\ = xterm.js 6.0.0, addon-fit 0.11.0 et addon-webgl 0.19.0 (MIT, copiés tels quels ; exceptions du lint dans charte-lint.allow)
-web\cdx\            la charte (copie exacte de cdx-ui/dist : node tools/charte-sync.mjs --write cdx-windows) et host.js, le pont des pages
+web\terminal\       la page du terminal (terminal.html, terminal.css, terminal.js : onglets, arbre de volets) ; fonts\ = CDX Pixel Mono (générée par cdx-ui\gen\gen_font_mono.py, copie à refaire si la police change) ; vendor\ = xterm.js 6.0.0, addon-fit 0.11.0 et addon-webgl 0.19.0 (MIT, copiés tels quels ; exceptions du lint dans charte-lint.allow)
+web\cdx\            la charte, copie exacte de cdx-ui/dist (node tools/charte-sync.mjs --write cdx-windows), rien d'autre
+web\host\           ce que les pages ajoutent à la charte : host.js (le pont vers l'hôte C#), page.css (socle html/body/.win), grammaire-worker.js (Grammalecte)
 web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
-couche1\            le cadre des fenêtres de Windows aux couleurs de la charte (DWM), réversible
 tests\              pilote.ps1 (Pilote contre fake_claude.py et fake_gmail.py : 41 vérifications), navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
 ```
 
@@ -54,8 +54,8 @@ Windows PowerShell 5.1 lise aussi leurs accents (sans elle, « écris » partait
 
 ## Aimantation des fenêtres (01/11/2026)
 Toutes les fenêtres de l'hôte C# (`Cdx.Host/Snap.cs`, `HostForm.WndProc`) : pendant un déplacement ou un redimensionnement, la fenêtre colle aux bords des autres
-fenêtres de la suite (`cdx-*.exe`, KIRC, AudioLinker) qui lui font face, et aux bords de la zone de travail de son écran. Règles de la charte (`tokens.json`) : 10 px
-d'attraction, 2 px d'écart entre deux fenêtres, aucun au bord de l'écran, à l'échelle de l'écran ; mêmes règles que KIRC (`app.rs`). Windows fait le geste
+fenêtres de la suite (`cdx-*.exe`, Messages, AudioLinker) qui lui font face, et aux bords de la zone de travail de son écran. Règles de la charte (`tokens.json`) : 10 px
+d'attraction, 2 px d'écart entre deux fenêtres, aucun au bord de l'écran, à l'échelle de l'écran ; mêmes règles que Messages (`app.rs`). Windows fait le geste
 (`WM_NCLBUTTONDOWN`), l'hôte corrige le rectangle proposé par `WM_MOVING` / `WM_SIZING` ; les voisines sont relevées à l'entrée du geste. Essai : `cdx-shell --selftest-snap`.
 
 ## Réglages communs et bus (phase 2)
@@ -139,18 +139,15 @@ Claude Code en sous-processus plutôt que l'API ; un projet = fiche dans Notes +
   `tests\fake_claude.py`, un faux `claude -p` qui lance les vrais serveurs MCP et rejoue les scénarios : outils, navigateur piloté, accords automatiques et demandés, refus, question à choix,
   commande d'un programme, création d'un projet dans un coffre jetable, lecture du courrier contre un faux Gmail, mémoire dans le coffre relue après reprise, redémarrage et reprise, arrêt). Rien ne touche au vrai Claude Code ni aux vrais programmes.
 
-## Présentation animée (01/11/2026)
+## Archives (02/11/2026)
 
-`docs\presentation\cdx-presentation.html` : une animation de 14 secondes (1280 × 720) faite des éléments de la charte (polices pixel, icônes, jetons) : le logo, la barre et ses neuf
-programmes, puis Pilote qui reçoit une demande et agit dans Dépôts, Notes, Agenda et Courrier par ses outils, et la signature « Des outils faits pour l'IA ». Pilotée par le temps :
-ouverte telle quelle elle joue en boucle ; `?t=<ms>` rend l'image d'un instant. `python docs\presentationender.py` en fait `cdx-presentation.mp4` (Chrome headless image par image, puis
-ffmpeg ; non versionné, à regénérer).
+La couche DWM d'essai (`couche1`), les maquettes du 30/10 et la présentation animée du 01/11 sont dans `Dev\CDX\archives\`, hors du dépôt.
 
 ## Icônes d'application (01/11/2026)
 
 Décision du 01/11/2026 : une icône pixel par application, d'une même famille, sans retouche des icônes existantes ; dessins approuvés par Valentin.
 - **La famille** vit dans la charte (cdx-ui `gen/pixel_icons.py`, dictionnaire `APPS`) : dix pictogrammes 16 × 16, chacun dans les couleurs de son objet (choix de Valentin :
-  pas le même rouge partout), avec la lumière de l'icône de KIRC (arête claire en haut et à gauche, ombre en bas et à droite, contour noir). Explorateur : le dossier jaune existant ;
+  pas le même rouge partout), avec la lumière de l'icône de Messages (arête claire en haut et à gauche, ombre en bas et à droite, contour noir). Explorateur : le dossier jaune existant ;
   Navigateur : globe bleu et vert ; Dépôts : classeur gris ; Notes : carnet à spirale blanc ; Terminal : écran noir dans un cadre gris, invite verte ; Agenda : page de calendrier au bandeau
   rouge ; Courrier : enveloppe beige ; Pilote : volant noir au klaxon rouge ; Transferts : flèches verte et bleue ; CDX : le carré rouge de l'accent et son C.
 - **Dans les pages** : les mêmes noms dans `icons.js` (`pix('notes')`, `data-ic="pilote"`…) ; les épingles de la barre et les tuiles du Démarrer (`Pins.cs` : une épingle d'une application
@@ -235,8 +232,8 @@ favoris, historique, telechargements, extensions, motsdepasse, reglages).
 
 ## Synergies (phase 4)
 - **Notifications** : `notify` sur le bus du shell → une cloche et le nombre de notifications non vues dans la barre (place fixe), la liste dans le centre rapide (50 au plus, « Effacer »).
-  Émetteurs : KIRC (messages privés, mentions), cdx-browser (téléchargement terminé ou échoué), AudioLinker (erreurs et avertissements).
-- **Liens** : un lien cliqué dans KIRC s'ouvre dans cdx-browser (lancé au besoin d'après `apps.json`, sinon navigateur de Windows).
+  Émetteurs : Messages (messages privés, mentions), cdx-browser (téléchargement terminé ou échoué), AudioLinker (erreurs et avertissements).
+- **Liens** : un lien cliqué dans Messages s'ouvre dans cdx-browser (lancé au besoin d'après `apps.json`, sinon navigateur de Windows).
 - **Fichiers** : le double-clic sur une page HTML, un PDF, une image, un son ou une vidéo dans l'Explorateur les ouvre dans le navigateur (`open-file`) ; « Afficher dans le dossier » d'un téléchargement ouvre l'Explorateur sur le fichier (`select`).
 - **Son** : le groupe d'AudioLinker (volume, coupure, setups) est dans la barre (voir ci-dessous).
 - Essai de bout en bout isolé : `tests\bus.ps1` (sections 6 et 7).
@@ -263,4 +260,3 @@ réinstalle par-dessus, désinstalle, et le publie en artefact.
 
 ## Pas encore
 Icône propre de la suite (les fenêtres et l'installeur ont celle par défaut), signature, autostart par défaut (la tâche existe, décochée).
-Les anciens fichiers sous `KIRC\charte\windows\` ne sont pas supprimés.

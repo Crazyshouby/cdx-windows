@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/cdx/cdx-ui.css">
 <link rel="stylesheet" href="/cdx/themes.css">
 <link rel="stylesheet" href="/cdx/cdx-frame.css">
-<link rel="stylesheet" href="/cdx/page.css">
+<link rel="stylesheet" href="/host/page.css">
 <style>
   /* « Agenda » : le calendrier (mois, semaine, liste) et les tâches du compte Google relié à la suite. Le programme parle à Google ; la page dessine. */
   .top { display: flex; gap: 5px; align-items: center; flex: none; }
@@ -79,7 +79,7 @@
 <script src="/cdx/cdx-frame.js"></script>
 <script src="/cdx/cdx-split.js"></script>
 <script src="/cdx/cdx-spell.js"></script>
-<script src="/cdx/host.js"></script>
+<script src="/host/host.js"></script>
 </head>
 <body>
 <div class="win active" id="win">
@@ -223,7 +223,7 @@
       <label>Description</label><textarea class="text-input" id="fd">${esc(e ? e.description : '')}</textarea></div>
       <div class="btns"><button class="primary" id="save">Enregistrer</button><button class="btn" id="cancel">Annuler</button></div>`);
     d.querySelector('#vt').textContent = e ? 'Modifier l’événement' : 'Nouvel événement'; d.querySelector('#ft').focus();
-    if (window.CdxSpell) CdxSpell.attach(d.querySelector('#fd'), { enabled: spell, auto: autoc, grammar: '/cdx/grammaire-worker.js', grammarEnabled: gram });   // le correcteur sur la description (calque retiré avec le voile)
+    if (window.CdxSpell) CdxSpell.attach(d.querySelector('#fd'), { enabled: spell, auto: autoc, grammar: '/host/grammaire-worker.js', grammarEnabled: gram });   // le correcteur sur la description (calque retiré avec le voile)
     d.querySelector('#fall').onchange = () => { const on = d.querySelector('#fall').checked; d.querySelector('#fst').disabled = on; d.querySelector('#fet').disabled = on; };
     d.querySelector('#cancel').onclick = closeVeil;
     d.querySelector('#save').onclick = () => {

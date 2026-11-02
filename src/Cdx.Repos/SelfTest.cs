@@ -88,8 +88,8 @@ static class SelfTest
             Check("recherche : le bare (origine.git) n'est pas pris pour un projet (pas de dossier .git)", !found.Any(p => N(p) == "origine.git"));
 
             // --- adresses web ---
-            Check("adresse web : https GitHub", Git.WebUrl("https://github.com/Crazyshouby/KIRC.git") == "https://github.com/Crazyshouby/KIRC");
-            Check("adresse web : ssh GitHub", Git.WebUrl("git@github.com:Crazyshouby/KIRC.git") == "https://github.com/Crazyshouby/KIRC");
+            Check("adresse web : https GitHub", Git.WebUrl("https://github.com/Crazyshouby/cdx-messages.git") == "https://github.com/Crazyshouby/cdx-messages");
+            Check("adresse web : ssh GitHub", Git.WebUrl("git@github.com:Crazyshouby/cdx-messages.git") == "https://github.com/Crazyshouby/cdx-messages");
             Check("adresse web : un jeton glissé dans l'adresse n'en sort pas", Git.WebUrl("https://ghp_SECRET:x-oauth@github.com/a/b") == "https://github.com/a/b");
             Check("adresse web : hébergeur inconnu ou chemin local refusés", Git.WebUrl("https://exemple.org/a/b") == null && Git.WebUrl(@"C:\depot") == null && Git.WebUrl("") == null);
             Check("adresse web : caractères étranges refusés", Git.WebUrl("https://github.com/a/b c") == null && Git.WebUrl("https://github.com/a") == null);

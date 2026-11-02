@@ -4,7 +4,7 @@ namespace Cdx;
 
 // Aimantation des fenêtres (charte : tokens.json « snap_distance » 10 px d'attraction, « snap_gap » 0 : les fenêtres se collent bord à bord, entre elles comme au bord
 // de l'écran ; c'était 2 px jusqu'à la charte 2.0.1). Le paramètre `gap` est gardé pour que la règle reste lisible et essayable.
-// Logique pure, les mêmes règles que KIRC (src-tauri/src/app.rs : snap_rect, snap_size) : une fenêtre glissée ou redimensionnée colle aux bords des autres
+// Logique pure, les mêmes règles que Messages (src-tauri/src/app.rs : snap_rect, snap_size) : une fenêtre glissée ou redimensionnée colle aux bords des autres
 // fenêtres de la suite qui lui font face, et à ceux de la zone de travail de son écran. Pixels d'écran (l'hôte met Dist et Gap à l'échelle de l'écran).
 static class Snap
 {

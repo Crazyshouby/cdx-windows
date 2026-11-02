@@ -1,4 +1,4 @@
-// Ce que seules les pages du shell (barre, menu Démarrer) utilisent, en plus du pont /cdx/host.js.
+// Ce que seules les pages du shell (barre, menu Démarrer) utilisent, en plus du pont /host/host.js.
 // Les applications épinglées viennent du programme (message « pins », fichier epingles.json) : bar = affichée dans la barre, tile = tuile du menu Démarrer.
 // Une icône : ic = icône pixel de la charte (repli), path = fichier dont on extrait l'icône réelle quand la cible en est un.
 function pinIcon(p, size) {

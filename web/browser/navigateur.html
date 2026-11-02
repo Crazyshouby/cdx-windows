@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/cdx/cdx-ui.css">
 <link rel="stylesheet" href="/cdx/themes.css">
 <link rel="stylesheet" href="/cdx/cdx-frame.css">
-<link rel="stylesheet" href="/cdx/page.css">
+<link rel="stylesheet" href="/host/page.css">
 <style>
   /* Le cadre du navigateur : tout ce qui entoure la page web. Les pages sont des WebView2 posés par le programme sur les rectangles #vpA (et #vpB, pages scindées). */
   .tabs { cursor: default; gap: 0; overflow: hidden; }
@@ -50,7 +50,7 @@
 <script src="/cdx/cdx-bridge.js"></script>
 <script src="/cdx/cdx-frame.js"></script>
 <script src="/cdx/cdx-split.js"></script>
-<script src="/cdx/host.js"></script>
+<script src="/host/host.js"></script>
 </head>
 <body>
 <div class="win active" id="win">
@@ -110,7 +110,7 @@
       lastGroup = g ? g.id : 0;
       if (g && g.collapsed) continue;
       const other = st.split && (t.id === st.split || t.id === st.left) && t.id !== st.active;
-      html += `<button class="tab ${t.id === st.active ? 'on' : ''} ${g ? 'g c-' + g.color : ''} ${other ? 'sp' : ''}" data-id="${t.id}" title="${esc(t.title)}">${t.favicon ? `<img src="data:image/png;base64,${t.favicon}" alt="">` : `<span class="pix">${pix(t.internalPage ? 'kirc' : 'serveur', 16)}</span>`}<span class="tt">${esc(t.loading ? 'Chargement… ' + t.title : t.title)}</span><span class="x" data-x="${t.id}" title="Fermer (Ctrl+W)">×</span></button>`;
+      html += `<button class="tab ${t.id === st.active ? 'on' : ''} ${g ? 'g c-' + g.color : ''} ${other ? 'sp' : ''}" data-id="${t.id}" title="${esc(t.title)}">${t.favicon ? `<img src="data:image/png;base64,${t.favicon}" alt="">` : `<span class="pix">${pix(t.internalPage ? 'messages' : 'serveur', 16)}</span>`}<span class="tt">${esc(t.loading ? 'Chargement… ' + t.title : t.title)}</span><span class="x" data-x="${t.id}" title="Fermer (Ctrl+W)">×</span></button>`;
     }
     $('tabs').innerHTML = html + '<button class="tab new" data-new title="Nouvel onglet (Ctrl+T)">+</button>';
   }

@@ -41,7 +41,7 @@
 </style>
 <script src="/cdx/icons.js"></script>
 <script src="/cdx/cdx-bridge.js"></script>
-<script src="/cdx/host.js"></script>
+<script src="/host/host.js"></script>
 </head>
 <body>
 <div class="wrap" id="app"></div>
@@ -168,7 +168,7 @@
     const p = $('prog'); if (p) p.textContent = ''; const b = $('ubo'); if (b) b.disabled = false;
   };
 
-  if (!hasHost) { data = { bookmarks: [{ title: 'Documentation WebView2', url: 'https://learn.microsoft.com/fr-fr/microsoft-edge/webview2/', added: 1 }, { title: 'KIRC', url: 'https://example.org', added: 2 }], history: [{ title: 'Exemple', url: 'https://example.org/a', time: Date.now() }], downloads: [{ id: 1, name: 'archive.zip', path: 'C:\\Users\\x\\Downloads\\archive.zip', state: 'progress', received: 4e6, total: 1e7 }, { id: 2, name: 'doc.pdf', path: 'C:\\Users\\x\\Downloads\\doc.pdf', state: 'done', received: 2e5, total: 2e5 }], passwords: [{ url: 'https://example.org', user: 'moi', name: 'Exemple' }], sources: [{ browser: 'Chrome', profile: 'Votre Chrome', path: 'C:\\...\\Bookmarks', count: 12 }], settings: { search: 'google', downloadDir: '', downloadsFolder: 'C:\\Users\\x\\Downloads', askWhere: false, restoreSession: true, savePasswords: true, autofill: true, engines: [{ id: 'google', name: 'Google' }, { id: 'duckduckgo', name: 'DuckDuckGo' }] } }; exts = [{ id: 'abc', name: 'uBlock Origin Lite', enabled: true, options: true, folder: 'uBOLite', version: '2026.10' }]; render(); }
+  if (!hasHost) { data = { bookmarks: [{ title: 'Documentation WebView2', url: 'https://learn.microsoft.com/fr-fr/microsoft-edge/webview2/', added: 1 }, { title: 'Messages', url: 'https://example.org', added: 2 }], history: [{ title: 'Exemple', url: 'https://example.org/a', time: Date.now() }], downloads: [{ id: 1, name: 'archive.zip', path: 'C:\\Users\\x\\Downloads\\archive.zip', state: 'progress', received: 4e6, total: 1e7 }, { id: 2, name: 'doc.pdf', path: 'C:\\Users\\x\\Downloads\\doc.pdf', state: 'done', received: 2e5, total: 2e5 }], passwords: [{ url: 'https://example.org', user: 'moi', name: 'Exemple' }], sources: [{ browser: 'Chrome', profile: 'Votre Chrome', path: 'C:\\...\\Bookmarks', count: 12 }], settings: { search: 'google', downloadDir: '', downloadsFolder: 'C:\\Users\\x\\Downloads', askWhere: false, restoreSession: true, savePasswords: true, autofill: true, engines: [{ id: 'google', name: 'Google' }, { id: 'duckduckgo', name: 'DuckDuckGo' }] } }; exts = [{ id: 'abc', name: 'uBlock Origin Lite', enabled: true, options: true, folder: 'uBOLite', version: '2026.10' }]; render(); }
   else { post({ cmd: 'in.data' }); if (page === 'extensions') post({ cmd: 'in.ext.list' }); }
 </script>
 </body>

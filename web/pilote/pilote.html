@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/cdx/cdx-ui.css">
 <link rel="stylesheet" href="/cdx/themes.css">
 <link rel="stylesheet" href="/cdx/cdx-frame.css">
-<link rel="stylesheet" href="/cdx/page.css">
+<link rel="stylesheet" href="/host/page.css">
 <style>
   /* « Pilote » : le chat avec Claude pour organiser et créer les projets. Trois colonnes : les conversations, le fil, les actions (accords à donner, journal). Le programme
      tient Claude Code et décide ; la page dessine et pose les questions. */
@@ -86,7 +86,7 @@
 <script src="/cdx/cdx-frame.js"></script>
 <script src="/cdx/cdx-split.js"></script>
 <script src="/cdx/cdx-spell.js"></script>
-<script src="/cdx/host.js"></script>
+<script src="/host/host.js"></script>
 <script src="/notes/js/md.js"></script>
 </head>
 <body>
@@ -146,7 +146,7 @@
 
   // ---- le fil ----
   // l'icône d'une ligne d'outil : celle du programme de la suite visé (famille pixel), sinon celle de la nature de l'outil
-  const APP_ICON = { shell: 'cdx', explorer: 'explorateur', browser: 'navigateur', repos: 'depots', transfers: 'transferts', notes: 'notes', terminal: 'terminal', agenda: 'agenda', mail: 'courrier', pilote: 'pilote', kirc: 'kirc' };
+  const APP_ICON = { shell: 'cdx', explorer: 'explorateur', browser: 'navigateur', repos: 'depots', transfers: 'transferts', notes: 'notes', terminal: 'terminal', agenda: 'agenda', mail: 'courrier', pilote: 'pilote', messages: 'messages' };
   function toolIcon(it) {
     const n = String(it.name || ''), t = String(it.target || '').toLowerCase();
     if (/app_(open|state|command|restart)/.test(n)) return APP_ICON[t.split(/[\s:]/)[0]] || 'apps';
@@ -262,7 +262,7 @@
   // le correcteur orthographique (cdx-spell.js) sur la zone de saisie ; réglage gardé
   const spellKey = 'cdx.pilote.spell', gramKey = 'cdx.pilote.grammaire', autoKey = 'cdx.pilote.autocorrection'; let spell = true, gram = true, autoc = true;
   try { spell = localStorage.getItem(spellKey) !== 'off'; gram = localStorage.getItem(gramKey) !== 'off'; autoc = localStorage.getItem(autoKey) !== 'off'; } catch (e) { }
-  const spellIn = window.CdxSpell ? CdxSpell.attach($('in'), { enabled: spell, auto: autoc, grammar: '/cdx/grammaire-worker.js', grammarEnabled: gram }) : null;
+  const spellIn = window.CdxSpell ? CdxSpell.attach($('in'), { enabled: spell, auto: autoc, grammar: '/host/grammaire-worker.js', grammarEnabled: gram }) : null;
   const setSpell = on => { spell = on; try { localStorage.setItem(spellKey, on ? 'on' : 'off'); } catch (e) { } if (spellIn) spellIn.enable(on); };
   const setGram = on => { gram = on; try { localStorage.setItem(gramKey, on ? 'on' : 'off'); } catch (e) { } if (spellIn) spellIn.grammar(on); };
   const setAuto = on => { autoc = on; try { localStorage.setItem(autoKey, on ? 'on' : 'off'); } catch (e) { } if (spellIn) spellIn.auto(on); };

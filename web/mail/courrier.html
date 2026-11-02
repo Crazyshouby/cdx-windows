@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/cdx/cdx-ui.css">
 <link rel="stylesheet" href="/cdx/themes.css">
 <link rel="stylesheet" href="/cdx/cdx-frame.css">
-<link rel="stylesheet" href="/cdx/page.css">
+<link rel="stylesheet" href="/host/page.css">
 <style>
   /* « Courrier » : la boîte Gmail du compte relié. Libellés à gauche, fils au milieu, le fil ouvert à droite ; les corps HTML sont dans un cadre isolé (sans script, images distantes bloquées). */
   .top { display: flex; gap: 5px; align-items: center; flex: none; }
@@ -69,7 +69,7 @@
 <script src="/cdx/cdx-frame.js"></script>
 <script src="/cdx/cdx-split.js"></script>
 <script src="/cdx/cdx-spell.js"></script>
-<script src="/cdx/host.js"></script>
+<script src="/host/host.js"></script>
 </head>
 <body>
 <div class="win active" id="win">
@@ -202,7 +202,7 @@
       <div class="btns"><button class="btn" id="cattach">Joindre…</button><span class="grow"></span><button class="primary" id="csend">Envoyer</button><button class="btn" id="ccancel">Annuler</button></div></div></div>`;
     veil.dataset.threadId = threadId; veil.dataset.inReplyTo = inReplyTo; veil.dataset.references = references;
     document.body.appendChild(veil); renderChips();
-    if (window.CdxSpell) CdxSpell.attach(veil.querySelector('#ctext'), { enabled: spell, auto: autoc, grammar: '/cdx/grammaire-worker.js', grammarEnabled: gram });   // le correcteur orthographique sur le message (calque retiré avec le voile)
+    if (window.CdxSpell) CdxSpell.attach(veil.querySelector('#ctext'), { enabled: spell, auto: autoc, grammar: '/host/grammaire-worker.js', grammarEnabled: gram });   // le correcteur orthographique sur le message (calque retiré avec le voile)
     veil.querySelector(kind === 'new' ? '#cto' : '#ctext').focus(); if (kind !== 'new') { const ta = veil.querySelector('#ctext'); ta.setSelectionRange(0, 0); }
     veil.querySelector('#ccancel').onclick = closeVeil; veil.querySelector('#cattach').onclick = () => post({ cmd: 'ml.pick' }); veil.querySelector('#csend').onclick = sendCompose;
     veil.querySelector('#chips').onclick = e => { const r = e.target.closest('[data-rm]'); if (r) { attachments.splice(+r.dataset.rm, 1); renderChips(); } const f = e.target.closest('[data-fw]'); if (f) { forward.splice(+f.dataset.fw, 1); renderChips(); } };
