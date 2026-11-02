@@ -31,27 +31,30 @@
   .ph { color: var(--faint) !important; }
   .pins { display: flex; gap: 6px; flex: none; }
   .tasks { display: flex; gap: 6px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
-  /* La zone de notification : une case par icône reçue des applis (clic gauche, double-clic, clic droit renvoyés à l'appli). */
-  .zone { flex: none; display: flex; align-items: center; gap: 2px; height: 26px; }
+  /* La case creusée de droite : [icônes des applis · date · heure] (décision de Valentin du 02/11/2026, maquette barre-audiolinker.html).
+     Les icônes de la zone de notification y sont rendues en un seul ton, celui du texte : nos pictogrammes pixel quand l'appli est connue
+     (table APP_ICONS), sinon la vraie icône réduite à un ton. Clic gauche, double-clic et clic droit sont renvoyés à l'appli. */
+  .tray { flex: none; display: flex; align-items: center; gap: 10px; height: 26px; padding: 0 8px; background: var(--ink); color: var(--field-ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  .zone { display: inline-flex; align-items: center; gap: 2px; height: 24px; }
   .zone:empty { display: none; }
-  .zi { flex: none; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; font: inherit; color: var(--text); background: transparent; border: 1px solid transparent; cursor: default; }
-  .zi:hover { background: var(--btn); border-color: #000; box-shadow: var(--bevel); }
-  .zi:active { background: #2a2a2a; box-shadow: var(--bevel-down); }
-  .zi img { width: 16px; height: 16px; flex: none; }
-  .tray { flex: none; display: flex; align-items: center; gap: 14px; height: 26px; padding: 0 10px; background: var(--ink); color: var(--field-ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  .zi { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; font: inherit; color: inherit; background: transparent; border: 1px solid transparent; cursor: default; }
+  .zi:hover { border-color: #333; background: #161616; }
+  .zi:active { background: #0b0b0b; }
+  .zi svg, .zi canvas { width: 16px; height: 16px; display: block; }
+  .zi svg path:not([fill="#000000"]) { fill: currentColor; }
   .tray .faint { color: var(--faint); }
   .tray .hot { color: var(--warn); }
   .tray.click { cursor: default; }
   .tray.click:hover { background: #0b0b0b; }
   .tray.on { border-color: #000 #444 #444 #000; background: #101010; }
-  /* Les boutons du son d'AudioLinker : visibles seulement tant qu'il tourne sur cette machine (le programme tient le tube « cdx.audiolinker »). */
-  .alk { flex: none; display: flex; align-items: center; gap: 6px; height: 26px; }
+  /* AudioLinker : un seul bouton, visible tant qu'il tourne sur cette machine (le programme tient le tube « cdx.audiolinker ») : l'icône du son
+     et, dans le coin, le voyant du groupe. Clic : le déroulant (audiomenu.html) ; molette : le volume. */
+  .alk { flex: none; display: flex; align-items: center; height: 26px; }
   .alk[hidden] { display: none; }
-  .alk input[type="range"] { flex: none; width: 90px; }
-  .alk .alval { flex: none; width: 28px; text-align: right; color: var(--field-ink); font-variant-numeric: tabular-nums; }
-  .alk .alset { flex: none; width: 150px; justify-content: space-between; }
-  .alk #alMute.muted .pix { opacity: 0.4; }
-  .alk #alMute.muted::after { content: ""; position: absolute; left: 6px; right: 6px; top: 50%; height: 2px; background: var(--red); transform: rotate(-45deg); }
+  .alk .tk.al { width: 34px; padding: 0; justify-content: center; }
+  .alk .tk.al .orb { position: absolute; right: 3px; bottom: 3px; width: 7px; height: 7px; }
+  .alk .tk.al.muted .pix { opacity: 0.4; }
+  .alk .tk.al.muted::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; background: var(--red); transform: rotate(-45deg); }
   .alk .orb.pulse { animation: alpulse 1s ease-in-out infinite; }
   @keyframes alpulse { 50% { opacity: 0.4; } }
 </style>
@@ -69,14 +72,9 @@
   <div class="tasks" id="tasks"></div>
   <span style="flex:1"></span>
   <div class="alk" id="alk" hidden>
-    <button class="tk pin" id="alRun" title="AudioLinker : démarrer le groupe"><span class="orb" id="alOrb"></span></button>
-    <button class="tk pin" id="alMute" title="AudioLinker : couper le groupe"><span class="pix" data-ic="volume"></span></button>
-    <input type="range" id="alVol" min="0" max="100" value="100" title="Volume du groupe d'AudioLinker (molette)">
-    <span class="alval" id="alVal">100</span>
-    <button class="tk alset" id="alSet" title="Setup d'AudioLinker à jouer"><span id="alSetLbl">Setup…</span><span>▲</span></button>
+    <button class="tk pin al" id="alBtn" title="AudioLinker"><span class="pix" data-ic="volume"></span><span class="orb" id="alOrb"></span></button>
   </div>
-  <div class="zone" id="zone"></div>
-  <div class="tray click" id="tray" title="Centre rapide : son, réseau, notifications, calendrier"><span id="nt" class="hot" style="visibility:hidden;display:inline-flex;align-items:center;gap:4px;width:34px"><span class="pix" data-ic="cloche"></span><span id="ntn">0</span></span><span id="cpu">CPU –</span><span id="ram">RAM –</span><span id="clock"></span><span id="date"></span></div>
+  <div class="tray click" id="tray" title="Centre rapide : son, réseau, notifications, calendrier"><span id="nt" class="hot" style="visibility:hidden;display:inline-flex;align-items:center;gap:4px;width:34px"><span class="pix" data-ic="cloche"></span><span id="ntn">0</span></span><span class="zone" id="zone"></span><span id="date"></span><span id="clock"></span></div>
 </div>
 <script>
   fillPix();
@@ -164,24 +162,57 @@
   };
   $('tasks').onauxclick = e => { if (e.button === 1) { const b = e.target.closest('[data-h]'); if (b && !b.dataset.g) post({ cmd: 'close', h: b.dataset.h }); } };
 
-  // Les icônes de la zone de notification : poussées quand elles changent (ajout, retrait, image, infobulle).
+  // Les icônes de la zone de notification : poussées quand elles changent (ajout, retrait, image, infobulle). Nos pictogrammes pixel pour les
+  // applis connues (nom du processus, sans .exe, en minuscules) ; pour les autres, la vraie icône réduite à un ton par un seuil de clarté.
+  const APP_ICONS = { discord: 'discord', steam: 'steam', nvcontainer: 'nvidia', 'nvdisplay.container': 'nvidia', amdinstallmanager: 'amd', radeonsoftware: 'amd',
+    amdfendrsr: 'amd', amdnoisesuppression: 'amd', localsend_app: 'localsend', 'tailscale-ipn': 'tailscale', obs64: 'obs', 'whatsapp.root': 'whatsapp', whatsapp: 'whatsapp',
+    vlc: 'vlc', epicgameslauncher: 'epic', 'battle.net': 'battlenet', 'core temp': 'temperature', hwinfo64: 'temperature', phoneexperiencehost: 'telephone',
+    droidcam: 'camera', iriunwebcam: 'camera', 'creative cloud': 'adobe', photoshopprefsmanager: 'adobe', medal: 'medal', anydesk: 'distant', teamviewer: 'distant',
+    barrier: 'distant', 'transmission-qt': 'telecharger', 'lm studio': 'ia', tennis: 'tennis', securityhealthsystray: 'bouclier', taskmgr: 'processeur',
+    explorer: 'pc', 'cdx-messages': 'messages', kirc: 'messages', audiolinker: 'volume', winrar: 'fichier', quicklook: 'recherche' };
+  const monoCache = new Map();
+  // La vraie icône (PNG 16 × 16) en un ton, couleur du texte : on garde ce qui est plus clair que le gros de l'icône (le dessin sur son fond) ;
+  // une icône d'une seule teinte (un glyphe blanc sur transparent) garde toute sa silhouette.
+  const mono = (png, cv) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = 16, g = cv.getContext('2d'); cv.width = w; cv.height = w; g.drawImage(img, 0, 0, w, w);
+      const px = g.getImageData(0, 0, w, w).data, ink = getComputedStyle(cv).color, opaque = [];
+      for (let i = 0; i < px.length; i += 4) if (px[i + 3] > 128) opaque.push({ i: i / 4, l: (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) / 255 });
+      const med = opaque.map(o => o.l).sort((a, b) => a - b)[Math.floor(opaque.length / 2)] || 0;
+      let keep = opaque.filter(o => o.l > med + 0.12);
+      if (keep.length < 10) keep = opaque;
+      g.clearRect(0, 0, w, w); g.fillStyle = ink;
+      for (const o of keep) g.fillRect(o.i % w, Math.floor(o.i / w), 1, 1);
+    };
+    img.src = 'data:image/png;base64,' + png;
+  };
   let lastZone = '';
   handlers.tray = m => {
     const key = JSON.stringify(m.items);
     if (key === lastZone) return; lastZone = key;
-    $('zone').innerHTML = m.items.map(t => `<button class="zi" data-k="${esc(t.k)}" title="${esc(t.tip || t.exe)}"><img src="data:image/png;base64,${t.png}" alt=""></button>`).join('');
+    const z = $('zone'); z.textContent = '';
+    for (const t of m.items) {
+      const b = document.createElement('button'); b.className = 'zi'; b.dataset.k = t.k; b.title = t.tip || t.exe;
+      const ic = APP_ICONS[(t.exe || '').toLowerCase()];
+      if (ic) b.innerHTML = pix(ic, 16);
+      else { const cv = document.createElement('canvas'); b.appendChild(cv); mono(t.png, cv); }
+      z.appendChild(b);
+    }
     log('zone de notification : ' + m.items.length + ' icône(s)');
   };
   // Le second clic d'un double-clic part comme « double-clic » (comme la barre de Windows : bouton enfoncé, relâché, double-clic, relâché).
-  $('zone').onclick = e => { const b = e.target.closest('[data-k]'); if (b && e.detail <= 2) post({ cmd: 'tray.click', k: b.dataset.k, b: e.detail === 2 ? 'd' : 'l' }); };
-  $('zone').oncontextmenu = e => { e.preventDefault(); const b = e.target.closest('[data-k]'); if (b) post({ cmd: 'tray.click', k: b.dataset.k, b: 'r' }); };
+  // Un clic sur une icône ne doit pas aussi ouvrir le centre rapide (la zone est dans la case de l'heure).
+  $('zone').onclick = e => { e.stopPropagation(); const b = e.target.closest('[data-k]'); if (b && e.detail <= 2) post({ cmd: 'tray.click', k: b.dataset.k, b: e.detail === 2 ? 'd' : 'l' }); };
+  $('zone').onmousedown = e => e.stopPropagation();
+  $('zone').oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); const b = e.target.closest('[data-k]'); if (b) post({ cmd: 'tray.click', k: b.dataset.k, b: 'r' }); };
 
   $('tray').onclick = () => post({ cmd: 'toggleCenter' });
   // Notifications non vues (envoyées par les autres applications) : la cloche et leur nombre, à place fixe (la barre ne bouge pas).
   handlers.notifs = m => { $('nt').style.visibility = m.unread ? 'visible' : 'hidden'; $('ntn').textContent = m.unread > 99 ? '99+' : m.unread; };
   handlers.centerOpen = m => $('tray').classList.toggle('on', m.open);
   handlers.start = m => $('start').classList.toggle('on', m.open);
-  handlers.stats = m => { $('cpu').textContent = 'CPU ' + m.cpu + ' %'; $('cpu').className = m.cpu >= 90 ? 'hot' : ''; $('ram').textContent = 'RAM ' + m.ram + ' Go'; };
+  handlers.stats = () => {};   // CPU et RAM ne sont plus dans la barre (centre rapide seulement), décision du 02/11/2026
 
   const tick = () => {
     const d = new Date();
@@ -198,7 +229,6 @@
     m.remove(); el.style.display = 'inline-block'; el.style.width = Math.ceil(w) + 'px';
   };
   const lockTray = () => {
-    lock($('cpu'), ['CPU 100 %', 'CPU 88 %']); lock($('ram'), ['RAM 99,9 Go', 'RAM 88,8 Go']);
     lock($('clock'), ['00:00', '08:08', '11:11', '88:88']);
     const wd = [], mo = [];
     for (let i = 0; i < 7; i++) wd.push(new Date(2026, 9, 25 + i).toLocaleDateString('fr-FR', { weekday: 'short' }));
@@ -209,32 +239,24 @@
   (document.fonts ? document.fonts.ready : Promise.resolve()).then(lockTray);
 
   // AudioLinker : le programme pousse son état (running, starting, volume, muted, playing, setups) tant que le tube répond, {on:false} sinon.
-  let alState = null, alHold = 0, alSent = 0;
-  const alFill = v => { const el = $('alVol'); el.value = v; el.style.background = 'var(--bar) 0 0 / ' + v + '% 100% no-repeat, #222222'; $('alVal').textContent = v; };
+  let alState = null, alHold = 0, alVol = 100;
+  const alTitle = () => { const m = alState; if (!m) return;
+    $('alBtn').title = 'AudioLinker : ' + (m.starting ? 'le groupe démarre…' : m.running ? 'en marche' + (m.playing ? ' (' + m.playing + ')' : '') : 'arrêté') + ', volume ' + alVol + ' %' + (m.muted ? ', coupé' : '') + ' — molette : volume'; };
   handlers.audio = m => {
     $('alk').hidden = !m.on;
     if (!m.on) { alState = null; return; }
     alState = m;
     $('alOrb').className = 'orb' + (m.starting ? ' amber pulse' : m.running ? ' green' : '');
-    $('alRun').title = m.starting ? 'AudioLinker : le groupe démarre…' : m.running ? 'AudioLinker : arrêter le groupe' : 'AudioLinker : démarrer le groupe';
-    $('alMute').classList.toggle('muted', m.muted);
-    $('alMute').title = m.muted ? 'AudioLinker : rétablir le son du groupe' : 'AudioLinker : couper le groupe';
-    if (Date.now() > alHold) alFill(m.volume);   // pendant qu'on tire le curseur, l'état renvoyé ne le déplace pas
-    $('alSetLbl').textContent = m.playing || (m.setups.length ? 'Setup…' : 'Aucun setup');
+    $('alBtn').classList.toggle('muted', !!m.muted);
+    if (Date.now() > alHold) alVol = m.volume;   // juste après la molette, l'état renvoyé ne reprend pas la main
+    alTitle();
   };
-  $('alRun').onclick = () => post({ cmd: 'audio.toggle' });
-  $('alMute').onclick = () => post({ cmd: 'audio.mute', on: !(alState && alState.muted) });
-  $('alVol').oninput = e => {
-    const v = +e.target.value; alHold = Date.now() + 1500; alFill(v);
-    if (Date.now() - alSent > 40) { alSent = Date.now(); post({ cmd: 'audio.volume', v, commit: false }); }
+  $('alk').onwheel = e => {   // la molette sur le bouton règle le volume par pas de 5, sans ouvrir le déroulant
+    e.preventDefault(); alVol = Math.max(0, Math.min(100, alVol + (e.deltaY < 0 ? 5 : -5)));
+    alHold = Date.now() + 1500; alTitle(); post({ cmd: 'audio.volume', v: alVol, commit: true });
   };
-  $('alVol').onchange = e => post({ cmd: 'audio.volume', v: +e.target.value, commit: true });
-  $('alk').onwheel = e => {   // la molette sur le groupe règle le volume par pas de 5
-    e.preventDefault(); const v = Math.max(0, Math.min(100, +$('alVol').value + (e.deltaY < 0 ? 5 : -5)));
-    alHold = Date.now() + 1500; alFill(v); post({ cmd: 'audio.volume', v, commit: true });
-  };
-  // La liste des setups s'ouvre dans une petite fenêtre au-dessus de la barre (un menu déroulant natif sortirait de l'écran vers le bas).
-  $('alSet').onclick = () => post({ cmd: 'audio.menu', x: Math.round($('alSet').getBoundingClientRect().left) });
+  // Le déroulant (état du groupe, coupure, volume, setups) s'ouvre dans une petite fenêtre au-dessus du bouton (un menu natif sortirait de l'écran vers le bas).
+  $('alBtn').onclick = () => post({ cmd: 'audio.menu', x: Math.round($('alBtn').getBoundingClientRect().left) });
   if (!hasHost && location.search.includes('audio')) handlers.audio({ on: true, running: true, starting: false, muted: false, volume: 70, playing: 'Casque', setups: [{ name: 'Casque', count: 1 }, { name: 'Groupe Ecrans', count: 3 }] });   // aperçu hors du shell
   post({ cmd: 'ready', page: 'bar' });
 </script>

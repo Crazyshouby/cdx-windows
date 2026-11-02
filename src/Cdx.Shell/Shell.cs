@@ -390,14 +390,14 @@ class Shell : IHostApp
     {
         if (startOpen) HideStart(); if (centerOpen) HideCenter();
         int rows = 1; try { using var d = JsonDocument.Parse(JsonSerializer.Serialize(lastAudio)); if (d.RootElement.TryGetProperty("setups", out var s)) rows = Math.Clamp(s.GetArrayLength(), 1, 14); } catch { }
-        int w = (int)(280 * scale), h = (int)((21 + 12 + 4 + rows * 27) * scale), m = (int)(6 * scale);
+        int w = (int)(280 * scale), h = (int)((21 + 8 + 24 + 8 + 24 + 8 + 2 + 8 + 16 + 8 + rows * 27 + 4 + 18) * scale), m = (int)(6 * scale);   // titre, état, volume, séparateur, étiquette, liste (audiomenu.html)
         var scr = Screen.FromControl(Bar).Bounds;
         AudioMenu.Bounds = new Rectangle(Math.Clamp(Bar.Left + x, scr.Left, scr.Right - w), Bar.Top - m - h, w, h);
         AudioMenu.Show(); AudioMenu.Activate(); ForceForeground(AudioMenu.Handle);
         if (lastAudio != null) AudioMenu.Send(lastAudio);
         AudioMenu.Send(new { type = "show" });
         audioMenuOpen = true;
-        Host.Log("liste des setups AudioLinker ouverte");
+        Host.Log("déroulant AudioLinker ouvert");
     }
 
     void HideAudioMenu()
