@@ -34,5 +34,8 @@ for title, path, note in PARTS:
         out += [note, ""]
     out += [text, ""]
 
-(root / "THIRD-PARTY-NOTICES.txt").write_text("\r\n".join(out), encoding="utf-8-sig")
+# Fins de ligne CRLF partout, quel que soit le système (newline="" : pas de seconde conversion,
+# sinon Windows écrit \r\r\n et le contrôle de la CI voit le fichier comme périmé).
+texte = "\n".join(out).replace("\r\n", "\n").replace("\n", "\r\n")
+(root / "THIRD-PARTY-NOTICES.txt").write_text(texte, encoding="utf-8-sig", newline="")
 print("THIRD-PARTY-NOTICES.txt", (root / "THIRD-PARTY-NOTICES.txt").stat().st_size, "octets")
