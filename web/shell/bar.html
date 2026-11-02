@@ -168,9 +168,18 @@
     amdfendrsr: 'amd', amdnoisesuppression: 'amd', localsend_app: 'localsend', 'tailscale-ipn': 'tailscale', obs64: 'obs', 'whatsapp.root': 'whatsapp', whatsapp: 'whatsapp',
     vlc: 'vlc', epicgameslauncher: 'epic', 'battle.net': 'battlenet', 'core temp': 'temperature', hwinfo64: 'temperature', phoneexperiencehost: 'telephone',
     droidcam: 'camera', iriunwebcam: 'camera', 'creative cloud': 'adobe', photoshopprefsmanager: 'adobe', medal: 'medal', anydesk: 'distant', teamviewer: 'distant',
-    barrier: 'distant', 'transmission-qt': 'telecharger', 'lm studio': 'ia', tennis: 'tennis', securityhealthsystray: 'bouclier', taskmgr: 'processeur',
-    explorer: 'pc', 'cdx-messages': 'messages', kirc: 'messages', audiolinker: 'volume', winrar: 'fichier', quicklook: 'recherche' };
-  const monoCache = new Map();
+    barrier: 'distant', 'lm studio': 'lmstudio', tennis: 'tennis', securityhealthsystray: 'securite', quicklook: 'loupe', 'cdx-messages': 'discussion', kirc: 'discussion',
+    usagely: 'ia', usagemonitorforclaude: 'ia' };
+  // Les icônes de Windows lui-même (explorer.exe : réseau, son, batterie) se reconnaissent à leur infobulle.
+  const SYS_ICONS = [[/r[ée]seau|internet|wi-?fi|ethernet|network/i, 'reseau'], [/haut-parleur|volume|casque|speaker|audio/i, 'son'], [/batterie|battery/i, 'batterie']];
+  // AudioLinker a son bouton juste à côté : son icône ferait doublon.
+  const HIDDEN = new Set(['audiolinker']);
+  const iconFor = t => {
+    const exe = (t.exe || '').toLowerCase();
+    if (APP_ICONS[exe]) return APP_ICONS[exe];
+    if (exe === 'explorer') for (const [re, ic] of SYS_ICONS) if (re.test(t.tip || '')) return ic;
+    return null;
+  };
   // La vraie icône (PNG 16 × 16) en un ton, couleur du texte : on garde ce qui est plus clair que le gros de l'icône (le dessin sur son fond) ;
   // une icône d'une seule teinte (un glyphe blanc sur transparent) garde toute sa silhouette.
   const mono = (png, cv) => {
@@ -193,8 +202,9 @@
     if (key === lastZone) return; lastZone = key;
     const z = $('zone'); z.textContent = '';
     for (const t of m.items) {
+      if (HIDDEN.has((t.exe || '').toLowerCase())) continue;
       const b = document.createElement('button'); b.className = 'zi'; b.dataset.k = t.k; b.title = t.tip || t.exe;
-      const ic = APP_ICONS[(t.exe || '').toLowerCase()];
+      const ic = iconFor(t);
       if (ic) b.innerHTML = pix(ic, 16);
       else { const cv = document.createElement('canvas'); b.appendChild(cv); mono(t.png, cv); }
       z.appendChild(b);
