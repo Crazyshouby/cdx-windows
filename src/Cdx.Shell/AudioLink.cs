@@ -4,13 +4,13 @@ using System.Text.Json;
 
 namespace Cdx;
 
-// La liaison avec AudioLinker, quand il tourne sur la même machine : un tube nommé « cdx.audiolinker » (voir AudioLinker/src/CdxLink.cpp pour le
+// La liaison avec Audio Linker, quand il tourne sur la même machine : un tube nommé « cdx.audio_linker » (voir src/cdx-audio_linker/src/CdxLink.cpp pour le
 // protocole : des lignes de JSON dans les deux sens). On s'y connecte dès qu'il existe, on le retente toutes les 1,5 s sinon, et la barre
 // n'affiche les boutons du son que pendant que le tube répond. Rien n'est évalué : seuls cinq types de messages sortent (liste blanche ci-dessous)
 // et l'état reçu est recopié champ par champ vers la barre, jamais transmis tel quel.
 sealed class AudioLink
 {
-    public const string DefaultPipe = "cdx.audiolinker";
+    public const string DefaultPipe = "cdx.audio_linker";
 
     readonly string pipeName;
     readonly Action<object> toBar;                     // appelé sur n'importe quel fil : l'appelant le ramène sur le fil de l'interface
@@ -45,7 +45,7 @@ sealed class AudioLink
                 {
                     await p.ConnectAsync(250, cts.Token);
                     pipe = p; connected = true;
-                    Host.Log("AudioLinker connecté");
+                    Host.Log("Audio Linker connecté");
                     using var rd = new StreamReader(p, new UTF8Encoding(false));
                     await SendAsync("audio.get");
                     string line;
@@ -55,8 +55,8 @@ sealed class AudioLink
             catch (OperationCanceledException) { }
             catch (TimeoutException) { }
             catch (IOException) { }
-            catch (Exception ex) { Host.Log("AudioLinker : " + ex.Message); }
-            if (connected) { connected = false; pipe = null; Host.Log("AudioLinker déconnecté"); toBar(new { type = "audio", on = false }); }
+            catch (Exception ex) { Host.Log("Audio Linker : " + ex.Message); }
+            if (connected) { connected = false; pipe = null; Host.Log("Audio Linker déconnecté"); toBar(new { type = "audio", on = false }); }
             try { await Task.Delay(1500, cts.Token); } catch (OperationCanceledException) { }
         }
     }
@@ -84,13 +84,13 @@ sealed class AudioLink
                 setups,
             });
         }
-        catch (Exception ex) { Host.Log("AudioLinker : ligne illisible (" + ex.Message + ")"); }
+        catch (Exception ex) { Host.Log("Audio Linker : ligne illisible (" + ex.Message + ")"); }
     }
 
     static bool Bool(JsonElement r, string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.True;
     static string Clip(string s) => s == null ? "" : s.Length > 200 ? s[..200] : s;
 
-    // Commandes vers AudioLinker. Sans connexion, elles sont perdues : la barre n'affiche les boutons que connectée.
+    // Commandes vers Audio Linker. Sans connexion, elles sont perdues : la barre n'affiche les boutons que connectée.
     public void Refresh() => _ = SendAsync("audio.get");
     public void Toggle() => _ = SendAsync("audio.toggle");
     public void Mute(bool on) => _ = SendAsync("audio.mute", new { on });
@@ -104,7 +104,7 @@ sealed class AudioLink
         byte[] bytes = Encoding.UTF8.GetBytes(Bus.Compose(type, "shell", data) + "\n");
         await writeLock.WaitAsync();
         try { await p.WriteAsync(bytes, cts.Token); await p.FlushAsync(cts.Token); }
-        catch (Exception ex) { Host.Log("AudioLinker : envoi impossible (" + ex.Message + ")"); }
+        catch (Exception ex) { Host.Log("Audio Linker : envoi impossible (" + ex.Message + ")"); }
         finally { writeLock.Release(); }
     }
 }

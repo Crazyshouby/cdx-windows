@@ -2,13 +2,13 @@
 <html lang="fr" data-theme="rouge">
 <head>
 <meta charset="utf-8">
-<title>CDX — AudioLinker</title>
+<title>CDX — Audio Linker</title>
 <link rel="stylesheet" href="/cdx/fonts.css">
 <link rel="stylesheet" href="/cdx/cdx-ui.css">
 <link rel="stylesheet" href="/cdx/themes.css">
 <link rel="stylesheet" href="/host/page.css">
 <style>
-  /* Le déroulant d'AudioLinker, ouvert au-dessus du bouton de la barre (un menu natif sortirait de l'écran vers le bas) : l'état du groupe et son
+  /* Le déroulant d'Audio Linker, ouvert au-dessus du bouton de la barre (un menu natif sortirait de l'écran vers le bas) : l'état du groupe et son
      bouton, la coupure et le volume, puis la liste des setups. Décision de Valentin du 02/11/2026 (maquette barre-audiolinker.html). */
   .cb { gap: 8px; padding: 8px; }
   .etat { display: flex; align-items: center; gap: 8px; height: 24px; flex: none; }
@@ -35,7 +35,7 @@
 </head>
 <body>
 <div class="win active">
-  <div class="tb"><span class="tb-title"><span class="pix" data-ic="volume" data-size="14" style="vertical-align:-2px;margin-right:6px"></span>AudioLinker</span></div>
+  <div class="tb"><span class="tb-title"><span class="pix" data-ic="volume" data-size="14" style="vertical-align:-2px;margin-right:6px"></span>Audio Linker</span></div>
   <div class="cb">
     <div class="etat"><span class="orb" id="orb"></span><span class="grow" id="etat">—</span><button class="btn" id="run">Démarrer</button></div>
     <div class="vol"><button class="btn" id="mute" title="Couper le groupe"><span class="pix" data-ic="volume"></span></button><input type="range" id="vol" min="0" max="100" value="100" title="Volume du groupe (molette)"><span class="alval" id="val">100</span></div>
@@ -52,7 +52,7 @@
   function render() {
     const list = $('list'); list.textContent = '';
     $('orb').className = 'orb' + (st && st.starting ? ' amber pulse' : st && st.running ? ' green' : '');
-    $('etat').textContent = !st ? 'AudioLinker absent' : st.starting ? 'Démarrage…' : st.running ? 'En marche' + (st.playing ? ' : ' + st.playing : '') : 'Arrêté';
+    $('etat').textContent = !st ? 'Audio Linker absent' : st.starting ? 'Démarrage…' : st.running ? 'En marche' + (st.playing ? ' : ' + st.playing : '') : 'Arrêté';
     $('run').textContent = st && st.running ? 'Arrêter' : 'Démarrer';
     $('run').disabled = !st || !!st.starting;
     $('mute').classList.toggle('muted', !!(st && st.muted));

@@ -47,7 +47,7 @@
   .tray.click { cursor: default; }
   .tray.click:hover { background: #0b0b0b; }
   .tray.on { border-color: #000 #444 #444 #000; background: #101010; }
-  /* AudioLinker : un seul bouton, visible tant qu'il tourne sur cette machine (le programme tient le tube « cdx.audiolinker ») : l'icône du son
+  /* Audio Linker : un seul bouton, visible tant qu'il tourne sur cette machine (le programme tient le tube « cdx.audio_linker ») : l'icône du son
      et, dans le coin, le voyant du groupe. Clic : le déroulant (audiomenu.html) ; molette : le volume. */
   .alk { flex: none; display: flex; align-items: center; height: 26px; }
   .alk[hidden] { display: none; }
@@ -72,7 +72,7 @@
   <div class="tasks" id="tasks"></div>
   <span style="flex:1"></span>
   <div class="alk" id="alk" hidden>
-    <button class="tk pin al" id="alBtn" title="AudioLinker"><span class="pix" data-ic="volume"></span><span class="orb" id="alOrb"></span></button>
+    <button class="tk pin al" id="alBtn" title="Audio Linker"><span class="pix" data-ic="volume"></span><span class="orb" id="alOrb"></span></button>
   </div>
   <div class="tray click" id="tray" title="Centre rapide : son, réseau, notifications, calendrier"><span id="nt" class="hot" style="visibility:hidden;display:inline-flex;align-items:center;gap:4px;width:34px"><span class="pix" data-ic="cloche"></span><span id="ntn">0</span></span><span class="zone" id="zone"></span><span id="date"></span><span id="clock"></span></div>
 </div>
@@ -172,8 +172,8 @@
     usagely: 'ia', usagemonitorforclaude: 'ia' };
   // Les icônes de Windows lui-même (explorer.exe : réseau, son, batterie) se reconnaissent à leur infobulle.
   const SYS_ICONS = [[/r[ée]seau|internet|wi-?fi|ethernet|network/i, 'reseau'], [/haut-parleur|volume|casque|speaker|audio/i, 'son'], [/batterie|battery/i, 'batterie']];
-  // AudioLinker a son bouton juste à côté : son icône ferait doublon.
-  const HIDDEN = new Set(['audiolinker']);
+  // Audio Linker a son bouton juste à côté : son icône ferait doublon.
+  const HIDDEN = new Set(['cdx-audio_linker', 'audiolinker']);   // (audiolinker : une version d'avant le renommage, encore installée)
   const iconFor = t => {
     const exe = (t.exe || '').toLowerCase();
     if (APP_ICONS[exe]) return APP_ICONS[exe];
@@ -248,10 +248,10 @@
   };
   (document.fonts ? document.fonts.ready : Promise.resolve()).then(lockTray);
 
-  // AudioLinker : le programme pousse son état (running, starting, volume, muted, playing, setups) tant que le tube répond, {on:false} sinon.
+  // Audio Linker : le programme pousse son état (running, starting, volume, muted, playing, setups) tant que le tube répond, {on:false} sinon.
   let alState = null, alHold = 0, alVol = 100;
   const alTitle = () => { const m = alState; if (!m) return;
-    $('alBtn').title = 'AudioLinker : ' + (m.starting ? 'le groupe démarre…' : m.running ? 'en marche' + (m.playing ? ' (' + m.playing + ')' : '') : 'arrêté') + ', volume ' + alVol + ' %' + (m.muted ? ', coupé' : '') + ' — molette : volume'; };
+    $('alBtn').title = 'Audio Linker : ' + (m.starting ? 'le groupe démarre…' : m.running ? 'en marche' + (m.playing ? ' (' + m.playing + ')' : '') : 'arrêté') + ', volume ' + alVol + ' %' + (m.muted ? ', coupé' : '') + ' — molette : volume'; };
   handlers.audio = m => {
     $('alk').hidden = !m.on;
     if (!m.on) { alState = null; return; }

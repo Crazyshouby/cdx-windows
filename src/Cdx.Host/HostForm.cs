@@ -73,7 +73,7 @@ class HostForm : Form
 
     // ---------- aimantation (Snap.cs) ----------
     // Un déplacement ou un redimensionnement est confié à Windows (WM_NCLBUTTONDOWN, Host.WindowCommand) ; pendant le geste, WM_MOVING / WM_SIZING
-    // proposent un rectangle que l'on corrige : la fenêtre colle aux autres fenêtres de la suite (cdx-*, Messages, AudioLinker) et aux bords de la zone de
+    // proposent un rectangle que l'on corrige : la fenêtre colle aux autres fenêtres de la suite (cdx-*, Messages, Audio Linker) et aux bords de la zone de
     // travail de son écran. Les voisines sont relevées une fois, à l'entrée du geste (WM_ENTERSIZEMOVE).
     // Windows propose chaque rectangle à partir du DERNIER rendu (donc de la position aimantée), pas de la souris : une fenêtre collée serait ré-aimantée à chaque
     // petit mouvement et ne se décollerait plus (vu le 01/11/2026). On tient donc le rectangle « libre » (ce qu'il serait sans aimantation) en lui ajoutant l'écart
@@ -103,8 +103,8 @@ class HostForm : Form
         }
     }
 
-    // Les fenêtres visibles de la suite (cdx-*.exe, Messages, AudioLinker) autres que `self`, en pixels d'écran. Une fenêtre réduite ou vide ne compte pas.
-    static readonly string[] SuiteExes = { "cdx-messages.exe", "audiolinker.exe" };
+    // Les fenêtres visibles de la suite (cdx-*.exe, Messages, Audio Linker) autres que `self`, en pixels d'écran. Une fenêtre réduite ou vide ne compte pas.
+    static readonly string[] SuiteExes = { "cdx-messages.exe", "cdx-audio_linker.exe" };
     public static List<Rectangle> SuiteWindows(IntPtr self)
     {
         var list = new List<Rectangle>();

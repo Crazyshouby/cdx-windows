@@ -177,7 +177,7 @@ static class PilotTools
         {
             if (!N.IsWindowVisible(h)) return true;
             string exe = Path.GetFileName(N.ExePathOf(h) ?? "").ToLowerInvariant();
-            if (!(exe.StartsWith("cdx-") || exe == "audiolinker.exe")) return true;
+            if (!exe.StartsWith("cdx-")) return true;   // les programmes de la suite (Audio Linker compris : cdx-audio_linker.exe)
             string title = N.TitleOf(h); if (title.Length == 0) return true;
             N.GetWindowRect(h, out var rc);
             wins.Add(new { app = Regex.Replace(exe, @"\.exe(\..*)?$", ""), title, x = rc.Left, y = rc.Top, w = rc.Right - rc.Left, h = rc.Bottom - rc.Top, minimized = N.IsIconic(h) });

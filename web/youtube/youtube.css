@@ -1,0 +1,88 @@
+/* CDX-YouTube : accueil, recherche, fiche d'une vidéo. Mise en page propre à l'application (CHARTE.md §9.5) : les composants viennent de cdx-ui.css,
+   les couleurs des jetons du thème. Aucun arrondi, aucune graisse, 14 px partout. */
+.cb { display: flex; flex-direction: column; gap: 5px; min-height: 0; }
+
+.nav { display: flex; gap: 5px; flex: none; align-items: center; margin: 0; }
+.nav .btn { padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; }
+.nav #q { flex: 1; min-width: 120px; }
+.nav #bCompte { margin-left: 10px; }
+
+/* la zone de contenu : creusée, comme une liste */
+.zone { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); outline: none; }
+.entete { display: flex; align-items: baseline; gap: 12px; padding: 10px 12px 4px; color: var(--text); }
+.entete .n { color: var(--faint); }
+.vide { padding: 40px 20px; text-align: center; color: var(--faint); line-height: 1.6; }
+.vide .btn { margin-top: 12px; }
+
+/* grille de vignettes (accueil, recherche) */
+.grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px 12px; padding: 8px 12px 16px; }
+.carte { min-width: 0; cursor: default; padding: 4px; border: 1px solid transparent; }
+.carte:hover { background: var(--row-hover); }
+.carte:focus { outline: none; background: var(--row-sel); border-color: var(--row-sel-ring); }
+.vign { position: relative; aspect-ratio: 16 / 9; background: var(--panel); border: 1px solid var(--outline); overflow: hidden; }
+.vign img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.duree { position: absolute; right: 3px; bottom: 3px; padding: 0 4px; line-height: 16px; background: var(--panel); color: var(--text); border: 1px solid var(--outline); }
+.duree.direct { background: var(--hl); color: var(--hl-text); }
+.carte .t { margin-top: 5px; color: var(--text); line-height: 16px; max-height: 32px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.carte .c, .carte .m { color: var(--faint); line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plus { display: flex; justify-content: center; padding: 4px 0 20px; color: var(--faint); }
+
+/* fiche d'une vidéo : elle remplit la zone sans la faire défiler (#zone.fige), pour que le lecteur garde sa place ; la colonne d'informations sous le lecteur et
+   celle des suggestions défilent chacune de leur côté. Le rectangle .lecteur est recouvert par la vraie page YouTube (une vue native posée par le programme). */
+#zone.fige { overflow: hidden; }
+#zone.fige > #vue { height: 100%; }
+.fiche { display: flex; gap: 14px; padding: 12px; height: 100%; box-sizing: border-box; min-height: 0; }
+.fiche .principal { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.fiche .lecteur { flex: none; position: relative; align-self: center; width: min(100%, calc((100vh - 262px) * 16 / 9)); aspect-ratio: 16 / 9; background: var(--panel); border: 1px solid var(--outline);
+  display: flex; align-items: center; justify-content: center; color: var(--faint); }
+.fiche .infos { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+.fiche h2 { margin: 0; font: inherit; color: var(--text); line-height: 18px; }
+.fiche .chaine { display: flex; align-items: center; gap: 10px; color: var(--text); }
+.fiche .chaine img { width: 32px; height: 32px; border: 1px solid var(--outline); }
+.fiche .chaine .ab { color: var(--faint); }
+.fiche .meta { color: var(--faint); }
+.fiche .desc { white-space: pre-wrap; word-break: break-word; line-height: 16px; padding: 8px 10px; color: var(--text); background: var(--panel); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+.fiche .cote { flex: none; width: 380px; min-height: 0; display: flex; flex-direction: column; gap: 2px; }
+.fiche .cote .sec { flex: none; color: var(--faint); padding: 0 0 4px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.fiche .sugs { flex: 1; min-height: 0; overflow-y: auto; }
+.sug { display: flex; gap: 8px; padding: 4px; cursor: default; border: 1px solid transparent; }
+.sug:hover { background: var(--row-hover); }
+.sug:focus { outline: none; background: var(--row-sel); border-color: var(--row-sel-ring); }
+.sug .vign { flex: none; width: 160px; }
+.sug .tx { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sug .t { color: var(--text); line-height: 16px; max-height: 48px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.sug .c, .sug .m { color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1000px) { .fiche .cote { width: 300px; } .sug .vign { width: 120px; } }
+
+/* chaînes, listes : en-tête, onglets, vignettes de liste, liens vers une chaîne */
+.lien { cursor: pointer; }
+.lien:hover { text-decoration: underline; }
+.fiche .chaine.lien:hover { text-decoration: none; }
+.fiche .chaine.lien:hover span:first-of-type { text-decoration: underline; }
+.tete { display: flex; align-items: flex-start; gap: 14px; padding: 12px 12px 6px; }
+.tete .avatar { flex: none; width: 88px; height: 88px; border: 1px solid var(--outline); }
+.tete .qui { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tete .nom { color: var(--text); }
+.tete .apropos { color: var(--faint); line-height: 16px; max-height: 48px; overflow: hidden; white-space: pre-wrap; }
+.tete .btn { flex: none; }
+.onglets { padding: 0 12px; }
+.vign.pile { box-shadow: 4px -4px 0 var(--line); margin: 4px 4px 0 0; }
+.duree.liste { background: var(--panel); }
+.sug.on { background: var(--row-sel); border-color: var(--row-sel-ring); }
+.fiche .sugs.encours { flex: 0 1 auto; max-height: 40%; margin-bottom: 8px; }
+
+/* nos commandes du lecteur, sous la vidéo */
+.commandes { flex: none; display: flex; align-items: center; gap: 4px; align-self: center; width: min(100%, calc((100vh - 262px) * 16 / 9)); }
+.commandes .btn.ic { width: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.commandes .btn.ic svg { display: block; }
+.commandes .temps { flex: none; min-width: 112px; text-align: center; color: var(--text); white-space: nowrap; }
+.commandes #cPos { flex: 1; min-width: 80px; }
+.commandes #cVol { flex: none; width: 80px; }
+/* plein écran : la vidéo occupe la fenêtre (qui couvre l'écran), nos commandes en bas ; plus de cadre ni de barre de titre */
+body.plein .tb, body.plein .nav, body.plein .status, body.plein .fiche .infos, body.plein .fiche .cote, body.plein .rz { display: none; }
+body.plein .fiche .lecteur { visibility: hidden; }   /* en plein écran, le rectangle du lecteur est calculé par youtube.js (toute la fenêtre moins la barre) */
+body.plein .commandes { position: fixed; left: 0; right: 0; bottom: 0; width: auto; height: 30px; padding: 0 6px; background: var(--panel); z-index: 6; }
+body.plein.sans-barre .commandes { display: none; }
+
+.status { flex: none; }
+.status .st2 { margin-left: auto; padding-left: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

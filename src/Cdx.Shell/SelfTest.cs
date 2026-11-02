@@ -39,14 +39,14 @@ static class SelfTest
     }
 
 
-    // cdx-shell.exe --selftest-audio : la liaison avec AudioLinker contre un faux serveur (tube de test, jamais « cdx.audiolinker » : on ne touche pas
-    // au vrai AudioLinker). Vérifie : pas de connexion sans serveur, requête d'état à la connexion, état recopié et borné, ligne illisible ignorée,
+    // cdx-shell.exe --selftest-audio : la liaison avec Audio Linker contre un faux serveur (tube de test, jamais « cdx.audio_linker » : on ne touche pas
+    // au vrai Audio Linker). Vérifie : pas de connexion sans serveur, requête d'état à la connexion, état recopié et borné, ligne illisible ignorée,
     // commandes sortantes bien formées et bornées, déconnexion signalée, reconnexion. Résultat dans selftest-audio.txt.
     public static void RunAudio()
     {
         var lines = new List<string>(); int bad = 0;
         void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
-        string name = "cdx.audiolinker-selftest-" + Guid.NewGuid().ToString("N")[..8];
+        string name = "cdx.audio_linker-selftest-" + Guid.NewGuid().ToString("N")[..8];
         var got = new List<JsonElement>(); var gl = new object();
         AudioLink link = null;
         bool Until(Func<bool> f, int ms) { var t0 = DateTime.UtcNow; while ((DateTime.UtcNow - t0).TotalMilliseconds < ms) { if (f()) return true; Thread.Sleep(25); } return f(); }
@@ -65,7 +65,7 @@ static class SelfTest
             string l0 = Read();
             Check("à la connexion, le client demande l'état (audio.get)", l0 != null && l0.Contains("\"audio.get\""));
 
-            wr.WriteLine("{\"type\":\"audio.state\",\"from\":\"audiolinker\",\"data\":{\"version\":\"1\",\"running\":true,\"starting\":false,\"volume\":42,\"muted\":true,\"playing\":\"B\",\"setups\":[{\"name\":\"A\",\"count\":1},{\"name\":\"B\",\"count\":3}]}}");
+            wr.WriteLine("{\"type\":\"audio.state\",\"from\":\"audio_linker\",\"data\":{\"version\":\"1\",\"running\":true,\"starting\":false,\"volume\":42,\"muted\":true,\"playing\":\"B\",\"setups\":[{\"name\":\"A\",\"count\":1},{\"name\":\"B\",\"count\":3}]}}");
             Check("état reçu : relayé à la barre", Until(() => Got().Any(g => g.GetProperty("type").GetString() == "audio" && g.GetProperty("on").GetBoolean()), 3000));
             var s1 = Got().Last(g => g.GetProperty("on").GetBoolean());
             Check("état : volume 42, coupé, joué « B », deux setups, en marche",
@@ -206,7 +206,7 @@ static class SelfTest
         try
         {
             var s = new PinStore(file);
-            Check("fichier absent : 14 épingles par défaut (dont Notes, Terminal CDX, Agenda, Courrier et Pilote), 5 dans la barre", s.Items.Count == 14 && s.OnBar.Count == 5 && s.Items.All(p => p.Tile));
+            Check("fichier absent : 16 épingles par défaut (dont Notes, Terminal CDX, Agenda, Courrier, Pilote, YouTube et Audio Linker), 5 dans la barre", s.Items.Count == 16 && s.OnBar.Count == 5 && s.Items.All(p => p.Tile));
             Check("la barre commence par l'Explorateur et finit par le Navigateur CDX", s.OnBar[0].Target == "cdx:explorer" && s.OnBar[^1].Target == "cdx:navigateur");
 
             Check("ajout d'un fichier existant", s.AddToBar("Essai", exe) && s.OnBar.Count == 6 && s.OnBar[^1].Target == exe);
@@ -257,9 +257,9 @@ static class SelfTest
 
             File.WriteAllText(file, "{{{ abîmé");
             var s3 = new PinStore(file);
-            Check("fichier abîmé : valeurs par défaut, aucune exception", s3.Items.Count == 14 && s3.OnBar.Count == 5);
+            Check("fichier abîmé : valeurs par défaut, aucune exception", s3.Items.Count == 16 && s3.OnBar.Count == 5);
             File.WriteAllText(file, "{\"version\":2,\"pins\":[]}");
-            Check("version inconnue : valeurs par défaut", new PinStore(file).Items.Count == 14);
+            Check("version inconnue : valeurs par défaut", new PinStore(file).Items.Count == 16);
             string allSeen = "\"seen\":[" + string.Join(",", PinStore.Defaults.Select(d => "\"" + d.Target + "\"")) + "],";   // toutes les épingles par défaut déjà proposées : rien à ajouter
             File.WriteAllText(file, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Bon\",\"target\":\"cdx:repos\",\"bar\":true,\"tile\":false},{\"name\":\"Mauvais\",\"target\":\"C:\\\\nexiste\\\\pas.exe\",\"bar\":true},{\"name\":\"Doublon\",\"target\":\"CDX:REPOS\",\"bar\":true},{\"name\":\"Rien\",\"target\":\"cdx:explorer\"},42]}");
             var s4 = new PinStore(file);
@@ -271,8 +271,8 @@ static class SelfTest
             string legacy = Path.Combine(dir, "ancien.json");
             File.WriteAllText(legacy, "{\"version\":1,\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"ic\":\"dossier\",\"bar\":true,\"tile\":true,\"barIndex\":0},{\"name\":\"Calculatrice\",\"target\":\"calc.exe\",\"ic\":\"apps\",\"bar\":false,\"tile\":true,\"barIndex\":-1}]}");
             var lg = new PinStore(legacy);
-            Check("ancien fichier (sans « seen ») : seules les tuiles Notes, Terminal CDX, Agenda, Courrier et Pilote sont ajoutées (hors barre), les neuf d'origine ne reviennent pas", lg.Items.Select(p => p.Target).SequenceEqual(new[] { "cdx:explorer", "calc.exe", "cdx:notes", "cdx:terminal", "cdx:agenda", "cdx:courrier", "cdx:pilote" }) && lg.Find("cdx:notes") is { Tile: true, Bar: false } && lg.Find("cdx:terminal") is { Tile: true, Bar: false } && lg.OnBar.Count == 1);
-            Check("la migration est écrite : « seen » contient cdx:notes, une relecture ne la refait pas", File.ReadAllText(legacy).Contains("\"seen\"") && File.ReadAllText(legacy).Contains("cdx:notes") && File.ReadAllText(legacy).Contains("cdx:terminal") && File.ReadAllText(legacy).Contains("cdx:agenda") && File.ReadAllText(legacy).Contains("cdx:courrier") && File.ReadAllText(legacy).Contains("cdx:pilote") && new PinStore(legacy).Items.Count == 7);
+            Check("ancien fichier (sans « seen ») : seules les tuiles Notes, Terminal CDX, Agenda, Courrier, Pilote, YouTube et Audio Linker sont ajoutées (hors barre), les neuf d'origine ne reviennent pas", lg.Items.Select(p => p.Target).SequenceEqual(new[] { "cdx:explorer", "calc.exe", "cdx:notes", "cdx:terminal", "cdx:agenda", "cdx:courrier", "cdx:pilote", "cdx:youtube", "cdx:audio_linker" }) && lg.Find("cdx:notes") is { Tile: true, Bar: false } && lg.Find("cdx:terminal") is { Tile: true, Bar: false } && lg.OnBar.Count == 1);
+            Check("la migration est écrite : « seen » contient cdx:notes, une relecture ne la refait pas", File.ReadAllText(legacy).Contains("\"seen\"") && File.ReadAllText(legacy).Contains("cdx:notes") && File.ReadAllText(legacy).Contains("cdx:terminal") && File.ReadAllText(legacy).Contains("cdx:agenda") && File.ReadAllText(legacy).Contains("cdx:courrier") && File.ReadAllText(legacy).Contains("cdx:pilote") && File.ReadAllText(legacy).Contains("cdx:youtube") && File.ReadAllText(legacy).Contains("cdx:audio_linker") && new PinStore(legacy).Items.Count == 9);
             File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"bar\":true,\"tile\":true,\"barIndex\":0}]}");
             Check("tuile Notes retirée par l'utilisateur (déjà dans « seen ») : elle ne revient pas", new PinStore(legacy).Items.Count == 1);
             File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"ic\":\"dossier\",\"bar\":true,\"tile\":true},{\"name\":\"Notes\",\"target\":\"cdx:notes\",\"ic\":\"carnet\",\"bar\":false,\"tile\":true},{\"name\":\"Chrome\",\"target\":\"chrome.exe\",\"ic\":\"serveur\",\"bar\":true,\"tile\":true}]}");

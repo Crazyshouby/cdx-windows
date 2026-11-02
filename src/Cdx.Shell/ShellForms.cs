@@ -34,7 +34,7 @@ class StartForm : HostForm
 }
 
 // Le centre rapide : ancré en bas à droite, se ferme quand il perd le focus (comme le menu Démarrer).
-// La liste des setups d'AudioLinker, ouverte au-dessus du bouton de la barre (un menu déroulant natif sortirait de l'écran vers le bas) ; se ferme comme le centre rapide.
+// La liste des setups d'Audio Linker, ouverte au-dessus du bouton de la barre (un menu déroulant natif sortirait de l'écran vers le bas) ; se ferme comme le centre rapide.
 class AudioMenuForm : HostForm
 {
     Shell shell => (Shell)app;

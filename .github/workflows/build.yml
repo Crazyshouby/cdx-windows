@@ -23,9 +23,21 @@ jobs:
       - name: Build
         run: dotnet build Cdx.sln -c Release -o bin
 
+      # Audio Linker (C++, src/cdx-audio_linker) : compilé et posé dans bin\ comme les autres programmes, pour l'installeur de la suite.
+      # Ses propres contrôles (essais, page, installeur à lui, publication) sont dans audio_linker.yml.
+      - name: Build Audio Linker
+        shell: pwsh
+        working-directory: src/cdx-audio_linker
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64
+          if ($LASTEXITCODE -ne 0) { throw "Configuration d'Audio Linker échouée" }
+          cmake --build build --config Release
+          if ($LASTEXITCODE -ne 0) { throw "Compilation d'Audio Linker échouée" }
+          Copy-Item build\Release\cdx-audio_linker.exe ..\..\bin\cdx-audio_linker.exe
+
       # Les auto-tests qui n'ouvrent pas de fenêtre visible ni ne touchent au son. Ce sont des programmes Windows (sans console) :
       # Start-Process -Wait est nécessaire pour attendre leur fin et lire leur code de sortie.
-      - name: Self-tests (bus, AudioLinker link, snapping, files, git)
+      - name: Self-tests (bus, Audio Linker link, snapping, files, git)
         shell: pwsh
         run: |
           foreach ($t in @(@('cdx-shell', '--selftest-bus'), @('cdx-shell', '--selftest-audio'), @('cdx-shell', '--selftest-snap'), @('cdx-shell', '--selftest-pilote'), @('cdx-shell', '--selftest-spell'), @('cdx-explorer', '--selftest-fs'), @('cdx-repos', '--selftest-git'))) {
@@ -54,7 +66,7 @@ jobs:
           foreach ($pass in 1, 2) {
             $p = Start-Process $setup -ArgumentList $a -Wait -PassThru
             if ($p.ExitCode -ne 0) { if (Test-Path $log) { Get-Content $log | Select-Object -Last 40 }; throw "Installation (passage $pass) : code $($p.ExitCode)" }
-            foreach ($exe in 'cdx-shell', 'cdx-explorer', 'cdx-browser', 'cdx-transfers', 'cdx-repos', 'cdx-notes', 'cdx-notes-mcp', 'cdx-terminal', 'cdx-agenda', 'cdx-mail', 'cdx-pilote', 'cdx-pilote-mcp') { if (-not (Test-Path "$dir\$exe.exe")) { throw "$exe.exe absent après installation" } }
+            foreach ($exe in 'cdx-shell', 'cdx-explorer', 'cdx-browser', 'cdx-transfers', 'cdx-repos', 'cdx-notes', 'cdx-notes-mcp', 'cdx-terminal', 'cdx-agenda', 'cdx-mail', 'cdx-pilote', 'cdx-pilote-mcp', 'cdx-youtube', 'cdx-audio_linker') { if (-not (Test-Path "$dir\$exe.exe")) { throw "$exe.exe absent après installation" } }
             if (-not (Test-Path "$dir\web\cdx\cdx-ui.css")) { throw 'les pages (web\) manquent' }
             if (Test-Path "$dir\web\explorer\_test-explorer.html") { throw 'une page de test a été installée' }
           }

@@ -34,7 +34,7 @@ class Shell : IHostApp
     bool startOpen, centerOpen, cleaned; DateTime startHiddenAt = DateTime.MinValue, centerHiddenAt = DateTime.MinValue;
     long pIdle, pKernel, pUser; int tick;
     bool audioMenuOpen; DateTime audioMenuHiddenAt = DateTime.MinValue; volatile object lastAudio;
-    AudioLink audio;   // la liaison avec AudioLinker (tube « cdx.audiolinker »), si ce programme tourne
+    AudioLink audio;   // la liaison avec Audio Linker (tube « cdx.audio_linker »), si ce programme tourne
     TrayRelay tray;    // la zone de notification : les icônes des applis, reçues à la place de la barre de Windows
 
     public Shell(string theme)
@@ -78,7 +78,7 @@ class Shell : IHostApp
         Bus.Listen("shell", OnBus);
         Suite.RegisterApp("shell", Environment.ProcessPath);
         // Les deux autres programmes sont posés à côté du shell : leur chemin est enregistré même s'ils n'ont pas encore tourné (ou si apps.json garde un ancien dossier).
-        foreach (var other in new[] { "explorer", "browser", "repos", "transfers", "notes" }) { var exe = Path.Combine(AppContext.BaseDirectory, "cdx-" + other + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other, exe); }
+        foreach (var other in new[] { "explorer", "browser", "repos", "transfers", "notes", "youtube", "audio_linker" }) { var exe = Path.Combine(AppContext.BaseDirectory, "cdx-" + other + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other, exe); }
         if (!pinnedTheme) suiteWatch = Suite.Watch(theme, a => { theme = a; foreach (var f in new HostForm[] { Bar, Start, Center, Switch, AudioMenu, BarMenu }) f.Send(new { type = "theme", value = a }); Host.Log("accent de la suite : " + a); });
         StartTray();
         Host.Log($"shell prêt : thème {theme}, échelle {scale}, racine {root}");
@@ -385,7 +385,7 @@ class Shell : IHostApp
 
     public void OnCenterDeactivated() { if (centerOpen) HideCenter(); }
 
-    // Les setups d'AudioLinker, dans une petite fenêtre posée au-dessus de la barre, alignée sur le bord gauche du bouton (x : pixels de la page de la barre).
+    // Les setups d'Audio Linker, dans une petite fenêtre posée au-dessus de la barre, alignée sur le bord gauche du bouton (x : pixels de la page de la barre).
     void ShowAudioMenu(int x)
     {
         if (startOpen) HideStart(); if (centerOpen) HideCenter();
@@ -397,7 +397,7 @@ class Shell : IHostApp
         if (lastAudio != null) AudioMenu.Send(lastAudio);
         AudioMenu.Send(new { type = "show" });
         audioMenuOpen = true;
-        Host.Log("déroulant AudioLinker ouvert");
+        Host.Log("déroulant Audio Linker ouvert");
     }
 
     void HideAudioMenu()
@@ -405,7 +405,7 @@ class Shell : IHostApp
         if (!audioMenuOpen) return;
         audioMenuOpen = false; audioMenuHiddenAt = DateTime.UtcNow;
         AudioMenu.Hide();
-        Host.Log("liste des setups AudioLinker fermée");
+        Host.Log("liste des setups Audio Linker fermée");
     }
 
     public void OnAudioMenuDeactivated() { if (audioMenuOpen) HideAudioMenu(); }
@@ -595,6 +595,9 @@ class Shell : IHostApp
         if (target.StartsWith("cdx:agenda")) { StartApp("cdx-agenda.exe", null); return; }
         if (target.StartsWith("cdx:courrier")) { StartApp("cdx-mail.exe", null); return; }
         if (target.StartsWith("cdx:pilote")) { StartApp("cdx-pilote.exe", null); return; }
+        if (target.StartsWith("cdx:youtube")) { StartApp("cdx-youtube.exe", null); return; }
+        // Audio Linker (C++, src/cdx-audio_linker) : posé dans bin\ par build.ps1 ; déjà lancé, il passe devant (son instance unique)
+        if (target.StartsWith("cdx:audio_linker")) { StartApp(File.Exists(Path.Combine(AppContext.BaseDirectory, "cdx-audio_linker.exe")) ? "cdx-audio_linker.exe" : Suite.AppPath("audio_linker") ?? "cdx-audio_linker.exe", null); return; }
         if (target.StartsWith("cdx:terminal")) { StartApp("cdx-terminal.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
         if (target.StartsWith("cdx:notes")) { StartApp("cdx-notes.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
         if (target.StartsWith("cdx:explorer")) { StartApp("cdx-explorer.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }

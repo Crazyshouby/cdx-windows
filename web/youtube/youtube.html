@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8">
+<title>CDX — YouTube</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/host/page.css">
+<link rel="stylesheet" href="/youtube/youtube.css">
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/cdx-frame.js"></script>
+<script src="/host/host.js"></script>
+</head>
+<body class="active">
+<div class="win active" id="win">
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" data-act="close"></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">YouTube</span><button class="tb-btn tb-r2" data-act="max"></button><button class="tb-btn tb-r" data-act="min"></button></div>
+  <div class="cb">
+    <form class="nav" id="nav" autocomplete="off">
+      <button type="button" class="btn" id="bRetour" title="Retour (Alt+←, bouton « précédent » de la souris)" disabled>◀</button>
+      <button type="button" class="btn" id="bAccueil" title="Accueil (Alt+Origine)"><span class="pix" data-ic="video"></span> Accueil</button>
+      <button type="button" class="btn" id="bAbos" title="Les vidéos des chaînes suivies"><span class="pix" data-ic="liste"></span> Abonnements</button>
+      <input id="q" class="text-input" type="search" placeholder="Rechercher sur YouTube…" spellcheck="false" maxlength="200">
+      <button type="submit" class="btn" id="bChercher"><span class="pix" data-ic="loupe"></span> Rechercher</button>
+      <button type="button" class="btn" id="bCompte" title="Compte Google de la page cachée"><span class="pix" data-ic="utilisateur"></span> <span id="compte">…</span></button>
+    </form>
+    <div class="zone" id="zone" tabindex="-1">
+      <div id="vue"></div>
+    </div>
+    <div class="status"><span class="orb" id="orb"></span><span id="st1">Démarrage…</span><span class="st2" id="st2"></span></div>
+  </div>
+</div>
+<script src="/youtube/youtube.js"></script>
+</body>
+</html>

@@ -128,7 +128,7 @@
 
   drawCal();
   handlers.notify({ items: [] });
-  if (!hasHost) { handlers.notify({ items: [{ title: 'Téléchargement terminé', text: 'photo-vacances.zip', level: 'info', from: 'browser', at: Date.now() / 1000 - 60 }, { title: 'Sortie audio perdue', text: 'Casque (Arctis 7)', level: 'warn', from: 'audiolinker', at: Date.now() / 1000 - 600 }, { title: 'Mention dans #cdx', text: '<alice> messages: tu es là ?', level: 'info', from: 'messages', at: Date.now() / 1000 - 3000 }] }); }
+  if (!hasHost) { handlers.notify({ items: [{ title: 'Téléchargement terminé', text: 'photo-vacances.zip', level: 'info', from: 'browser', at: Date.now() / 1000 - 60 }, { title: 'Sortie audio perdue', text: 'Casque (Arctis 7)', level: 'warn', from: 'audio_linker', at: Date.now() / 1000 - 600 }, { title: 'Mention dans #cdx', text: '<alice> messages: tu es là ?', level: 'info', from: 'messages', at: Date.now() / 1000 - 3000 }] }); }
   if (!hasHost) handlers.center({ volume: 64, muted: false, device: 'Haut-parleurs (Realtek)', net: { up: true, type: 'Ethernet', speed: 1000, ip: '192.168.1.158' } });
   post({ cmd: 'ready', page: 'center' });
 </script>

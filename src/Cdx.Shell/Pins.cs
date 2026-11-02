@@ -26,7 +26,7 @@ sealed class PinStore
         new("Explorateur", "cdx:explorer", "explorateur", true, true), new("Paramètres", "ms-settings:", "reglages", true, true), new("Terminal", "wt.exe", "console", true, true),
         new("Chrome", "chrome.exe", "serveur", true, true), new("Navigateur CDX", "cdx:navigateur", "navigateur", true, true), new("Dépôts", "cdx:repos", "depots", false, true),
         new("Calculatrice", "calc.exe", "apps", false, true), new("Bloc-notes", "notepad.exe", "journal", false, true), new("Images", "shell:My Pictures", "image", false, true),
-        new("Notes", "cdx:notes", "notes", false, true), new("Terminal CDX", "cdx:terminal", "terminal", false, true), new("Agenda", "cdx:agenda", "agenda", false, true), new("Courrier", "cdx:courrier", "courrier", false, true), new("Pilote", "cdx:pilote", "pilote", false, true),
+        new("Notes", "cdx:notes", "notes", false, true), new("Terminal CDX", "cdx:terminal", "terminal", false, true), new("Agenda", "cdx:agenda", "agenda", false, true), new("Courrier", "cdx:courrier", "courrier", false, true), new("Pilote", "cdx:pilote", "pilote", false, true), new("YouTube", "cdx:youtube", "video", false, true), new("Audio Linker", "cdx:audio_linker", "volume", false, true),
     };
 
     public PinStore(string file) { this.file = file; SetItems(Defaults.ToList()); foreach (var d in Defaults) seen.Add(d.Target); Load(); }

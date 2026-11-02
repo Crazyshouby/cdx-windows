@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr" data-cdx-host="strings">
+<head>
+<meta charset="utf-8">
+<title>Options — Audio Linker</title>
+<style>
+/*@common.css@*/
+/*@page.css@*/
+</style>
+</head>
+<body>
+<div class="win" id="optWin">
+<div class="tb">
+  <button class="tb-btn tb-l" data-act="close" data-glyph="x" title="Fermer" aria-label="Fermer"></button>
+  <span class="tb-title">Options</span>
+  <button class="tb-btn tb-r" data-act="shade" data-glyph="minus" title="Enrouler" aria-label="Enrouler"></button>
+</div>
+<div id="app" class="cb">
+  <h3 class="sec">Démarrage</h3>
+  <div class="row">
+    <label class="switch"><input type="checkbox" id="launchWin"><span class="track"></span></label>
+    <label class="switch-label" for="launchWin">Lancer Audio Linker avec Windows, dans la zone de notification</label>
+  </div>
+  <div class="row">
+    <label class="switch"><input type="checkbox" id="autostart"><span class="track"></span></label>
+    <label class="switch-label" for="autostart">Démarrer le groupe dès qu'Audio Linker s'ouvre</label>
+  </div>
+  <div class="help">Les deux ensemble : le groupe joue tout seul à chaque session Windows, sans ouvrir la fenêtre.</div>
+
+  <h3 class="sec">Raccourcis</h3>
+  <div class="row">
+    <label>Démarrer / arrêter le groupe</label>
+    <button class="ghost-btn" id="hkToggleBtn"></button>
+  </div>
+  <div class="row">
+    <label>Changer de setup (switcher)</label>
+    <button class="ghost-btn" id="hkSwitcherBtn"></button>
+  </div>
+  <div class="row">
+    <label class="switch"><input type="checkbox" id="setupDigits"><span class="track"></span></label>
+    <label class="switch-label" for="setupDigits"
+           title="Raccourcis globaux : ils ne sont actifs que si au moins un setup existe. Désactivez-les si une autre application en a besoin.">
+      Ctrl+Maj+1 à 9 : jouer directement le setup n°1 à 9</label>
+  </div>
+
+  <h3 class="sec">Latence</h3>
+  <div class="row">
+    <label>Marge anti-craquements</label>
+    <input type="range" id="sCushion" min="30" max="800" step="10"
+           title="Réserve interne absorbant les à-coups d'ordonnancement (charge CPU). Plus bas = moins de latence ; plus haut = plus de résistance aux craquements. Ne compense PAS les coupures radio Bluetooth.">
+    <span class="val" id="vCushion"></span>
+  </div>
+  <div class="row">
+    <label>Tampon de sortie</label>
+    <input type="range" id="sDeviceFill" min="20" max="150" step="10"
+           title="Quantité d'audio maintenue dans le tampon de chaque périphérique. Plus bas = moins de latence ; plus haut = plus de tolérance aux blocages système brefs.">
+    <span class="val" id="vDeviceFill"></span>
+  </div>
+  <div class="help" id="latencyEstimate"></div>
+  <div class="row">
+    <label class="switch"><input type="checkbox" id="lowLatency"><span class="track"></span></label>
+    <label class="switch-label" for="lowLatency"
+           title="Utilise la période audio minimale du pilote (IAudioClient3) quand elle est disponible. Latence plus basse, mais moins tolérant aux à-coups. Redémarre le groupe.">
+      Mode basse latence (périphériques compatibles)</label>
+  </div>
+  <div class="row">
+    <button class="ghost-btn" id="optimizeBtn" style="flex:1"
+            title="Réduit automatiquement la marge jusqu'au réglage le plus bas sans craquement. Démarrez le groupe d'abord.">
+      Optimiser la latence automatiquement</button>
+  </div>
+
+  <h3 class="sec">Capture du son</h3>
+  <div class="row">
+    <label>Mode</label>
+    <select class="ghost-btn" id="captureMode" style="flex:1">
+      <option value="0">Câble virtuel VB-CABLE (recommandé)</option>
+      <option value="1">Sans câble (expérimental)</option>
+    </select>
+  </div>
+  <div class="help" id="captureHelp"></div>
+
+  <h3 class="sec">Configuration</h3>
+  <div class="row" style="justify-content:flex-end;flex-wrap:wrap">
+    <button class="ghost-btn" id="exportBtn">Exporter…</button>
+    <button class="ghost-btn" id="importBtn">Importer…</button>
+    <button class="ghost-btn" id="resetBtn">Réinitialiser ces options</button>
+  </div>
+  <div class="help">L'export contient tout (setups, enceintes, raccourcis, réglages). La réinitialisation ne touche qu'aux options de cette fenêtre.</div>
+
+  <div class="row footer-row">
+    <label id="versionLabel" class="mono" style="cursor:default;color:var(--green)"></label>
+    <button class="ghost-btn" id="openLogBtn" style="padding:4px 10px">
+      Ouvrir le journal de diagnostic</button>
+  </div>
+</div>
+<div class="grip-rz"></div>
+</div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+/*@common.js@*/
+/*@page.js@*/
+</script>
+</body>
+</html>

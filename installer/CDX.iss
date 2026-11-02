@@ -72,6 +72,8 @@ Name: "terminal"; Description: "Terminal"; Types: full
 Name: "agenda"; Description: "Agenda (calendrier et tâches du compte Google)"; Types: full
 Name: "mail"; Description: "Courrier (boîte Gmail du compte Google)"; Types: full
 Name: "pilote"; Description: "Pilote (chat avec Claude pour organiser et créer les projets ; demande Claude Code)"; Types: full
+Name: "youtube"; Description: "YouTube (accueil, recherche, vidéos ; page YouTube cachée avec uBlock Origin Lite)"; Types: full
+Name: "audio_linker"; Description: "Audio Linker (le son du PC sur plusieurs sorties à la fois ; demande VB-CABLE)"; Types: full
 
 [Tasks]
 Name: "startup"; Description: "Lancer la barre {#AppName} à l'ouverture de session Windows"; Components: shell; Flags: unchecked
@@ -99,6 +101,9 @@ Source: "{#BinDir}\cdx-agenda.*"; DestDir: "{app}"; Excludes: "*.pdb"; Component
 Source: "{#BinDir}\cdx-mail.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: mail; Flags: ignoreversion
 Source: "{#BinDir}\cdx-pilote.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: pilote; Flags: ignoreversion
 Source: "{#BinDir}\cdx-pilote-mcp.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: pilote; Flags: ignoreversion
+Source: "{#BinDir}\cdx-youtube.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: youtube; Flags: ignoreversion
+; Audio Linker (C++, compilé par build.ps1 dans bin\) : un seul exécutable autonome
+Source: "{#BinDir}\cdx-audio_linker.exe"; DestDir: "{app}"; Components: audio_linker; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}\Barre {#AppName}"; Filename: "{app}\{#ShellExe}"; Components: shell
@@ -111,6 +116,8 @@ Name: "{autoprograms}\{#AppName}\Terminal {#AppName}"; Filename: "{app}\cdx-term
 Name: "{autoprograms}\{#AppName}\Agenda {#AppName}"; Filename: "{app}\cdx-agenda.exe"; Components: agenda
 Name: "{autoprograms}\{#AppName}\Courrier {#AppName}"; Filename: "{app}\cdx-mail.exe"; Components: mail
 Name: "{autoprograms}\{#AppName}\Pilote {#AppName}"; Filename: "{app}\cdx-pilote.exe"; Components: pilote
+Name: "{autoprograms}\{#AppName}\YouTube {#AppName}"; Filename: "{app}\cdx-youtube.exe"; Components: youtube
+Name: "{autoprograms}\{#AppName}\Audio Linker"; Filename: "{app}\cdx-audio_linker.exe"; Components: audio_linker
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#ShellExe}"""; Tasks: startup; Flags: uninsdeletevalue
@@ -217,7 +224,10 @@ var
   Shell: String;
 begin
   if NoStop then exit;
-  Names := ['cdx-shell.exe', 'cdx-explorer.exe', 'cdx-browser.exe', 'cdx-transfers.exe', 'cdx-repos.exe', 'cdx-notes.exe', 'cdx-notes-mcp.exe', 'cdx-terminal.exe', 'cdx-agenda.exe', 'cdx-mail.exe', 'cdx-pilote.exe', 'cdx-pilote-mcp.exe'];
+  // Audio Linker d'abord, et proprement (--quit : groupe arrêté, sortie par défaut de Windows rendue) : tué, il laisserait le son sur le câble virtuel.
+  if FileExists(AppDir + '\cdx-audio_linker.exe') then
+    Exec(AppDir + '\cdx-audio_linker.exe', '--quit', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Names := ['cdx-shell.exe', 'cdx-explorer.exe', 'cdx-browser.exe', 'cdx-transfers.exe', 'cdx-repos.exe', 'cdx-notes.exe', 'cdx-notes-mcp.exe', 'cdx-terminal.exe', 'cdx-agenda.exe', 'cdx-mail.exe', 'cdx-pilote.exe', 'cdx-pilote-mcp.exe', 'cdx-youtube.exe'];
   for I := 0 to GetArrayLength(Names) - 1 do
     Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM ' + Names[I] + ' /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Shell := AppDir + '\{#ShellExe}';

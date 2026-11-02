@@ -4,14 +4,14 @@ La charte CDX-UI (dépôt `cdx-ui`) appliquée à Windows : la barre des tâches
 un navigateur web. Chaque page est du HTML/CSS de la charte servi par WebView2 ; les programmes .NET 8 ne font que le lien avec Windows.
 
 ```
-pwsh -File build.ps1               # compile les trois programmes dans bin\
+pwsh -File build.ps1               # compile les programmes dans bin\ (C#, puis Audio Linker en C++ si Visual Studio Build Tools 2022 est là)
 pwsh -File lancer.ps1 [thème]      # compile si besoin, lance le shell (un des seize thèmes de cdx-ui/tokens.json : rouge, couchant, ambre, jean, marine, tramway, sarcelle, chocolat, lavande, oxygene, techno, reve-bleu, reve-vert, reve-violet, lagon, turquoise)
 pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Windows
 ```
 
 | Programme | Rôle | Instance | Données |
 |---|---|---|---|
-| `bin\cdx-shell.exe` | la barre, le menu Démarrer, le centre rapide, Alt+Tab, la touche Windows, la liaison avec AudioLinker | une | `journal.log` |
+| `bin\cdx-shell.exe` | la barre, le menu Démarrer, le centre rapide, Alt+Tab, la touche Windows, la liaison avec Audio Linker | une | `journal.log` |
 | `bin\cdx-explorer.exe [--theme t] [dossier]` | l'Explorateur : une fenêtre par dossier ouvert, s'arrête avec la dernière ; **glisser-déposer** (voir ci-dessous) | une (un second lancement ouvre une fenêtre dans la première) | `journal-explorer.log` |
 | `bin\cdx-browser.exe [--theme t] [adresse]` | le navigateur : onglets, groupes d'onglets, pages scindées, plusieurs fenêtres, session retrouvée, extensions (antipub), réglages, import depuis Chrome (voir « Navigateur, lot 4 ») | une (un second lancement ouvre un onglet) | `journal-browser.log`, profil `navigateur\` |
 | `bin\cdx-repos.exe [--theme t]` | **Dépôts** : tous les projets git du PC (ce qui reste à enregistrer ou à envoyer sur GitHub), en lecture seule | une (un second lancement passe devant) | `journal-repos.log`, `repos.json` (dossiers explorés, projets masqués) |
@@ -19,8 +19,10 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 | `bin\cdx-mail.exe [--theme t]` | **Courrier** : la boîte Gmail du compte Google relié à la suite (voir « Courrier ») | une (un second lancement passe devant) | `journal-mail.log` |
 | `bin\cdx-pilote.exe [--theme t]` | **Pilote** : le chat avec Claude réservé à l'organisation et à la création des projets ; Claude Code en sous-processus, la suite en outils (voir « Pilote ») | une (un second lancement passe devant) | `journal-pilote.log`, `pilote.json`, `pilote\<conversation>.json` |
 | `bin\cdx-terminal.exe [--theme t] [dossier]` | **Terminal** : un shell (PowerShell 7 s'il est installé, sinon Windows PowerShell) dans une fenêtre de la charte : cadre CDX, fond noir, texte à la couleur d'accent, aucun coin arrondi. Pseudo-console Windows (ConPTY) côté C#, xterm.js dans la page. **Onglets** (Ctrl+Maj+T / W, Ctrl+Tab, Ctrl+Alt+1..9), **volets** côte à côte ou l'un sous l'autre (Alt+Maj+D, menu clic droit, séparateurs déplaçables, Alt+flèches), un shell par volet ; police pixel à chasse fixe de la charte (CDX Pixel Mono, case de 7 px), texte dessiné par WebGL. Lancé avec un dossier (ou, s'il tourne déjà, un second lancement) : un onglet dans ce dossier. **Win+T** l'ouvre depuis le shell ; la tuile « Terminal CDX » du menu Démarrer le lance ; « Ouvrir dans un terminal » de l'Explorateur l'utilise (Windows Terminal puis cmd en repli) | une (un second lancement passe devant) | `journal-terminal.log` |
+| `bin\cdx-youtube.exe [--theme t]` | **YouTube** : accueil, abonnements, recherche, fiche et lecture d'une vidéo (le vrai lecteur de YouTube, posé dans la fenêtre), par une page YouTube cachée (session Google, uBlock Origin Lite) ; voir « YouTube » | une (un second lancement passe devant) | `journal-youtube.log`, `youtube\` (profil de la page cachée, uBOL, `veille.log`), `webview-youtube\` |
+| `bin\cdx-audio_linker.exe [--tray] [--quit]` | **Audio Linker** (ex-AudioLinker, C++) : le son du PC sur plusieurs sorties à la fois (latence, volume, égaliseur par sortie, setups) ; son groupe est dans la barre ; voir « Audio Linker » | une (un second lancement passe devant) | `%APPDATA%\cdx-audio_linker\config.json`, journal `%LOCALAPPDATA%\cdx-audio_linker\` |
 
-Le shell lance les autres (`cdx:explorer`, `cdx:navigateur`, `cdx:repos`, `cdx:terminal`, Win+E, Win+T) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
+Le shell lance les autres (`cdx:explorer`, `cdx:navigateur`, `cdx:repos`, `cdx:terminal`, `cdx:youtube`, Win+E, Win+T) : **un plantage de l'un n'emporte pas les autres** (essai `tests\suite.ps1`).
 Toutes les données sont dans `%LOCALAPPDATA%\CdxShell\`.
 
 ## Organisation
@@ -33,12 +35,14 @@ src\Cdx.Explorer\   cdx-explorer : Fs.cs (fichiers), ExplorerForm.cs
 src\Cdx.Browser\    cdx-browser : Browser.cs (onglets, favoris, historique, téléchargements)
 src\Cdx.Repos\      cdx-repos : Git.cs (recherche et lecture de git, jamais d'écriture), ReposApp.cs
 src\Cdx.Pilote\     cdx-pilote : Claude.cs (claude.exe en sous-processus, stream-json), PilotTools.cs (les outils de la suite, tube cdx.pilote.outils), PiloteApp.cs (conversations, accords, page) ; src\Cdx.PiloteMcp\ cdx-pilote-mcp (le relais MCP « cdx-suite ») ; dans Cdx.Host : ClaudeFlux.cs (l'analyseur du flux), PilotPolicy.cs (la politique d'autorisation)
+src\cdx-audio_linker\  Audio Linker (C++ : CMake, MSVC, WebView2 en bibliothèque statique) : son propre README, CHANGELOG, essais (build.cmd tests), installeur et publication (.github\workflows\audio_linker.yml)
+src\Cdx.YouTube\    cdx-youtube : YtLecture.cs (la couche de lecture YouTube, seul fichier qui connaît les formats de YouTube), PageCachee.cs (la page cachée : navigation interne, interception des réponses youtubei, connexion, consentement), Ubol.cs, Veille.cs, YouTubeApp.cs
 src\Cdx.Terminal\   cdx-terminal : ConPty.cs (la pseudo-console : lancer le shell, faire passer les octets, redimensionner), TerminalApp.cs (fenêtre, une session par volet, messages de la page, presse-papiers)
 web\terminal\       la page du terminal (terminal.html, terminal.css, terminal.js : onglets, arbre de volets) ; fonts\ = CDX Pixel Mono (générée par cdx-ui\gen\gen_font_mono.py, copie à refaire si la police change) ; vendor\ = xterm.js 6.0.0, addon-fit 0.11.0 et addon-webgl 0.19.0 (MIT, copiés tels quels ; exceptions du lint dans charte-lint.allow)
 web\cdx\            la charte, copie exacte de cdx-ui/dist (node tools/charte-sync.mjs --write cdx-windows), rien d'autre
 web\host\           ce que les pages ajoutent à la charte : host.js (le pont vers l'hôte C#), page.css (socle html/body/.win), grammaire-worker.js (Grammalecte)
-web\shell\ web\explorer\ web\browser\ web\repos\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
-tests\              pilote.ps1 (Pilote contre fake_claude.py et fake_gmail.py : 41 vérifications), navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée)
+web\shell\ web\explorer\ web\browser\ web\repos\ web\youtube\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
+tests\              pilote.ps1 (Pilote contre fake_claude.py et fake_gmail.py : 41 vérifications), navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée), youtube.ps1 (YouTube : le parcours de cdx-youtube --essai sur le vrai YouTube, lecture, plein écran et fiche qui suit compris, avec les vraies données ou -Isole)
 ```
 
 ## Essais (aucune entrée simulée)
@@ -54,7 +58,7 @@ Windows PowerShell 5.1 lise aussi leurs accents (sans elle, « écris » partait
 
 ## Aimantation des fenêtres (01/11/2026)
 Toutes les fenêtres de l'hôte C# (`Cdx.Host/Snap.cs`, `HostForm.WndProc`) : pendant un déplacement ou un redimensionnement, la fenêtre colle aux bords des autres
-fenêtres de la suite (`cdx-*.exe`, Messages, AudioLinker) qui lui font face, et aux bords de la zone de travail de son écran. Règles de la charte (`tokens.json`) : 10 px
+fenêtres de la suite (`cdx-*.exe`, Messages, Audio Linker) qui lui font face, et aux bords de la zone de travail de son écran. Règles de la charte (`tokens.json`) : 10 px
 d'attraction, 2 px d'écart entre deux fenêtres, aucun au bord de l'écran, à l'échelle de l'écran ; mêmes règles que Messages (`app.rs`). Windows fait le geste
 (`WM_NCLBUTTONDOWN`), l'hôte corrige le rectangle proposé par `WM_MOVING` / `WM_SIZING` ; les voisines sont relevées à l'entrée du geste. Essai : `cdx-shell --selftest-snap`.
 
@@ -232,15 +236,36 @@ favoris, historique, telechargements, extensions, motsdepasse, reglages).
 
 ## Synergies (phase 4)
 - **Notifications** : `notify` sur le bus du shell → une cloche et le nombre de notifications non vues dans la barre (place fixe), la liste dans le centre rapide (50 au plus, « Effacer »).
-  Émetteurs : Messages (messages privés, mentions), cdx-browser (téléchargement terminé ou échoué), AudioLinker (erreurs et avertissements).
+  Émetteurs : Messages (messages privés, mentions), cdx-browser (téléchargement terminé ou échoué), Audio Linker (erreurs et avertissements).
 - **Liens** : un lien cliqué dans Messages s'ouvre dans cdx-browser (lancé au besoin d'après `apps.json`, sinon navigateur de Windows).
 - **Fichiers** : le double-clic sur une page HTML, un PDF, une image, un son ou une vidéo dans l'Explorateur les ouvre dans le navigateur (`open-file`) ; « Afficher dans le dossier » d'un téléchargement ouvre l'Explorateur sur le fichier (`select`).
-- **Son** : le groupe d'AudioLinker (volume, coupure, setups) est dans la barre (voir ci-dessous).
+- **Son** : le groupe d'Audio Linker (volume, coupure, setups) est dans la barre (voir ci-dessous).
 - Essai de bout en bout isolé : `tests\bus.ps1` (sections 6 et 7).
 
-## Liaison avec AudioLinker
-Le shell se connecte au tube `\\.\pipe\cdx.audiolinker` (voir AudioLinker `src/CdxLink.cpp`) et affiche dans la barre le groupe (voyant, coupure, volume, setups) tant
-qu'AudioLinker tourne sur la machine.
+## Audio Linker (`src\cdx-audio_linker`, 03/11/2026)
+L'ancien dépôt AudioLinker (le mixeur multi-sorties, en C++) fait partie de la suite depuis le 03/11/2026 : `cdx-audio_linker.exe`, compilé par `build.ps1` (avec
+`src\cdx-audio_linker\build.cmd`, qui lance aussi ses essais) et posé dans `bin\` ; tuile « Audio Linker » du menu Démarrer (`cdx:audio_linker`), composant de l'installeur ;
+sa propre publication (installeur à lui, étiquettes `audio_linker-v*`) reste possible, voir `src\cdx-audio_linker\RELEASING.md`. Au premier lancement sous ce nom, il reprend
+les réglages de `%APPDATA%\AudioLinker` et l'entrée « AudioLinker » du démarrage de Windows. Le shell se connecte au tube `\\.\pipe\cdx.audio_linker`
+(voir `src/cdx-audio_linker/src/CdxLink.cpp`) et affiche dans la barre le groupe (voyant, coupure, volume, setups) tant qu'Audio Linker tourne sur la machine.
+
+## YouTube (`cdx-youtube`, 02/11/2026)
+Né dans le dépôt `Dev\CDX-YouTube` (étapes 1 et 2 : `docs\etape-1-resultats.md`, `docs\etape-2-resultats.md`), devenu un programme de la suite. Une **page YouTube cachée**
+(WebView2 hors de l'écran, profil `youtube\profil`, uBlock Origin Lite téléchargé de GitHub et vérifié chaque semaine) fait le travail ; la fenêtre de la charte ne lui parle que
+par le programme. Navigation par la navigation interne de YouTube (évènement `yt-navigate`, comme un clic) ; données lues côté C# (`WebResourceResponseReceived` sur
+`youtubei/v1/browse`, `search`, `next`, `get_watch`), ou dans `ytd-page-manager` quand YouTube sert une page de son cache ; crochet `fetch` en secours. Consentement UE refusé
+seul ; sans session, la fenêtre de connexion Google s'affiche une fois puis se recache. `youtube\veille.log` note ce qui casse (format inconnu, pub, extraction, bloqueur, session),
+les réponses en cause vont sous `youtube\brut\` et se rejouent avec `cdx-youtube --lire <réponse.json>`. Un uBOL tout juste ajouté au profil n'agit pas pendant le lancement
+qui l'ajoute : YouTube est alors rechargé une fois. **Lecture** (étape 3, `docs\etape-3-resultats.md`) : le contrôle WebView2 de la page cachée vient se poser dans la fenêtre, sur le rectangle
+que la fiche réserve au lecteur (`yt.lecteur`), un style n'y laisse que `#movie_player` ; il repart se cacher en pause quand on quitte la fiche. Le plein écran du lecteur
+agrandit la fenêtre ; si le lecteur change seul de vidéo (lecture automatique, écran de fin), la fiche suit. Vue **Abonnements** (`FEsubscriptions`).
+**Notre lecteur** : l'interface du lecteur de YouTube est entièrement masquée (seules restent l'image et les sous-titres), nos commandes CDX-UI sous la vidéo
+(lecture, position, volume, vitesse, qualité, sous-titres, précédente/suivante, plein écran, raccourcis clavier) pilotent son API (`yt.cmd`), son état revient 4 fois par
+seconde (`lecture`) ; notre plein écran remplace celui de YouTube.
+**Chaînes** (en-tête et onglets Vidéos, Shorts, En direct, Playlists…), **listes de lecture et mix** (page de la liste, « Tout lire », lecture dans la liste avec
+son panneau dans la fiche), **compte** (nom lu dans le menu de l'avatar ; se déconnecter : cookies du profil effacés ; changer de compte). `cdx-youtube --sonder <chemin>`
+garde les données d'une page de YouTube sous `youtube\brut\` pour relever un format. Essai : `tests\youtube.ps1`
+(`-Isole` : profil neuf et anonyme). Au premier lancement, les données de `%LOCALAPPDATA%\CdxYouTube` (prototype) sont déplacées sous `youtube\`.
 
 ## Notes (`cdx-notes`, lots 1 à 6)
 Le coffre (`Cdx.Vault`, dossier `Documents\Notes CDX` par défaut) est partagé avec le serveur MCP `cdx-notes-mcp` de Claude ; l'application voit tout changement du dossier. Page `web/notes/` :
@@ -255,7 +280,7 @@ avec `"phrase"`, `tag:`, `in:`, `type:` ; **sélecteur Ctrl+P** qui crée la not
 (barre, Explorateur, navigateur, Dépôts, Notes + MCP, Terminal) ; tâche « lancer la barre à l'ouverture de session » (clé `Run`, décochée par défaut) ; raccourcis dans Démarrer > CDX, dont
 « Rendre la barre de Windows » (`cdx-shell.exe --restore`). Prérequis téléchargés et installés s'ils manquent : .NET 8 Desktop et WebView2. Avant d'installer ou de désinstaller, les programmes
 en cours sont arrêtés et la barre de Windows rendue ; `/NOSTOP=1` (essais) n'y touche pas. La désinstallation propose de supprimer les réglages, jamais le coffre de notes.
-Signature : comme AudioLinker (`-Sign` + `CDX_SIGN_ARGS`, `installer\sign.cmd`), aucun certificat pour l'instant (SmartScreen avertit). La CI construit l'installeur, l'installe en silence,
+Signature : comme Audio Linker (`-Sign` + `CDX_SIGN_ARGS`, `installer\sign.cmd`), aucun certificat pour l'instant (SmartScreen avertit). La CI construit l'installeur, l'installe en silence,
 réinstalle par-dessus, désinstalle, et le publie en artefact.
 
 ## Pas encore
