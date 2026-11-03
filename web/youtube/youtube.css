@@ -1,7 +1,7 @@
 /* CDX-YouTube (maquette du 03/11/2026, archives/maquettes/youtube) : une rangée en haut, la zone creusée, la platine en bas. Mise en page propre à
    l'application (CHARTE.md §9.5) : les composants viennent de cdx-ui.css, les couleurs des jetons du thème. Aucun arrondi, aucune graisse, 14 px partout.
    Accueil en rubans (par moment), abonnements en règle du temps, recherche en liste à colonnes (ou en vignettes), vidéo en mode cinéma. */
-.cb { display: flex; flex-direction: column; gap: 5px; min-height: 0; }
+.cb { display: flex; flex-direction: column; gap: 5px; min-height: 0; position: relative; }
 
 /* ---------- le haut ---------- */
 .nav { display: flex; gap: 5px; flex: none; align-items: center; margin: 0; }
@@ -139,6 +139,18 @@
 .chap .h { color: var(--faint); }
 .chap span:last-child { color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chap.on { background: var(--row-sel); border-color: var(--row-sel-ring); }
+
+/* le mini-lecteur : en bas à droite de la zone, au-dessus de la platine ; la vidéo (vue native) recouvre .mini-ecran */
+.mini { position: absolute; right: 22px; bottom: 39px; width: 340px; background: var(--panel); border: 1px solid var(--outline); box-shadow: var(--bevel), 4px 5px 0 rgba(0, 0, 0, .5); padding: 4px; z-index: 4; }
+.mini[hidden] { display: none; }
+.mini-ecran { aspect-ratio: 16 / 9; background: var(--ink); border: 1px solid var(--outline); }
+.mini .bas { display: flex; align-items: center; gap: 4px; padding: 4px 0 0 2px; }
+.mini .titre { flex: 1; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.mini .titre:hover { text-decoration: underline; }
+.mini .btn.ic { flex: none; width: 22px; height: 20px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.mini .btn.ic svg { display: block; }
+body.avec-mini .page { padding-bottom: 250px; }
+body.plein .mini { display: none; }
 
 /* ---------- la platine : l'afficheur (le texte vert de la charte) et, pendant une vidéo, le transport ---------- */
 .platine { flex: none; display: flex; align-items: center; gap: 4px; height: 22px; }

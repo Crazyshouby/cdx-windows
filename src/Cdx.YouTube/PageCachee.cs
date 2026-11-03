@@ -436,10 +436,43 @@ sealed class PageCachee
         if (LecteurAffiche) { web.Visible = !recouvert && !Bloque; Host.Log($"lecteur affiché ({r.Width} × {r.Height})"); }
     }
 
+    // ---------- le mini-lecteur : la vidéo continue pendant qu'on parcourt YouTube ----------
+    // Une navigation de la page cachée hors de /watch décharge la vidéo (mesuré le 03/11/2026, --sonde-mini) ; le mini-lecteur de YouTube (touche « i »)
+    // la garde : #movie_player passe dans ytd-miniplayer et la lecture continue pendant les recherches et l'accueil. Le style « lecteur seul » le montre
+    // toujours en plein dans la vue ; seul le rectangle de la vue change (le coin de l'interface). « i » à nouveau rouvre la page de la vidéo.
+    public bool Mini { get; private set; }
+    const string MiniActifJs = "!!document.querySelector('ytd-miniplayer[active], ytd-app[miniplayer-is-active]')";
+    async Task<bool> MiniActifAsync() { try { return await core.ExecuteScriptAsync(MiniActifJs) == "true"; } catch { return false; } }
+    async Task ToucheIAsync()
+    {
+        // une vraie frappe (CDP) : YouTube ignore une partie des évènements fabriqués ; rien ne doit avoir le focus d'un champ
+        try { await core.ExecuteScriptAsync("document.activeElement && document.activeElement.blur && document.activeElement.blur()"); } catch { }
+        await core.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", JsonSerializer.Serialize(new { type = "keyDown", key = "i", code = "KeyI", windowsVirtualKeyCode = 73, nativeVirtualKeyCode = 73, text = "i" }));
+        await core.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", JsonSerializer.Serialize(new { type = "keyUp", key = "i", code = "KeyI", windowsVirtualKeyCode = 73, nativeVirtualKeyCode = 73 }));
+    }
+    public async Task<bool> EntrerMiniAsync()
+    {
+        if (!LecteurAffiche || Bloque || core == null) return false;
+        if (Mini && await MiniActifAsync()) return true;
+        if (!await MiniActifAsync()) { await ToucheIAsync(); for (int i = 0; i < 20 && !await MiniActifAsync(); i++) await Task.Delay(100); }
+        Mini = await MiniActifAsync();
+        Host.Log(Mini ? "mini-lecteur : la vidéo continue pendant la navigation" : "mini-lecteur : YouTube ne l'a pas ouvert");
+        return Mini;
+    }
+    public async Task SortirMiniAsync()
+    {
+        if (!Mini) return;
+        Mini = false;
+        if (await MiniActifAsync()) { await ToucheIAsync(); for (int i = 0; i < 20 && await MiniActifAsync(); i++) await Task.Delay(100); }
+        try { await core.ExecuteScriptAsync("window.dispatchEvent(new Event('resize'))"); } catch { }
+        Host.Log("mini-lecteur : retour à la page de la vidéo");
+    }
+
     // Le lecteur quitte l'interface : en pause, la page reprend sa forme et retourne dans sa fenêtre cachée.
     public async Task CacherLecteurAsync()
     {
         if (!LecteurAffiche) return;
+        if (Mini) await SortirMiniAsync();
         LecteurAffiche = false; Bloque = false;
         await PauseAsync();
         await ModeLecteurAsync(false);
@@ -478,7 +511,8 @@ sealed class PageCachee
           will-change: auto !important; perspective: none !important; container-type: normal !important; backdrop-filter: none !important; }
         #movie_player { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 2147483000 !important; background: #000 !important; }
         #movie_player .html5-video-container, #movie_player video.html5-main-video { width: 100vw !important; height: 100vh !important; left: 0 !important; top: 0 !important; object-fit: contain !important; }
-        ytd-masthead, #masthead-container, tp-yt-app-drawer, ytd-miniplayer { display: none !important; }
+        /* ytd-miniplayer reste rendu : en mini-lecteur (EntrerMiniAsync), #movie_player y est, et c'est lui que la vue montre */
+        ytd-masthead, #masthead-container, tp-yt-app-drawer { display: none !important; }
         /* toute l'interface du lecteur de YouTube : ce sont les commandes de CDX, sous la vidéo, qui le pilotent. Restent l'image, les sous-titres et le rond de chargement. */
         #movie_player .ytp-chrome-top, #movie_player .ytp-chrome-bottom, #movie_player .ytp-gradient-top, #movie_player .ytp-gradient-bottom,
         #movie_player .ytp-ce-element, #movie_player .ytp-endscreen-content, #movie_player .ytp-autonav-endscreen, #movie_player .ytp-autonav-endscreen-countdown-overlay,
@@ -629,7 +663,8 @@ sealed class PageCachee
           const pistes = f(() => (p.getOption('captions', 'tracklist', { includeAsr: true }) || []).map(x => ({ code: x.languageCode, nom: x.displayName || x.languageName || x.languageCode })), []);
           const piste = f(() => { const t = p.getOption('captions', 'track'); return t && t.languageCode ? t.languageCode : ''; }, '');
           const liste = f(() => p.getPlaylist(), null);
-          return { id: new URLSearchParams(location.search).get('v'), t: v ? Math.round(v.currentTime * 10) / 10 : null, duree: v && isFinite(v.duration) ? Math.round(v.duration) : null,
+          // l'identifiant d'après le lecteur : en mini-lecteur, l'adresse est celle de la page parcourue
+          return { id: f(() => p.getVideoData().video_id, null) || new URLSearchParams(location.search).get('v'), t: v ? Math.round(v.currentTime * 10) / 10 : null, duree: v && isFinite(v.duration) ? Math.round(v.duration) : null,
             pause: v ? v.paused : null, etat: f(() => p.getPlayerState(), null), charge: f(() => Math.round(p.getVideoLoadedFraction() * 1000) / 1000, 0),
             pub: !!(p && p.classList.contains('ad-showing')), muet: f(() => p.isMuted(), v ? v.muted : null), volume: f(() => p.getVolume(), null),
             vitesse: f(() => p.getPlaybackRate(), 1), vitesses: f(() => p.getAvailablePlaybackRates(), [1]),

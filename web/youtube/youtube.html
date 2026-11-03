@@ -31,6 +31,11 @@
     <div class="zone" id="zone" tabindex="-1">
       <div id="vue"></div>
     </div>
+    <!-- le mini-lecteur : la vidéo continue pendant qu'on parcourt YouTube (la vue native se pose sur #miniEcran) -->
+    <div class="mini" id="mini" hidden>
+      <div class="mini-ecran" id="miniEcran"></div>
+      <div class="bas"><span class="titre" id="miniTitre" title="Revenir à la vidéo"></span><button class="btn ic" id="miniRevenir" title="Revenir à la vidéo"></button><button class="btn ic" id="miniFermer" title="Fermer (la vidéo s'arrête)"></button></div>
+    </div>
     <!-- le bas : la platine, une seule bande (l'afficheur, puis le transport pendant qu'une vidéo est à l'écran) -->
     <div class="platine" id="platine">
       <div class="status" id="afficheur"><span class="orb" id="orb"></span><span class="ecran"><span class="tps" id="cTemps"></span><span class="st1" id="st1">Démarrage…</span><span class="st2" id="st2"></span></span></div>

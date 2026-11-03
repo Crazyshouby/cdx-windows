@@ -278,7 +278,17 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                 {
                     // un rectangle minuscule est une mise en page transitoire (la fenêtre change de taille) : on garde le précédent
                     if (I("w") <= 40 || I("h") <= 40) return;
-                    rectLecteur = new Rectangle(I("x"), I("y"), I("w"), I("h"));
+                    var rect = new Rectangle(I("x"), I("y"), I("w"), I("h"));
+                    if (r.TryGetProperty("mini", out var mi) && mi.ValueKind == JsonValueKind.True)
+                    {
+                        // le coin de l'interface (on parcourt YouTube) : la vidéo continue dans le mini-lecteur de YouTube
+                        if (!page.LecteurAffiche) return;
+                        if (!page.Mini && !await page.EntrerMiniAsync()) { await page.CacherLecteurAsync(); Envoyer(new { type = "mini", value = false }); return; }
+                        page.Placer(rect);
+                        return;
+                    }
+                    if (page.Mini) await page.SortirMiniAsync();   // de retour sur la fiche de la vidéo
+                    rectLecteur = rect;
                     await page.MontrerLecteurAsync(form, rectLecteur);
                 }
                 else { if (pleinEcran) PleinEcran(false); await page.CacherLecteurAsync(); }
@@ -322,6 +332,13 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
         try
         {
             if (n != demande && cmd != "yt.plus") return;   // une demande plus récente attend : celle-ci est dépassée
+            // quitter la vidéo pour parcourir YouTube : le mini-lecteur d'abord, sinon la navigation déchargerait la vidéo
+            if (cmd is "yt.accueil" or "yt.abonnements" or "yt.recherche" or "yt.chaine" or "yt.liste" && page.LecteurAffiche && !page.Mini)
+            {
+                bool m = await page.EntrerMiniAsync();
+                if (!m) await page.CacherLecteurAsync();
+                Envoyer(new { type = "mini", value = m });
+            }
             switch (cmd)
             {
                 case "yt.accueil":
@@ -357,6 +374,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                     if (liste != null && !Regex.IsMatch(liste, "^[A-Za-z0-9_-]{2,80}$")) liste = null;
                     int? index = liste != null && r.TryGetProperty("index", out var ix) && ix.TryGetInt32(out var ixn) && ixn >= 0 ? ixn : null;
                     Envoyer(new { type = "occupe", value = liste == null ? "Ouverture de la vidéo…" : "Ouverture de la vidéo dans la liste…" });
+                    if (page.Mini) { await page.SortirMiniAsync(); Envoyer(new { type = "mini", value = false }); }   // une autre vidéo : le mini-lecteur se referme
                     var f = await page.VideoAsync(id, liste, index);
                     if (f == null) { Erreur("La vidéo n'a pas répondu (voir youtube\\veille.log)."); break; }
                     Envoyer(new { type = "fiche", value = f });
@@ -690,12 +708,52 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                 }
             }
 
+            string idAvantAccueil = (await Etat()).GetProperty("id").GetString();
+            bool lectureAvant = page.LecteurAffiche;
+            if (lectureAvant)
+            {
+                // la vidéo doit jouer avant qu'on la quitte (celle ouverte par un lien de la page YouTube démarre parfois tard) : jusqu'à 10 s
+                await page.LireAsync();
+                for (int i = 0; i < 40; i++)
+                {
+                    var lv = JsonDocument.Parse(await page.EtatLecteurAsync()).RootElement;
+                    if (lv.GetProperty("t").ValueKind == JsonValueKind.Number && lv.GetProperty("t").GetDouble() > 0.5 && lv.GetProperty("pause").ValueKind == JsonValueKind.False) break;
+                    await Task.Delay(250);
+                }
+            }
             ok = await Demander(new { cmd = "yt.accueil" });
             var ea = await Etat();
             Verifier(ok && ea.GetProperty("vue").GetString() == "accueil" && (!page.Connecte || ea.GetProperty("n").GetInt32() > 0), $"retour à l'accueil par navigation interne : {ea.GetProperty("n").GetInt32()} vidéos");
+            if (lectureAvant && idAvantAccueil != null)
+            {
+                // le mini-lecteur : la vidéo continue, dans le coin de l'interface, pendant qu'on parcourt YouTube
+                for (int i = 0; i < 20 && !(page.Mini && page.BoundsDuLecteur.Width < 400); i++) await Task.Delay(250);
+                double Tm(JsonElement e) => e.GetProperty("t").ValueKind == JsonValueKind.Number ? e.GetProperty("t").GetDouble() : -1;
+                var m1 = JsonDocument.Parse(await page.EtatLecteurAsync()).RootElement;
+                await Task.Delay(2500);
+                var m2 = JsonDocument.Parse(await page.EtatLecteurAsync()).RootElement;
+                var em1 = await Etat();
+                Verifier(page.Mini && page.LecteurAffiche && page.HoteDuLecteur == form && page.BoundsDuLecteur.Width < 400 && em1.GetProperty("mini").GetBoolean()
+                    && m2.GetProperty("id").GetString() == idAvantAccueil && Tm(m2) > Tm(m1) + 1,
+                    $"en quittant la fiche, la vidéo continue dans le mini-lecteur : {page.BoundsDuLecteur}, {Tm(m1)} s → {Tm(m2)} s, id {m2.GetProperty("id").GetString()}");
+                // revenir à la vidéo : la fiche revient, le lecteur reprend sa taille, sans recharger la vidéo
+                await form.Web.CoreWebView2.ExecuteScriptAsync("document.getElementById('miniRevenir').click()");
+                for (int i = 0; i < 20 && (page.Mini || page.BoundsDuLecteur.Width < 400); i++) await Task.Delay(250);
+                var m3 = JsonDocument.Parse(await page.EtatLecteurAsync()).RootElement;
+                var em2 = await Etat();
+                Verifier(!page.Mini && em2.GetProperty("vue").GetString() == "video" && em2.GetProperty("id").GetString() == idAvantAccueil && page.BoundsDuLecteur.Width >= 400
+                    && m3.GetProperty("id").GetString() == idAvantAccueil && Tm(m3) >= Tm(m2) && m3.GetProperty("pause").ValueKind == JsonValueKind.False,
+                    $"retour du mini-lecteur à la fiche : {page.BoundsDuLecteur}, {Tm(m3)} s, toujours en lecture");
+                // de nouveau l'accueil, puis la croix du mini-lecteur : la vidéo s'arrête et le lecteur retourne dans la page cachée
+                ok = await Demander(new { cmd = "yt.accueil" });
+                for (int i = 0; i < 20 && !page.Mini; i++) await Task.Delay(250);
+                await Task.Delay(500);
+                await form.Web.CoreWebView2.ExecuteScriptAsync("document.getElementById('miniFermer').click()");
+            }
             for (int i = 0; i < 20 && (page.LecteurAffiche || page.HoteDuLecteur == form); i++) await Task.Delay(250);
             var l4 = JsonDocument.Parse(await page.EtatLecteurAsync()).RootElement;
-            Verifier(!page.LecteurAffiche && page.HoteDuLecteur != form && l4.GetProperty("pause").ValueKind != JsonValueKind.False, "en quittant la fiche, le lecteur est recaché et en pause");
+            Verifier(!page.LecteurAffiche && !page.Mini && page.HoteDuLecteur != form && l4.GetProperty("pause").ValueKind != JsonValueKind.False && !(await Etat()).GetProperty("mini").GetBoolean(),
+                "mini-lecteur fermé : le lecteur est recaché et en pause");
             if (ok && page.Connecte)
             {
                 ok = await Demander(new { cmd = "yt.plus", vue = "accueil" }, 20);

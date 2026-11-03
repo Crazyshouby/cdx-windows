@@ -30,6 +30,7 @@
   let recu = 0, derniereErreur = null;   // pour l'essai automatique
   let rectEnvoye = '';                   // le dernier rectangle du lecteur envoyé au programme
   let vueRecherche = lire('yt.recherche.vue') === 'vignettes' ? 'vignettes' : 'liste';
+  let mini = null;                       // le mini-lecteur : { fiche } de la vidéo qui continue pendant qu'on parcourt YouTube
 
   // ---------- l'afficheur (à gauche de la platine) ----------
   // Au repos, il dit l'état ; pendant une vidéo, il montre son temps et son titre, et un message le remplace quelques secondes.
@@ -38,9 +39,9 @@
     $('st1').textContent = texte;
     $('orb').className = 'orb' + (couleur ? ' ' + couleur : '') + (occupe ? ' pulse' : '');
     clearTimeout(minuteurMessage);
-    if (cur.vue === 'video') minuteurMessage = setTimeout(titreAfficheur, couleur === 'red' ? 8000 : 4000);
+    if (cur.vue === 'video' || mini) minuteurMessage = setTimeout(titreAfficheur, couleur === 'red' ? 8000 : 4000);
   }
-  function titreAfficheur() { if (cur.vue === 'video' && cur.fiche) { $('st1').textContent = cur.fiche.titre || ''; if (!occupe) $('orb').className = 'orb green'; } }
+  function titreAfficheur() { const f = cur.vue === 'video' ? cur.fiche : mini && mini.fiche; if (f) { $('st1').textContent = f.titre || ''; if (!occupe) $('orb').className = 'orb green'; } }
   function majEtat() {
     const b = etat.bloqueur ? etat.bloqueur : 'SANS bloqueur';
     const qui = etat.connecte ? 'connecté : ' + (etat.compte ? etat.compte.replace(/ \(.*\)$/, '') : 'compte Google') : 'non connecté';
@@ -172,9 +173,7 @@
     const enListe = cur.vue === 'recherche' && vueRecherche === 'liste' && cur.videos && cur.videos.length;
     $('zone').classList.toggle('fige', cur.vue === 'video');
     $('zone').classList.toggle('rl', !!enListe);
-    document.body.classList.toggle('lecture', cur.vue === 'video');
-    $('commandes').hidden = cur.vue !== 'video';
-    if (cur.vue !== 'video') { clearTimeout(minuteurMessage); $('cTemps').textContent = ''; }
+    majPlatine();
     if (pleinEcran && cur.vue !== 'video') cmd('pleinecran');   // on quitte la fiche : on quitte aussi le plein écran
     majEtat();
     if (cur.vue === 'attente') { z.innerHTML = '<div class="vide">Chargement de YouTube dans la page cachée…</div>'; placerLecteur(); return; }
@@ -206,6 +205,23 @@
     CdxFrame.title(cur.vue === 'accueil' ? 'YouTube' : 'YouTube — ' + titre);
     placerLecteur();
   }
+  // la platine : le transport pendant une vidéo, sur sa fiche ou dans le mini-lecteur ; le mini-lecteur hors de la fiche
+  function majPlatine() {
+    const enLecture = cur.vue === 'video' || !!mini, montrerMini = !!mini && cur.vue !== 'video' && cur.vue !== 'attente';
+    document.body.classList.toggle('lecture', enLecture);
+    document.body.classList.toggle('avec-mini', montrerMini);
+    $('commandes').hidden = !enLecture;
+    $('mini').hidden = !montrerMini;
+    if (montrerMini) { $('miniTitre').textContent = mini.fiche.titre || ''; $('miniTitre').title = 'Revenir à la vidéo : ' + (mini.fiche.titre || ''); }
+    if (!enLecture) { clearTimeout(minuteurMessage); $('cTemps').textContent = ''; }
+    else if (!occupe) titreAfficheur();
+  }
+  // quitter la fiche d'une vidéo qui est à l'écran : elle continue dans le mini-lecteur (le programme ouvre celui de YouTube)
+  function quitterFiche(vers) {
+    if (cur.vue === 'video' && vers && vers.vue !== 'video' && !mini && JSON.parse(rectEnvoye || '{}').visible && !(lecture && lecture.blocage)) mini = { fiche: cur.fiche };
+  }
+  function revenirVideo() { if (!mini) return; const f = mini.fiche; mini = null; aller({ vue: 'video', fiche: f }); }
+  function fermerMini() { if (!mini) return; mini = null; majPlatine(); placerLecteur(); statut('Mini-lecteur fermé', ''); }
 
   // ---------- VIDÉO : le mode cinéma ----------
   const secondes = s => s.split(':').reduce((a, x) => a * 60 + +x, 0);
@@ -278,6 +294,8 @@
     lire: svg('M2 1H3V9H2ZM3 2H4V8H3ZM4 3H5V7H4ZM5 3H6V7H5ZM6 4H7V6H6ZM7 4H8V6H7Z'),
     pause: svg('M2 1H4V9H2ZM6 1H8V9H6Z'),
     prec: svg('M1 1H3V9H1ZM3 5H4V5ZM4 4H5V6H4ZM5 3H6V7H5ZM6 2H7V8H6ZM7 1H9V9H7Z'),
+    agrandir: svg('M1 1H9V2H1ZM1 2H2V9H1ZM8 2H9V9H8ZM2 8H8V9H2ZM5 3H7V5H6V4H5ZM3 5H4V6H5V7H3Z'),
+    fermer: svg('M1 1H3V2H1ZM2 2H4V3H2ZM3 3H7V4H3ZM4 4H6V6H4ZM3 6H7V7H3ZM2 7H4V8H2ZM1 8H3V9H1ZM7 1H9V2H7ZM6 2H8V3H6ZM6 7H8V8H6ZM7 8H9V9H7Z'),
     suiv: svg('M7 1H9V9H7ZM1 1H3V9H1ZM3 2H4V8H3ZM4 3H5V7H4ZM5 4H6V6H5Z'),
     son: svg('M1 3H3V7H1ZM3 2H4V8H3ZM4 1H5V9H4ZM6 3H7V7H6ZM8 1H9V9H8Z'),
     muet: svg('M1 3H3V7H1ZM3 2H4V8H3ZM4 1H5V9H4ZM6 3H7V4H6ZM7 4H8V6H7ZM8 3H9V4H8ZM6 6H7V7H6ZM8 6H9V7H8Z'),
@@ -286,6 +304,7 @@
     reglages: svg('M4 0H6V2H4ZM4 8H6V10H4ZM0 4H2V6H0ZM8 4H10V6H8ZM1 1H3V3H1ZM7 1H9V3H7ZM1 7H3V9H1ZM7 7H9V9H7ZM3 2H7V3H3ZM2 3H8V7H2ZM3 7H7V8H3ZM4 4V6H6V4Z'),
   };
   $('cPrec').innerHTML = IC.prec; $('cLire').innerHTML = IC.lire; $('cSuiv').innerHTML = IC.suiv; $('cMuet').innerHTML = IC.son; $('cReglages').innerHTML = IC.reglages; $('cPlein').innerHTML = IC.plein;
+  $('miniRevenir').innerHTML = IC.agrandir; $('miniFermer').innerHTML = IC.fermer;
   const QUALITES = { highres: '4320p', hd2880: '2880p', hd2160: '2160p', hd1440: '1440p', hd1080: '1080p', hd720: '720p', large: '480p', medium: '360p', small: '240p', tiny: '144p', auto: 'Auto' };
   const temps = s => { if (s == null || !isFinite(s)) return '0:00'; s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
   const texteTemps = (t, d, pause) => `${pause ? '' : '▶ '}${temps(t)} / ${temps(d)}${pause ? ' · pause' : ''}`;
@@ -333,8 +352,8 @@
 
   function majCommandes(s) {
     lecture = s;
-    if (cur.vue !== 'video') return;
-    majBlocage(s.blocage || null);
+    if (cur.vue !== 'video' && !mini) return;
+    if (cur.vue === 'video') majBlocage(s.blocage || null);
     $('cLire').innerHTML = s.pause === false ? IC.pause : IC.lire;
     if (!glisse) { $('cPos').max = s.duree || 0; $('cPos').value = s.t || 0; $('cTemps').textContent = texteTemps(s.t, s.duree, s.pause !== false); remplir($('cPos')); }
     $('cPos').title = `Position (← →) · chargé : ${Math.round((s.charge || 0) * 100)} %`;
@@ -355,8 +374,16 @@
   });
   $('platine').addEventListener('click', e => {
     const c = e.target.closest('[data-c]');
-    if (c) { const a = c.dataset.c; if (a === 'muet') cmd('muet', !(lecture && lecture.muet)); else if (a === 'reglages') menuReglages(); else if (a === 'pleinecran') cmd('pleinecran'); else cmd(a); }
+    if (c) {
+      const a = c.dataset.c;
+      if (a === 'muet') cmd('muet', !(lecture && lecture.muet)); else if (a === 'reglages') menuReglages();
+      else if (a === 'pleinecran') { if (mini && cur.vue !== 'video') { revenirVideo(); setTimeout(() => cmd('pleinecran'), 500); } else cmd('pleinecran'); }
+      else cmd(a);
+      return;
+    }
+    if (e.target.closest('#afficheur') && mini && cur.vue !== 'video') revenirVideo();   // l'afficheur montre la vidéo du mini-lecteur : un clic y ramène
   });
+  $('miniTitre').onclick = revenirVideo; $('miniRevenir').onclick = revenirVideo; $('miniFermer').onclick = fermerMini;
   cdx.on('lecture', s => majCommandes(s));
   cdx.on('pleinecran', v => { pleinEcran = !!v; barreVisible = true; document.body.classList.toggle('plein', pleinEcran); document.body.classList.remove('sans-barre'); if (lecture) majCommandes(lecture); requestAnimationFrame(placerLecteur); });
   // en plein écran, le programme (qui voit la souris, même au-dessus de la vidéo) efface la barre après un moment sans mouvement, et la rappelle
@@ -368,6 +395,7 @@
   function placerLecteur() {
     const l = cur.vue === 'video' ? $('lecteur') : null;
     let m = { visible: false };
+    if (!l && mini && !$('mini').hidden) { const r = $('miniEcran').getBoundingClientRect(); m = { visible: true, mini: true, x: Math.round(r.left) + 1, y: Math.round(r.top) + 1, w: Math.round(r.width) - 2, h: Math.round(r.height) - 2 }; }
     if (l && pleinEcran) m = { visible: true, x: 0, y: 0, w: innerWidth, h: innerHeight - (barreVisible ? BARRE : 0) };   // plein écran : toute la fenêtre, moins la platine si elle est là
     else if (l) { const r = l.getBoundingClientRect(); m = { visible: true, x: Math.round(r.left) + 1, y: Math.round(r.top) + 1, w: Math.round(r.width) - 2, h: Math.round(r.height) - 2 }; }
     const cle = JSON.stringify(m);
@@ -392,15 +420,21 @@
 
   // ---------- navigation de l'interface ----------
   function aller(vue) {
+    quitterFiche(vue);
     if (cur.vue !== 'attente') pile.push(Object.assign({}, cur, { defil: $('zone').scrollTop, defilListe: $('rlist') ? $('rlist').scrollTop : 0 }));
     if (pile.length > 50) pile.shift();
     cur = vue; rendre(); $('zone').scrollTop = 0;
   }
   function retour() {
     if (!pile.length) return;
-    cur = pile.pop(); rendre(); $('zone').scrollTop = cur.defil || 0; if ($('rlist')) $('rlist').scrollTop = cur.defilListe || 0;
-    // revenir à une fiche : son lecteur doit rejouer cette vidéo-là (la page cachée a pu changer de vidéo entre-temps)
-    if (cur.vue === 'video') demander('yt.video', { id: cur.fiche.id, ...(cur.fiche.liste ? { liste: cur.fiche.liste.id } : {}) });
+    quitterFiche(pile[pile.length - 1]);
+    cur = pile.pop();
+    // revenir à la fiche de la vidéo du mini-lecteur : elle reprend sa place, sans être rechargée
+    const memeVideo = cur.vue === 'video' && mini && mini.fiche.id === cur.fiche.id;
+    if (cur.vue === 'video') mini = null;
+    rendre(); $('zone').scrollTop = cur.defil || 0; if ($('rlist')) $('rlist').scrollTop = cur.defilListe || 0;
+    // revenir à une autre fiche : son lecteur doit rejouer cette vidéo-là (la page cachée a pu changer de vidéo entre-temps)
+    if (cur.vue === 'video' && !memeVideo) demander('yt.video', { id: cur.fiche.id, ...(cur.fiche.liste ? { liste: cur.fiche.liste.id } : {}) });
   }
   function demander(cmd, args) {
     occupe = true; plusEnCours = cmd === 'yt.plus';
@@ -430,7 +464,14 @@
     else aller(nouvelle);
     statut(`${nouvelle.videos.length} éléments${m.pubs ? ` (${m.pubs} pub${m.pubs > 1 ? 's' : ''} retirée${m.pubs > 1 ? 's' : ''} des données)` : ''}`, 'green');
   });
+  // le programme a ouvert (ou n'a pas pu ouvrir) le mini-lecteur de YouTube avant de quitter la page de la vidéo
+  cdx.on('mini', v => {
+    if (v && !mini && cur.vue === 'video' && cur.fiche) mini = { fiche: cur.fiche };
+    else if (!v) mini = null;
+    majPlatine(); placerLecteur();
+  });
   cdx.on('fiche', (f, m) => {
+    if (m.spontanee && mini && cur.vue !== 'video') { mini.fiche = f; majPlatine(); return; }   // le mini-lecteur est passé à la vidéo suivante
     if (m.spontanee) {
       // le lecteur a changé de vidéo de lui-même : la fiche suit, si on la regarde encore
       if (cur.vue !== 'video' || cur.fiche.id === f.id) return;
@@ -438,6 +479,7 @@
       return;
     }
     occupe = false; recu++;
+    mini = null;   // une vidéo ouverte : le mini-lecteur s'est refermé (le programme l'a fait avant de l'ouvrir)
     if (cur.vue === 'video' && cur.fiche.id === f.id) { cur.fiche = f; rendre(); }   // la même fiche (retour) : remplacée sur place
     else aller({ vue: 'video', fiche: f });
     statut(f.liste ? `Liste « ${f.liste.titre} » : ${f.liste.index + 1} / ${f.liste.total}` : `${(f.suggestions || []).length} suggestions`, 'green');
@@ -523,7 +565,7 @@
     chaine: cur.chaine ? { id: cur.chaine.id, nom: cur.chaine.nom, onglets: (cur.chaine.onglets || []).map(o => ({ titre: o.titre, url: o.url, params: o.params, actif: o.actif })) } : null,
     entete: cur.entete || null,
     elements: (cur.videos || []).slice(0, 40).map(v => ({ id: v.id, genre: v.genre, listeId: v.listeId, index: v.index })),
-    lecteur: JSON.parse(rectEnvoye || '{}'), messages: cur.messages || [], plein: pleinEcran, commandes: !$('commandes').hidden,
+    lecteur: JSON.parse(rectEnvoye || '{}'), messages: cur.messages || [], plein: pleinEcran, commandes: !$('commandes').hidden, mini: !$('mini').hidden, miniId: mini ? mini.fiche.id : null,
     affichage: !$('commandes').hidden ? { temps: $('cTemps').textContent, pos: +$('cPos').value, max: +$('cPos').max, vol: +$('cVol').value, boutons: $('commandes').querySelectorAll('button, select').length } : null,
     barre: barreVisible, recouvert, menu: [...document.querySelectorAll('.menu[data-cdx] .menu-item')].map(x => x.innerText.trim()), compte: etat.compte || null, connecte: etat.connecte,
     texteVue: $('vue').innerText.slice(0, 400),
