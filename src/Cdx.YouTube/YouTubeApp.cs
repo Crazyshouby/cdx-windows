@@ -69,6 +69,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                         {
                             dernierBlocage = cle;
                             page.Bloquer(cle != null);
+                            DisposerPleinEcran();
                             Host.Log(cle == null ? "écran de YouTube disparu : la vidéo est de nouveau visible"
                                 : $"écran de YouTube à la place de la vidéo : {b.GetProperty("statut").GetString()} « {b.GetProperty("raison").GetString()} », boutons : {string.Join(", ", b.GetProperty("boutons").EnumerateArray().Select(y => y.GetString()))}");
                         }
@@ -128,8 +129,26 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
     {
         if (on == barreVisible) return;
         barreVisible = on;
-        Envoyer(new { type = "barre", value = on });   // la page efface ou remet la barre et renvoie le rectangle de la vidéo (toute la hauteur, ou moins la barre)
+        Envoyer(new { type = "barre", value = on });   // la page efface ou remet la barre
+        DisposerPleinEcran();
         await page.CurseurCacheAsync(!on);
+    }
+
+    // Plein écran : la vidéo occupe toute la fenêtre, toujours ; la page de l'interface, réduite à une bande de BarrePx en bas (la platine), passe DEVANT la
+    // vidéo quand la barre est visible et derrière quand elle s'efface (03/11/2026 : la barre ne doit plus réduire la vidéo). Un menu, un dialogue ou un
+    // écran de YouTube à la place de la vidéo : la page reprend toute la fenêtre (la vidéo s'efface alors, comme hors plein écran).
+    public const int BarrePx = 30;
+    void DisposerPleinEcran()
+    {
+        if (form == null) return;
+        var w = form.Web;
+        if (!pleinEcran) { if (w.Dock != DockStyle.Fill) w.Dock = DockStyle.Fill; page.AuDessus(); return; }
+        var cr = form.ClientRectangle;
+        page.Placer(cr);
+        if (page.Recouvert || page.Bloque) { w.Dock = DockStyle.Fill; w.BringToFront(); return; }
+        w.Dock = DockStyle.None;
+        w.Bounds = new Rectangle(0, cr.Height - BarrePx, cr.Width, BarrePx);
+        if (barreVisible) w.BringToFront(); else page.AuDessus();
     }
 
     // Notre plein écran : la fenêtre couvre l'écran ; la page passe en disposition « plein écran » (la vidéo et nos commandes en bas) et renvoie le
@@ -147,6 +166,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
             form.Bounds = Screen.FromControl(form).Bounds; form.TopMost = true;
         }
         else { form.TopMost = false; form.Bounds = boundsAvantPleinEcran; form.WindowState = etatAvantPleinEcran; }
+        DisposerPleinEcran();
         Host.Log("plein écran : " + (on ? "oui" : "non"));
     }
 
@@ -250,7 +270,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement.Clone();
             string cmd = r.GetProperty("cmd").GetString();
-            if (cmd == "win.overlay") { page.Recouvrir(r.TryGetProperty("on", out var on) && on.ValueKind == JsonValueKind.True); return; }
+            if (cmd == "win.overlay") { page.Recouvrir(r.TryGetProperty("on", out var on) && on.ValueKind == JsonValueKind.True); DisposerPleinEcran(); return; }
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             if (Host.CommonMessage(from, cmd, r)) return;
             _ = MessageAsync(cmd, r);
@@ -274,6 +294,13 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                 bool vis = r.TryGetProperty("visible", out var v) && v.ValueKind == JsonValueKind.True;
                 int I(string k) => r.TryGetProperty(k, out var x) && x.TryGetInt32(out var n) ? n : 0;
                 if (!pret || form == null) return;
+                if (vis && pleinEcran && r.TryGetProperty("plein", out var pl) && pl.ValueKind == JsonValueKind.True)
+                {
+                    // plein écran : la vidéo prend toute la fenêtre, la page n'est plus qu'une bande devant elle (DisposerPleinEcran)
+                    if (!page.LecteurAffiche) await page.MontrerLecteurAsync(form, form.ClientRectangle);
+                    DisposerPleinEcran();
+                    return;
+                }
                 if (vis)
                 {
                     // un rectangle minuscule est une mise en page transitoire (la fenêtre change de taille) : on garde le précédent
@@ -646,8 +673,11 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                     var ecran = Screen.FromControl(form).Bounds;
                     await Cmd(new { action = "pleinecran" });
                     for (int i = 0; i < 12 && page.BoundsDuLecteur.Width != ecran.Width; i++) await Task.Delay(250);
-                    Verifier(pleinEcran && form.Bounds == ecran && page.BoundsDuLecteur.Width == form.ClientSize.Width && page.BoundsDuLecteur.Height < form.ClientSize.Height && (await Etat()).GetProperty("plein").GetBoolean(),
-                        $"plein écran (nos commandes) : fenêtre {form.Bounds} (écran {ecran}), vidéo {page.BoundsDuLecteur}, nos commandes dessous ; la page : {(await Etat()).GetProperty("lecteur").GetRawText()}, plein {(await Etat()).GetProperty("plein")}, vue {await form.Web.CoreWebView2.ExecuteScriptAsync("innerWidth + ' x ' + innerHeight")}, style {await form.Web.CoreWebView2.ExecuteScriptAsync("(() => { const l = document.getElementById('lecteur'); const c = getComputedStyle(l); let p = l.parentElement, ch = []; while (p) { const s = getComputedStyle(p); if (s.transform !== 'none' || s.filter !== 'none' || s.contain !== 'none' || s.willChange !== 'auto' || s.containerType !== 'normal') ch.push((p.id || p.className) + ':' + s.transform + '/' + s.filter + '/' + s.contain + '/' + s.willChange + '/' + s.containerType); p = p.parentElement; } return [c.position, c.top, c.bottom, c.height, document.body.className, ch.join(' | ')].join(' ; '); })()")}");
+                    await Task.Delay(300);
+                    bool Devant() => form.Controls.GetChildIndex(form.Web) < form.Controls.GetChildIndex(page.VueDuLecteur);   // l'indice 0 est au premier plan
+                    bool Bande() => form.Web.Dock == DockStyle.None && form.Web.Bounds == new Rectangle(0, form.ClientSize.Height - BarrePx, form.ClientSize.Width, BarrePx);
+                    Verifier(pleinEcran && form.Bounds == ecran && page.BoundsDuLecteur.Size == form.ClientSize && Bande() && Devant() && (await Etat()).GetProperty("plein").GetBoolean(),
+                        $"plein écran (nos commandes) : fenêtre {form.Bounds} (écran {ecran}), vidéo {page.BoundsDuLecteur} sur toute la fenêtre, nos commandes devant elle ({form.Web.Bounds}, devant : {Devant()}) ; la page : {(await Etat()).GetProperty("lecteur").GetRawText()}, plein {(await Etat()).GetProperty("plein")}, vue {await form.Web.CoreWebView2.ExecuteScriptAsync("innerWidth + ' x ' + innerHeight")}, style {await form.Web.CoreWebView2.ExecuteScriptAsync("(() => { const l = document.getElementById('lecteur'); const c = getComputedStyle(l); let p = l.parentElement, ch = []; while (p) { const s = getComputedStyle(p); if (s.transform !== 'none' || s.filter !== 'none' || s.contain !== 'none' || s.willChange !== 'auto' || s.containerType !== 'normal') ch.push((p.id || p.className) + ':' + s.transform + '/' + s.filter + '/' + s.contain + '/' + s.willChange + '/' + s.containerType); p = p.parentElement; } return [c.position, c.top, c.bottom, c.height, document.body.className, ch.join(' | ')].join(' ; '); })()")}");
                     CaptureFenetre("3b-plein-ecran");
                     await Task.Delay(1500);
                     await page.CaptureAsync("plein-ecran-page");
@@ -663,13 +693,22 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                     // (Mesure faite avec la vraie souris : si on la bouge pendant l'essai, la barre reste, à juste titre.)
                     for (int i = 0; i < 32 && barreVisible; i++) await Task.Delay(250);
                     await Task.Delay(400);
-                    Verifier(!barreVisible && !(await Etat()).GetProperty("barre").GetBoolean() && page.BoundsDuLecteur.Height == form.ClientSize.Height,
-                        $"plein écran, souris immobile : barre effacée, vidéo {page.BoundsDuLecteur} sur toute la hauteur");
+                    Verifier(!barreVisible && !(await Etat()).GetProperty("barre").GetBoolean() && page.BoundsDuLecteur.Height == form.ClientSize.Height && !Devant(),
+                        $"plein écran, souris immobile : barre effacée (derrière la vidéo), vidéo {page.BoundsDuLecteur} sur toute la hauteur");
                     CaptureFenetre("3d-plein-ecran-sans-barre");
                     Activite();   // ce que fait un mouvement de la souris
                     await Task.Delay(600);
-                    Verifier(barreVisible && (await Etat()).GetProperty("barre").GetBoolean() && page.BoundsDuLecteur.Height == form.ClientSize.Height - 30,
-                        $"mouvement de la souris : barre revenue, vidéo {page.BoundsDuLecteur}");
+                    Verifier(barreVisible && (await Etat()).GetProperty("barre").GetBoolean() && page.BoundsDuLecteur.Height == form.ClientSize.Height && Bande() && Devant(),
+                        $"mouvement de la souris : barre revenue devant la vidéo, qui garde toute la hauteur ({page.BoundsDuLecteur})");
+                    // le menu de l'engrenage en plein écran : la page reprend toute la fenêtre pour l'afficher, puis redevient une bande
+                    await form.Web.CoreWebView2.ExecuteScriptAsync("document.getElementById('cReglages').click()");
+                    for (int i = 0; i < 12 && form.Web.Dock != DockStyle.Fill; i++) await Task.Delay(100);
+                    await Task.Delay(500);
+                    var emp = await Etat();
+                    bool menuPlein = form.Web.Dock == DockStyle.Fill && emp.GetProperty("menu").GetArrayLength() >= 3 && emp.GetProperty("recouvert").GetBoolean();
+                    await form.Web.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('.menu[data-cdx]').forEach(m => m.remove())");
+                    for (int i = 0; i < 12 && !Bande(); i++) await Task.Delay(100);
+                    Verifier(menuPlein && Bande() && page.BoundsDuLecteur.Size == form.ClientSize, $"plein écran : le menu de l'engrenage s'ouvre sur toute la fenêtre, puis la barre redevient une bande ({form.Web.Bounds})");
                     // la décision, sur des cas précis (sans bouger la vraie souris) : la fenêtre plein écran et un point hors d'elle (un autre écran)
                     var f = form.Bounds; var dedans = new Point(f.Left + f.Width / 2, f.Top + f.Height / 2); var surBarre = new Point(dedans.X, f.Bottom - 10);
                     var dehors = new Point(f.Right + 500, f.Top + 300); var court = TimeSpan.FromSeconds(1); var long_ = TimeSpan.FromSeconds(4);

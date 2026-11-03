@@ -497,6 +497,8 @@ sealed class PageCachee
     }
 
     public void Placer(Rectangle r) { if (LecteurAffiche) web.Bounds = r; }
+    public Control VueDuLecteur => web;
+    public void AuDessus() { if (LecteurAffiche) web.BringToFront(); }   // la vidéo devant la page de l'interface
 
     // Le style « lecteur seul » : #movie_player occupe toute la vue, le reste de la page de YouTube est dessous. YouTube recalcule la taille de la vidéo
     // à l'évènement resize.

@@ -318,11 +318,17 @@
   const temps = s => { if (s == null || !isFinite(s)) return '0:00'; s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; };
   const texteTemps = (t, d, pause) => `${pause ? '' : '▶ '}${temps(t)} / ${temps(d)}${pause ? ' · pause' : ''}`;
   let lecture = null, glisse = false, pleinEcran = false, barreVisible = true;
-  const BARRE = 30;   // hauteur de la platine en plein écran (youtube.css : body.plein .platine)
   const cmd = (action, valeur) => post('yt.cmd', valeur === undefined ? { action } : { action, valeur });
   // le menu de l'engrenage : vitesse, qualité, sous-titres (sous-menus, la valeur active cochée), d'après le dernier état du lecteur
   const nomVitesse = v => v === 1 ? 'Normale' : String(v).replace('.', ',') + '×';
-  function menuReglages() {
+  // en plein écran, la page n'est qu'une bande de la hauteur de la platine : elle demande d'abord toute la fenêtre (la vidéo s'efface le temps du menu)
+  const pageEntiere = () => new Promise(res => {
+    if (innerHeight > 100) { res(); return; }
+    const fin = () => { removeEventListener('resize', vu); clearTimeout(t); res(); }, vu = () => { if (innerHeight > 100) fin(); }, t = setTimeout(fin, 800);
+    addEventListener('resize', vu);
+  });
+  async function menuReglages() {
+    if (pleinEcran) { recouvrir(true); await pageEntiere(); }
     const s = lecture || {}, r = $('cReglages').getBoundingClientRect();
     const pistes = (s.pistes || []).map(p => [p.code, p.nom]);
     const piste = pistes.find(p => p[0] === s.piste);
@@ -405,7 +411,7 @@
     const l = cur.vue === 'video' ? $('lecteur') : null;
     let m = { visible: false };
     if (!l && mini && !$('mini').hidden) { const r = $('miniEcran').getBoundingClientRect(); m = { visible: true, mini: true, x: Math.round(r.left) + 1, y: Math.round(r.top) + 1, w: Math.round(r.width) - 2, h: Math.round(r.height) - 2 }; }
-    if (l && pleinEcran) m = { visible: true, x: 0, y: 0, w: innerWidth, h: innerHeight - (barreVisible ? BARRE : 0) };   // plein écran : toute la fenêtre, moins la platine si elle est là
+    if (l && pleinEcran) m = { visible: true, plein: true };   // plein écran : la vidéo prend toute la fenêtre, la page n'est plus qu'une bande devant elle (le programme la dispose)
     else if (l) { const r = l.getBoundingClientRect(); m = { visible: true, x: Math.round(r.left) + 1, y: Math.round(r.top) + 1, w: Math.round(r.width) - 2, h: Math.round(r.height) - 2 }; }
     const cle = JSON.stringify(m);
     if (cle === rectEnvoye) return;
@@ -418,6 +424,7 @@
   const recouvrir = on => { if (on !== recouvert) { recouvert = on; post('win.overlay', { on }); } };
   function surLaVideo() {
     const v = JSON.parse(rectEnvoye || '{}'); if (!v.visible) return false;
+    if (v.plein) return true;   // en plein écran, la page n'est qu'une bande : tout menu demande la fenêtre entière
     return [...document.querySelectorAll('.menu[data-cdx]')].some(m => { const r = m.getBoundingClientRect(); return r.left < v.x + v.w && r.right > v.x && r.top < v.y + v.h && r.bottom > v.y; });
   }
   function menu(items, x, y, titre) {
