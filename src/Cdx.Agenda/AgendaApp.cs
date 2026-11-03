@@ -10,16 +10,16 @@ namespace Cdx;
 // pour afficher quelque chose hors ligne. Réglages propres : agenda.json (agendas masqués).
 sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
 {
-    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
+    public HostForm? ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     string theme;
     readonly string root;
-    readonly IDisposable watch;
-    AgendaForm form;
-    CoreWebView2Environment env;
-    readonly HashSet<string> hidden = new();
+    readonly IDisposable? watch;   // null : thème imposé par --theme, pas de suivi de suite.json
+    AgendaForm? form;
+    CoreWebView2Environment? env;
+    readonly HashSet<string?> hidden = new();   // null possible : un identifiant absent (fichier ou page) y entre tel quel, sans effet
     JsonElement? calendars;              // la liste des agendas (calendarList), telle que Google la rend
     DateTime calendarsAt;
-    object lastEvents, lastTasks;        // ce qui a été envoyé en dernier (cache)
+    object? lastEvents, lastTasks;       // ce qui a été envoyé en dernier (cache) ; null : rien encore
     string lastFrom = "", lastTo = "";
     bool busy; string lastError = "";
     public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
@@ -28,7 +28,7 @@ sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
     static string CacheFile => Path.Combine(Host.DataDir, "agenda-cache.json");
     static readonly string[] Scopes = { GoogleAuth.ScopeCalendar, GoogleAuth.ScopeTasks };
 
-    public AgendaApp(string theme)
+    public AgendaApp(string? theme)
     {
         this.theme = theme ?? Suite.ReadAccent(); root = Host.FindWebRoot();
         _ = Anchor.Handle;
@@ -83,7 +83,9 @@ sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
         calendars = JsonDocument.Parse(d.RootElement.GetRawText()).RootElement; calendarsAt = DateTime.UtcNow;
         return calendars.Value;
     }
-    static string S(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : "";
+    static string S(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+    // Un identifiant manquant (page fautive) lève la même ArgumentNullException qu'Uri.EscapeDataString(null), que Fail affiche.
+    static string Esc(string? s) => Uri.EscapeDataString(s ?? throw new ArgumentNullException("stringToEscape"));
     static string S2(JsonElement e, string k, string k2) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Object ? S(v, k2) : "";
 
     async Task LoadEventsAsync(string from, string to)
@@ -99,7 +101,7 @@ sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
             string min = new DateTimeOffset(DateTime.Parse(from)).ToString("yyyy-MM-dd'T'HH:mm:ssK"), max = new DateTimeOffset(DateTime.Parse(to)).ToString("yyyy-MM-dd'T'HH:mm:ssK");
             foreach (var c in cals.Where(c => c.on))
             {
-                string page = null;
+                string? page = null;
                 do
                 {
                     using var d = await GoogleAuth.ApiAsync(HttpMethod.Get, $"/calendar/v3/calendars/{Uri.EscapeDataString(c.id)}/events?singleEvents=true&orderBy=startTime&maxResults=2500&timeMin={Uri.EscapeDataString(min)}&timeMax={Uri.EscapeDataString(max)}" + (page != null ? "&pageToken=" + Uri.EscapeDataString(page) : ""));
@@ -123,12 +125,12 @@ sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
 
     async Task SaveEventAsync(JsonElement r)
     {
-        string St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        string? St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         bool allDay = r.TryGetProperty("allDay", out var ad) && ad.ValueKind == JsonValueKind.True;
-        string cal = St("cal"), id = St("id");
-        if (string.IsNullOrEmpty(cal) || string.IsNullOrEmpty(St("title")) || string.IsNullOrEmpty(St("start")) || string.IsNullOrEmpty(St("end"))) { form?.Send(new { type = "error", text = "Il manque le titre, l'agenda ou les dates." }); return; }
+        string? cal = St("cal"), id = St("id"), title = St("title"), start = St("start"), end = St("end");
+        if (string.IsNullOrEmpty(cal) || string.IsNullOrEmpty(title) || string.IsNullOrEmpty(start) || string.IsNullOrEmpty(end)) { form?.Send(new { type = "error", text = "Il manque le titre, l'agenda ou les dates." }); return; }
         object When(string v) => allDay ? new { date = v } : new { dateTime = new DateTimeOffset(DateTime.Parse(v)).ToString("yyyy-MM-dd'T'HH:mm:ssK") };
-        var body = new Dictionary<string, object> { ["summary"] = St("title"), ["start"] = When(St("start")), ["end"] = When(St("end")), ["location"] = St("location") ?? "", ["description"] = St("description") ?? "" };
+        var body = new Dictionary<string, object> { ["summary"] = title, ["start"] = When(start), ["end"] = When(end), ["location"] = St("location") ?? "", ["description"] = St("description") ?? "" };
         try
         {
             if (string.IsNullOrEmpty(id)) { using var d = await GoogleAuth.ApiAsync(HttpMethod.Post, $"/calendar/v3/calendars/{Uri.EscapeDataString(cal)}/events", body); Host.Log("événement créé : " + St("title")); }
@@ -139,9 +141,9 @@ sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
         catch (Exception ex) { Fail("Enregistrement de l'événement", ex); }
     }
 
-    async Task DeleteEventAsync(string cal, string id)
+    async Task DeleteEventAsync(string? cal, string? id)
     {
-        try { using var d = await GoogleAuth.ApiAsync(HttpMethod.Delete, $"/calendar/v3/calendars/{Uri.EscapeDataString(cal)}/events/{Uri.EscapeDataString(id)}"); Host.Log("événement supprimé"); if (lastFrom.Length > 0) await LoadEventsAsync(lastFrom, lastTo); }
+        try { using var d = await GoogleAuth.ApiAsync(HttpMethod.Delete, $"/calendar/v3/calendars/{Esc(cal)}/events/{Esc(id)}"); Host.Log("événement supprimé"); if (lastFrom.Length > 0) await LoadEventsAsync(lastFrom, lastTo); }
         catch (Exception ex) { Fail("Suppression de l'événement", ex); }
     }
 
@@ -172,34 +174,34 @@ sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
 
     async Task TaskCommandAsync(string cmd, JsonElement r)
     {
-        string St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-        string list = St("list"), id = St("id"); if (string.IsNullOrEmpty(list)) return;
+        string? St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        string? list = St("list"), id = St("id"); if (string.IsNullOrEmpty(list)) return;
         try
         {
             switch (cmd)
             {
                 case "ag.task.add":
                 {
-                    if (string.IsNullOrWhiteSpace(St("title"))) return;
-                    var body = new Dictionary<string, object> { ["title"] = St("title").Trim() };
+                    string? title = St("title"); if (string.IsNullOrWhiteSpace(title)) return;
+                    var body = new Dictionary<string, object?> { ["title"] = title.Trim() };
                     if (St("due") is { Length: > 0 } due) body["due"] = due.Length == 10 ? due + "T00:00:00.000Z" : due;
                     using var d = await GoogleAuth.ApiAsync(HttpMethod.Post, $"/tasks/v1/lists/{Uri.EscapeDataString(list)}/tasks", body); break;
                 }
                 case "ag.task.toggle":
                 {
                     bool done = r.TryGetProperty("done", out var dv) && dv.ValueKind == JsonValueKind.True;
-                    var body = done ? new Dictionary<string, object> { ["status"] = "completed" } : new Dictionary<string, object> { ["status"] = "needsAction", ["completed"] = null };
-                    using var d = await GoogleAuth.ApiAsync(HttpMethod.Patch, $"/tasks/v1/lists/{Uri.EscapeDataString(list)}/tasks/{Uri.EscapeDataString(id)}", body); break;
+                    var body = done ? new Dictionary<string, object?> { ["status"] = "completed" } : new Dictionary<string, object?> { ["status"] = "needsAction", ["completed"] = null };
+                    using var d = await GoogleAuth.ApiAsync(HttpMethod.Patch, $"/tasks/v1/lists/{Uri.EscapeDataString(list)}/tasks/{Esc(id)}", body); break;
                 }
                 case "ag.task.edit":
                 {
-                    var body = new Dictionary<string, object>();
+                    var body = new Dictionary<string, object?>();
                     if (St("title") != null) body["title"] = St("title"); if (St("notes") != null) body["notes"] = St("notes");
-                    if (St("due") != null) body["due"] = St("due").Length == 0 ? null : St("due").Length == 10 ? St("due") + "T00:00:00.000Z" : St("due");
-                    using var d = await GoogleAuth.ApiAsync(HttpMethod.Patch, $"/tasks/v1/lists/{Uri.EscapeDataString(list)}/tasks/{Uri.EscapeDataString(id)}", body); break;
+                    if (St("due") is { } due) body["due"] = due.Length == 0 ? null : due.Length == 10 ? due + "T00:00:00.000Z" : due;
+                    using var d = await GoogleAuth.ApiAsync(HttpMethod.Patch, $"/tasks/v1/lists/{Uri.EscapeDataString(list)}/tasks/{Esc(id)}", body); break;
                 }
-                case "ag.task.delete": { using var d = await GoogleAuth.ApiAsync(HttpMethod.Delete, $"/tasks/v1/lists/{Uri.EscapeDataString(list)}/tasks/{Uri.EscapeDataString(id)}"); break; }
-                case "ag.list.add": { if (string.IsNullOrWhiteSpace(St("title"))) return; using var d = await GoogleAuth.ApiAsync(HttpMethod.Post, "/tasks/v1/users/@me/lists", new { title = St("title").Trim() }); break; }
+                case "ag.task.delete": { using var d = await GoogleAuth.ApiAsync(HttpMethod.Delete, $"/tasks/v1/lists/{Uri.EscapeDataString(list)}/tasks/{Esc(id)}"); break; }
+                case "ag.list.add": { string? title = St("title"); if (string.IsNullOrWhiteSpace(title)) return; using var d = await GoogleAuth.ApiAsync(HttpMethod.Post, "/tasks/v1/users/@me/lists", new { title = title.Trim() }); break; }
             }
             await LoadTasksAsync();
         }
@@ -212,7 +214,7 @@ sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
         busy = true; lastError = ""; PushState();
         try
         {
-            string err = await GoogleAuth.ConnectAsync(Scopes);
+            string? err = await GoogleAuth.ConnectAsync(Scopes);
             if (err != null) { lastError = err; Host.Log("Google : " + err); }
         }
         finally { busy = false; PushState(); }
@@ -226,19 +228,20 @@ sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
         {
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
-            string cmd = r.GetProperty("cmd").GetString();
-            string St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            string cmd = r.GetProperty("cmd").GetString() ?? throw new FormatException("cmd null");   // rattrapé plus bas, comme l'était le déréférencement
+            string? St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             switch (cmd)
             {
                 case "ag.ready":
                     PushState();
-                    if (lastEvents != null) from.Send(JsonSerializer.Deserialize<Dictionary<string, object>>(JsonSerializer.Serialize(lastEvents)).Concat(new[] { new KeyValuePair<string, object>("type", "events"), new("fresh", false) }).ToDictionary(k => k.Key, k => k.Value));
-                    if (lastTasks != null) from.Send(JsonSerializer.Deserialize<Dictionary<string, object>>(JsonSerializer.Serialize(lastTasks)).Concat(new[] { new KeyValuePair<string, object>("type", "tasks"), new("fresh", false) }).ToDictionary(k => k.Key, k => k.Value));
+                    // « ! » : lastEvents et lastTasks ne sont pas null ici, et un objet non null ne se sérialise jamais en « null ».
+                    if (lastEvents != null) from.Send(JsonSerializer.Deserialize<Dictionary<string, object?>>(JsonSerializer.Serialize(lastEvents))!.Concat(new[] { new KeyValuePair<string, object?>("type", "events"), new("fresh", false) }).ToDictionary(k => k.Key, k => k.Value));
+                    if (lastTasks != null) from.Send(JsonSerializer.Deserialize<Dictionary<string, object?>>(JsonSerializer.Serialize(lastTasks))!.Concat(new[] { new KeyValuePair<string, object?>("type", "tasks"), new("fresh", false) }).ToDictionary(k => k.Key, k => k.Value));
                     break;
                 case "ag.connect": await ConnectAsync(); break;
                 case "ag.disconnect": await GoogleAuth.DisconnectAsync(); lastEvents = null; lastTasks = null; calendars = null; SaveCache(); PushState(); break;
-                case "ag.load": await LoadEventsAsync(St("from"), St("to")); break;
+                case "ag.load": await LoadEventsAsync(St("from") ?? "", St("to") ?? ""); break;   // absente, une date échoue à la lecture comme avant (Fail)
                 case "ag.tasks": await LoadTasksAsync(); break;
                 case "ag.event.save": await SaveEventAsync(r); break;
                 case "ag.event.delete": await DeleteEventAsync(St("cal"), St("id")); break;
