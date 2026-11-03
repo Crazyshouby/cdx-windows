@@ -24,7 +24,7 @@ static class Veille
         Host.Log($"veille [{genre}] {texte}");
     }
 
-    public static void GarderBrut(string nom, string json)
+    public static void GarderBrut(string nom, string? json)   // null : fichier vide
     {
         try { Directory.CreateDirectory(YtDonnees.Brut); File.WriteAllText(Path.Combine(YtDonnees.Brut, $"{DateTime.Now:yyyyMMdd-HHmmss}-{nom}.json"), json); } catch { }
     }

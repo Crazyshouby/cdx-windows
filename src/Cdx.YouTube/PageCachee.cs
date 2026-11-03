@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -21,22 +22,22 @@ sealed class PageCachee
 
     readonly Form fenetre = new() { Text = "YouTube (page cachée) — CDX-YouTube", ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Size = new Size(1280, 800), Location = new Point(-20000, -20000) };
     readonly WebView2 web = new() { Dock = DockStyle.Fill };
-    CoreWebView2Environment env;
-    CoreWebView2 core;
+    CoreWebView2Environment? env;
+    CoreWebView2 core = null!;   // « null! » : posé par DemarrerAsync, que YouTubeApp appelle avant toute autre méthode (MontrerLecteurAsync, EntrerMiniAsync et EnPleinEcran testent encore null)
     readonly Extraction mode;
     readonly bool visible, muet;
     bool crochetPose, enConnexion;
-    TaskCompletionSource<bool> navigation;
+    TaskCompletionSource<bool>? navigation;   // null avant la première navigation
 
     public bool Connecte { get; private set; }
-    public string Compte { get; private set; }        // « Nom (@pseudo) » du compte connecté, lu dans le menu de l'avatar
+    public string? Compte { get; private set; }       // « Nom (@pseudo) » du compte connecté, lu dans le menu de l'avatar
     readonly Dictionary<string, string> pseudos = new();   // id de chaîne → @pseudo (YouTube réécrit /channel/<id>/… en /@pseudo/…)
-    public string Bloqueur { get; private set; }
-    public event Action<string> EtatChange;           // texte pour l'interface (session, bloqueur)
-    public event Action<Liste, string> SuiteRecue;    // une suite de liste arrivée (défilement) : (liste, genre browse|search)
-    public event Action ConnexionTerminee;
-    public event Action<Fiche> FicheSpontanee;        // le lecteur est passé seul à une autre vidéo (lecture automatique, écran de fin) : sa fiche
-    public event Action<bool> PleinEcran;             // le lecteur de YouTube demande (ou quitte) le plein écran
+    public string? Bloqueur { get; private set; }     // null : sans bloqueur
+    public event Action<string?>? EtatChange;         // texte pour l'interface (session, bloqueur)
+    public event Action<Liste, string>? SuiteRecue;   // une suite de liste arrivée (défilement) : (liste, genre browse|search)
+    public event Action? ConnexionTerminee;
+    public event Action<Fiche>? FicheSpontanee;       // le lecteur est passé seul à une autre vidéo (lecture automatique, écran de fin) : sa fiche
+    public event Action<bool>? PleinEcran;            // le lecteur de YouTube demande (ou quitte) le plein écran
     public readonly Dictionary<string, int> Recues = new() { ["csharp"] = 0, ["fetch"] = 0, ["ytInitialData"] = 0, ["page"] = 0, ["echecs"] = 0 };
 
     // muet : l'essai automatique lit les vidéos sans le son
@@ -117,7 +118,7 @@ sealed class PageCachee
     // Les données de la page chargée par Navigate() (le premier affichage seulement) : elles sont dans le HTML (ytInitialData), pas dans une réponse youtubei.
     async Task<Liste> ListeInitialeAsync()
     {
-        string brut = null;
+        string? brut = null;
         for (int i = 0; i < 40 && string.IsNullOrEmpty(brut); i++)
         {
             var r = await core.ExecuteScriptAsync("window.ytInitialData ? JSON.stringify(window.ytInitialData) : ''");
@@ -196,7 +197,7 @@ sealed class PageCachee
         if (enConnexion) { fenetre.Activate(); return; }
         await CacherLecteurAsync();
         enConnexion = true;
-        var ecran = Screen.PrimaryScreen.WorkingArea;
+        var ecran = Screen.PrimaryScreen!.WorkingArea;   // « ! » : une session ouverte a toujours un écran principal
         fenetre.Size = new Size(Math.Min(1000, ecran.Width - 80), Math.Min(760, ecran.Height - 80));
         fenetre.Location = new Point(ecran.X + (ecran.Width - fenetre.Width) / 2, ecran.Y + (ecran.Height - fenetre.Height) / 2);
         fenetre.ShowInTaskbar = true; fenetre.Text = "Connexion au compte Google — CDX-YouTube (fermer pour annuler)";
@@ -238,7 +239,7 @@ sealed class PageCachee
     // Une demande en attente : les genres de réponse youtubei qui la satisfont, un filtre sur la réponse, et l'adresse de la page attendue (secours par la page).
     sealed class Attente
     {
-        public string[] Genres; public Func<JsonElement, bool> Filtre; public Func<string, bool> Adresse;
+        public required string[] Genres; public required Func<JsonElement, bool> Filtre; public Func<string, bool>? Adresse;   // Adresse null : pas de secours par la page
         public TaskCompletionSource<(string json, string par)> Tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
     readonly List<Attente> attentes = new();
@@ -259,7 +260,7 @@ sealed class PageCachee
     const string DonneesPage = "JSON.stringify(document.querySelector('ytd-page-manager').getCurrentData().response)";
 
     // Déclenche la navigation et attend : la réponse youtubei (côté C#, ou crochet fetch), ou à défaut la page affichée quand elle a l'adresse attendue.
-    async Task<string> AttendreAsync(Attente a, Func<Task<bool>> declencher, int secondes = 15)
+    async Task<string?> AttendreAsync(Attente a, Func<Task<bool>> declencher, int secondes = 15)
     {
         lock (attentes) attentes.Add(a);
         try
@@ -270,11 +271,12 @@ sealed class PageCachee
             {
                 if (await Task.WhenAny(a.Tcs.Task, Task.Delay(400)) == a.Tcs.Task) return a.Tcs.Task.Result.json;
                 if (a.Adresse == null) continue;
-                string url = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync(AdressePage));
+                string? url = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync(AdressePage));
                 if (string.IsNullOrEmpty(url) || !a.Adresse(url)) continue;
                 // la page est arrivée ; la réponse réseau, s'il y en a une, arrive d'habitude avant : on lui laisse un instant
                 if (await Task.WhenAny(a.Tcs.Task, Task.Delay(300)) == a.Tcs.Task) return a.Tcs.Task.Result.json;
-                string json = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync(DonneesPage));
+                string? json = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync(DonneesPage));
+                if (json == null) continue;   // la page a changé entre les deux lectures (le script a échoué) : on attend encore
                 using var doc = JsonDocument.Parse(json);
                 if (!a.Filtre(YtLecture.Normaliser(doc.RootElement))) continue;
                 Recues["page"]++;
@@ -290,14 +292,14 @@ sealed class PageCachee
         finally { lock (attentes) attentes.Remove(a); }
     }
 
-    public Task<Liste> AccueilAsync() => FilAsync("FEwhat_to_watch", "/", 3854, "accueil");
-    public Task<Liste> AbonnementsAsync() => FilAsync("FEsubscriptions", "/feed/subscriptions", 96368, "abonnements");
+    public Task<Liste?> AccueilAsync() => FilAsync("FEwhat_to_watch", "/", 3854, "accueil");
+    public Task<Liste?> AbonnementsAsync() => FilAsync("FEsubscriptions", "/feed/subscriptions", 96368, "abonnements");
 
     // Une page « browse » de YouTube (accueil, abonnements), comme un clic sur l'entrée du menu de gauche.
-    async Task<Liste> FilAsync(string browseId, string url, int rootVe, string quoi)
+    async Task<Liste?> FilAsync(string browseId, string url, int rootVe, string quoi)
     {
         var a = new Attente { Genres = new[] { "browse" }, Filtre = r => !EstSuite(r) && r.ToString().Contains(browseId), Adresse = u => u == url };
-        string brut = await AttendreAsync(a, () => NaviguerAsync(new
+        string? brut = await AttendreAsync(a, () => NaviguerAsync(new
         {
             commandMetadata = new { webCommandMetadata = new { url, webPageType = "WEB_PAGE_TYPE_BROWSE", rootVe, apiUrl = "/youtubei/v1/browse" } },
             browseEndpoint = new { browseId },
@@ -305,7 +307,7 @@ sealed class PageCachee
         return Liste(quoi, brut);
     }
 
-    public async Task<Liste> RechercheAsync(string q)
+    public async Task<Liste?> RechercheAsync(string q)
     {
         string url = "/results?search_query=" + Uri.EscapeDataString(q).Replace("%20", "+");
         var a = new Attente
@@ -313,7 +315,7 @@ sealed class PageCachee
             Genres = new[] { "search" }, Filtre = r => !EstSuite(r),
             Adresse = u => u.StartsWith("/results?") && System.Web.HttpUtility.ParseQueryString(u[9..])["search_query"] == q,
         };
-        string brut = await AttendreAsync(a, () => NaviguerAsync(new
+        string? brut = await AttendreAsync(a, () => NaviguerAsync(new
         {
             commandMetadata = new { webCommandMetadata = new { url, webPageType = "WEB_PAGE_TYPE_SEARCH", rootVe = 4724 } },
             searchEndpoint = new { query = q },
@@ -322,7 +324,7 @@ sealed class PageCachee
     }
 
     // Une vidéo, seule ou dans une liste (liste de lecture : elle est lue dans l'ordre de la liste ; mix « RD… » : YouTube l'enchaîne).
-    public async Task<Fiche> VideoAsync(string id, string liste = null, int? index = null)
+    public async Task<Fiche?> VideoAsync(string id, string? liste = null, int? index = null)
     {
         // la fiche vient de « next », ou de « get_watch » (lecteur + fiche en une seule réponse, vu le 02/11/2026) ; YtLecture.Normaliser fait le tri
         var a = new Attente { Genres = new[] { "next", "get_watch" }, Filtre = r => YtLecture.IdDeFiche(r) == id, Adresse = u => u.StartsWith("/watch?") && u.Contains("v=" + id) && (liste == null || u.Contains("list=" + liste)) };
@@ -330,7 +332,7 @@ sealed class PageCachee
         string url = "/watch?v=" + id;
         if (liste != null) { we["playlistId"] = liste; url += "&list=" + liste; }
         if (liste != null && index != null) { we["index"] = index.Value; url += "&index=" + (index.Value + 1); }
-        string brut = await AttendreAsync(a, () => NaviguerAsync(new
+        string? brut = await AttendreAsync(a, () => NaviguerAsync(new
         {
             commandMetadata = new { webCommandMetadata = new { url, webPageType = "WEB_PAGE_TYPE_WATCH", rootVe = 3832 } },
             watchEndpoint = we,
@@ -345,7 +347,7 @@ sealed class PageCachee
     }
 
     // Une chaîne, sur un onglet : par défaut « Vidéos » (params bien connus, la réponse contient de toute façon la liste des onglets avec les leurs).
-    public async Task<(Chaine chaine, Liste liste)> ChaineAsync(string id, string url = null, string param = null)
+    public async Task<(Chaine? chaine, Liste? liste)> ChaineAsync(string id, string? url = null, string? param = null)
     {
         url ??= "/channel/" + id + "/videos"; param ??= "EgZ2aWRlb3PyBgQKAjoA";
         string suffixe = url[url.LastIndexOf('/')..];
@@ -357,7 +359,7 @@ sealed class PageCachee
         };
         var be = new Dictionary<string, object> { ["browseId"] = id };
         if (!string.IsNullOrEmpty(param)) be["params"] = param;
-        string brut = await AttendreAsync(a, () => NaviguerAsync(new
+        string? brut = await AttendreAsync(a, () => NaviguerAsync(new
         {
             commandMetadata = new { webCommandMetadata = new { url, webPageType = "WEB_PAGE_TYPE_CHANNEL", rootVe = 3611, apiUrl = "/youtubei/v1/browse" } },
             browseEndpoint = be,
@@ -371,10 +373,10 @@ sealed class PageCachee
     }
 
     // La page d'une liste de lecture (browseId « VL » + identifiant de la liste).
-    public async Task<(EnteteListe entete, Liste liste)> ListeAsync(string id)
+    public async Task<(EnteteListe? entete, Liste? liste)> ListeAsync(string id)
     {
         var a = new Attente { Genres = new[] { "browse" }, Filtre = r => !EstSuite(r) && r.GetRawText().Contains("\"VL" + id + "\""), Adresse = u => u.StartsWith("/playlist?list=" + id) };
-        string brut = await AttendreAsync(a, () => NaviguerAsync(new
+        string? brut = await AttendreAsync(a, () => NaviguerAsync(new
         {
             commandMetadata = new { webCommandMetadata = new { url = "/playlist?list=" + id, webPageType = "WEB_PAGE_TYPE_PLAYLIST", rootVe = 5754, apiUrl = "/youtubei/v1/browse" } },
             browseEndpoint = new { browseId = "VL" + id },
@@ -395,7 +397,7 @@ sealed class PageCachee
     {
         if (!Connecte) { Compte = null; return; }
         var a = new Attente { Genres = new[] { "compte" }, Filtre = _ => true };
-        string brut = await AttendreAsync(a, async () =>
+        string? brut = await AttendreAsync(a, async () =>
             await core.ExecuteScriptAsync("(() => { const b = document.querySelector('#avatar-btn, ytd-topbar-menu-button-renderer button[aria-label]'); if (!b) return false; b.click(); return true; })()") == "true", 10);
         await core.ExecuteScriptAsync("(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })); const d = document.querySelector('tp-yt-iron-dropdown:not([aria-hidden=true]) ytd-multi-page-menu-renderer'); if (d) document.querySelector('#avatar-btn')?.click(); })()");
         if (brut == null) { Host.Log("compte : menu de l'avatar sans réponse"); return; }
@@ -422,12 +424,12 @@ sealed class PageCachee
 
     public async Task<int> NombreDeCookiesAsync() => (await core.CookieManager.GetCookiesAsync("https://www.youtube.com")).Count;
 
-    string idFiche;   // la vidéo dont la fiche est affichée (pour reconnaître un changement de vidéo fait par le lecteur lui-même)
+    string? idFiche;   // la vidéo dont la fiche est affichée (pour reconnaître un changement de vidéo fait par le lecteur lui-même)
 
     // ---------- le lecteur dans la fenêtre de l'interface ----------
 
     public bool LecteurAffiche { get; private set; }
-    public Control HoteDuLecteur => web.Parent;
+    public Control? HoteDuLecteur => web.Parent;
     public Rectangle BoundsDuLecteur => web.Bounds;
 
     // Pose le contrôle WebView2 de la page dans `hote` (la fenêtre de l'interface), sur `r` (pixels de la fenêtre), au-dessus de la page de l'interface.
@@ -637,7 +639,7 @@ sealed class PageCachee
     // Chaque requête player / get_watch d'une de ces vidéos reçoit donc contentCheckOk et racyCheckOk, comme le fait la commande du bouton de YouTube.
     readonly HashSet<string> accords = new();
 
-    void AjouterAccord(object s, CoreWebView2WebResourceRequestedEventArgs e)
+    void AjouterAccord(object? s, CoreWebView2WebResourceRequestedEventArgs e)
     {
         try
         {
@@ -692,7 +694,7 @@ sealed class PageCachee
         """;
 
     // Une commande des boutons de l'interface, passée à l'API du lecteur de YouTube. Les valeurs viennent de la page de l'interface : vérifiées par l'appelant.
-    public async Task<string> CommandeAsync(string action, JsonElement valeur)
+    public async Task<string?> CommandeAsync(string action, JsonElement valeur)
     {
         string v = valeur.ValueKind == JsonValueKind.Undefined ? "null" : valeur.GetRawText();
         string js = "((a, v) => { const p = document.getElementById('movie_player'); if (!p || !p.playVideo) return 'pas de lecteur';"
@@ -718,13 +720,13 @@ sealed class PageCachee
     // YouTube demande le plein écran (double-clic sur la vidéo, touche F) : on le lui refuse (il remplirait la vue sans nos commandes) et c'est notre plein écran
     // qui bascule ; Échap dans le lecteur le quitte.
     public async Task QuitterPleinEcranYouTubeAsync() { try { await core.ExecuteScriptAsync("document.fullscreenElement && document.exitFullscreen()"); } catch { } }
-    public event Action<string> Touche;   // Échap, F11 frappées dans le lecteur
+    public event Action<string>? Touche;   // Échap, F11 frappées dans le lecteur
 
     // La suite d'une liste (accueil ou recherche) : on fait défiler la page cachée jusqu'en bas, YouTube demande la suite comme pour un vrai défilement.
-    public async Task<Liste> PlusAsync(string genre)
+    public async Task<Liste?> PlusAsync(string genre)
     {
         var a = new Attente { Genres = new[] { genre }, Filtre = EstSuite };
-        string brut = await AttendreAsync(a, async () =>
+        string? brut = await AttendreAsync(a, async () =>
         {
             await core.ExecuteScriptAsync("window.scrollTo(0, document.documentElement.scrollHeight)");
             return true;
@@ -736,7 +738,8 @@ sealed class PageCachee
     // onResponseReceivedCommands, mais pour une commande publicitaire : la présence de la clé ne suffit pas.)
     static bool EstSuite(JsonElement r) => YtLecture.EstSuite(r);
 
-    Liste Liste(string quoi, string brut)
+    [return: NotNullIfNotNull(nameof(brut))]
+    Liste? Liste(string quoi, string? brut)
     {
         if (brut == null) return null;
         using var doc = JsonDocument.Parse(brut);
@@ -748,18 +751,18 @@ sealed class PageCachee
 
     // ---------- réception des réponses ----------
 
-    static string GenreDe(string uri)
+    static string? GenreDe(string? uri)
     {
         if (!Uri.TryCreate(uri, UriKind.Absolute, out var u) || u.Host != "www.youtube.com") return null;
         return u.AbsolutePath switch { "/youtubei/v1/browse" => "browse", "/youtubei/v1/search" => "search", "/youtubei/v1/next" => "next", "/youtubei/v1/get_watch" => "get_watch", "/youtubei/v1/account/account_menu" => "compte", _ => null };
     }
 
     // Côté C# : WebView2 nous montre chaque réponse ; on lit le corps de celles qui nous intéressent.
-    async void RecuParCSharp(object s, CoreWebView2WebResourceResponseReceivedEventArgs e)
+    async void RecuParCSharp(object? s, CoreWebView2WebResourceResponseReceivedEventArgs e)
     {
         if (Trace && e.Request.Uri.Contains("youtube.com/") && !Regex.IsMatch(e.Request.Uri, @"\.(js|css|png|jpg|webp|woff2?|svg|ico)(\?|$)|/s/|/generate_204|/api/stats|/log_event|/ptracking|/pagead"))
             Host.Log($"   trace {e.Request.Method} {e.Response.StatusCode} {Court(e.Request.Uri)}");
-        string genre = GenreDe(e.Request.Uri);
+        string? genre = GenreDe(e.Request.Uri);
         if (genre == null || e.Request.Method != "POST") return;
         try
         {
@@ -781,10 +784,10 @@ sealed class PageCachee
         {
             using var d = JsonDocument.Parse(e.WebMessageAsJson);
             if (!d.RootElement.TryGetProperty("cdx", out var c) || c.GetString() != "yt") return;
-            string genre = GenreDe(d.RootElement.GetProperty("url").GetString());
+            string? genre = GenreDe(d.RootElement.GetProperty("url").GetString());
             if (genre == null) return;
             Recues["fetch"]++;
-            Distribuer(genre, d.RootElement.GetProperty("json").GetString(), "fetch");
+            Distribuer(genre, d.RootElement.GetProperty("json").GetString() ?? "", "fetch");   // le crochet envoie toujours un texte ; null, la réponse serait notée illisible, comme avant
         }
         catch (Exception ex) { Host.Log("crochet fetch : message illisible : " + ex.Message); }
     }
@@ -877,7 +880,7 @@ sealed class PageCachee
             {
                 // une vidéo : aussi ce que dit son lecteur (playabilityStatus) et l'écran d'avertissement de YouTube (âge, contenu sensible), s'il y en a un
                 await Task.Delay(4000);
-                string sonde = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync("""
+                string? sonde = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync("""
                     JSON.stringify((() => { const p = document.getElementById('movie_player'); let pr = null; try { pr = p.getPlayerResponse(); } catch (e) {}
                       const ecr = [...document.querySelectorAll('#error-screen, yt-playability-error-supported-renderers, ytd-player-error-message-renderer')];
                       return { playability: pr && pr.playabilityStatus, videoId: pr && pr.videoDetails && pr.videoDetails.videoId,

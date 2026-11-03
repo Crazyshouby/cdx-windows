@@ -17,14 +17,14 @@ static class Ubol
     static string Dossier => Path.Combine(YtDonnees.Extensions, "uBOLite");
     static string Etat => Path.Combine(YtDonnees.Extensions, "ubol.json");
 
-    sealed class EtatUbol { public string version { get; set; } public string id { get; set; } public DateTime verifie { get; set; } }
+    sealed class EtatUbol { public string? version { get; set; } public string? id { get; set; } public DateTime verifie { get; set; } }   // null : pas encore installé, ou identifiant oublié
 
     // Vrai quand l'extension vient d'être ajoutée au profil pendant ce lancement (installation, mise à jour, changement de dossier) : constaté le 02/11/2026,
     // elle laisse alors passer les encarts publicitaires de toute la session ; au lancement suivant, plus rien. Voir PageCachee.DemarrerAsync.
     public static bool VientDEtreAjoute;
 
     // Appelé avant la première navigation de la page cachée. Ne lève jamais : sans bloqueur, la page marche quand même (et le journal le dit).
-    public static async Task<string> PreparerAsync(CoreWebView2Profile profil, bool forcerVerification = false)
+    public static async Task<string?> PreparerAsync(CoreWebView2Profile profil, bool forcerVerification = false)
     {
         var e = Lire();
         try
@@ -67,18 +67,18 @@ static class Ubol
         }
     }
 
-    static async Task<(string tag, string url)> DerniereAsync()
+    static async Task<(string? tag, string? url)> DerniereAsync()
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cdx-youtube");
         using var doc = JsonDocument.Parse(await http.GetStringAsync(Api));
-        string tag = doc.RootElement.GetProperty("tag_name").GetString();
+        string? tag = doc.RootElement.GetProperty("tag_name").GetString();
         foreach (var a in doc.RootElement.GetProperty("assets").EnumerateArray())
             if (a.GetProperty("name").GetString() is { } n && n.EndsWith(".chromium.zip")) return (tag, a.GetProperty("browser_download_url").GetString());
         throw new Exception("aucune archive Chromium dans la publication " + tag);
     }
 
-    static async Task DeplierAsync(string url)
+    static async Task DeplierAsync(string? url)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("cdx-youtube");
@@ -96,7 +96,7 @@ static class Ubol
                 if (!x.FullName.StartsWith(tete) || x.FullName.EndsWith("/")) continue;
                 string plein = Path.GetFullPath(Path.Combine(Dossier, x.FullName[tete.Length..]));
                 if (!plein.StartsWith(Dossier + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;   // chemin qui sort du dossier : ignoré
-                Directory.CreateDirectory(Path.GetDirectoryName(plein)); x.ExtractToFile(plein, true);
+                Directory.CreateDirectory(Path.GetDirectoryName(plein)!); x.ExtractToFile(plein, true);   // « ! » : plein est un fichier sous Dossier (vérifié juste au-dessus), il a donc un dossier parent
             }
             if (!File.Exists(Path.Combine(Dossier, "manifest.json"))) throw new Exception("l'archive ne contient pas de manifest.json");
         }
@@ -104,7 +104,7 @@ static class Ubol
     }
 
     // Toute autre copie d'uBlock dans le profil (version précédente, ou celle d'un profil repris de l'étape 1, chargée depuis un autre dossier) est retirée.
-    static async Task RetirerAsync(CoreWebView2Profile profil, EtatUbol e, string garder = null)
+    static async Task RetirerAsync(CoreWebView2Profile profil, EtatUbol e, string? garder = null)
     {
         foreach (var x in await profil.GetBrowserExtensionsAsync())
             if (x.Name.Contains("uBlock", StringComparison.OrdinalIgnoreCase) && x.Id != garder)
@@ -126,7 +126,7 @@ static class Ubol
         return ext;
     }
 
-    static string VersionDuManifeste()
+    static string? VersionDuManifeste()
     {
         try { using var d = JsonDocument.Parse(File.ReadAllText(Path.Combine(Dossier, "manifest.json"))); return d.RootElement.GetProperty("version").GetString(); } catch { return "?"; }
     }

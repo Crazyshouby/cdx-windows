@@ -11,23 +11,23 @@ namespace Cdx;
 // fenêtre, sur le rectangle que la fiche lui réserve (message « yt.lecteur »).
 sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
 {
-    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
+    public HostForm? ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     readonly Options o;
     readonly PageCachee page;
     readonly SemaphoreSlim uneALaFois = new(1, 1);   // la page cachée ne fait qu'une navigation à la fois
-    readonly IDisposable surveillance;
+    readonly IDisposable? surveillance;   // null : thème imposé par --theme, pas de suivi de l'accent
     readonly string root;
-    YouTubeForm form;
-    CoreWebView2Environment env;
+    YouTubeForm? form;                 // null avant la première ouverture
+    CoreWebView2Environment? env;
     string theme;
     bool demarre, pret, uiPrete, connexionProposee, pleinEcran;
-    Liste accueil;
+    Liste? accueil;                    // null tant que la page cachée n'a pas démarré
     string vueBrowse = "accueil";            // la dernière page « browse » demandée (accueil ou abonnements), à qui reviennent ses suites
     Rectangle rectLecteur, boundsAvantPleinEcran;
     FormWindowState etatAvantPleinEcran;
     readonly System.Windows.Forms.Timer veilleLecture = new() { Interval = 5000 };
     readonly System.Windows.Forms.Timer suiviLecture = new() { Interval = 250 };   // l'état du lecteur, pour nos commandes
-    string dernierEtatLecture, dernierBlocage; bool suiviEnCours;
+    string? dernierEtatLecture, dernierBlocage; bool suiviEnCours;
     // plein écran : la barre de commandes s'efface après un moment sans mouvement de la souris (pendant la lecture), et revient au moindre mouvement
     readonly System.Windows.Forms.Timer souris = new() { Interval = 200 };
     static readonly TimeSpan DelaiBarre = TimeSpan.FromSeconds(3);
@@ -65,7 +65,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                     using (var d = JsonDocument.Parse(e))
                     {
                         var b = d.RootElement.TryGetProperty("blocage", out var x) && x.ValueKind == JsonValueKind.Object ? x : default;
-                        string cle = b.ValueKind == JsonValueKind.Object ? b.GetRawText() : null;
+                        string? cle = b.ValueKind == JsonValueKind.Object ? b.GetRawText() : null;
                         if (cle != dernierBlocage || page.Bloque != (cle != null))
                         {
                             dernierBlocage = cle;
@@ -185,7 +185,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
             var f = new YouTubeForm(this); form = f;
             f.FormClosed += (s, e) => ExitThread();
             double scale = f.DeviceDpi / 96.0;
-            var zone = Screen.PrimaryScreen.WorkingArea;
+            var zone = Screen.PrimaryScreen!.WorkingArea;   // « ! » : la fenêtre s'ouvre dans une session ouverte, Windows y a toujours un écran principal
             f.Bounds = new Rectangle(zone.X + 120, zone.Y + 60, (int)Math.Min(1280 * scale, zone.Width - 160), (int)Math.Min(860 * scale, zone.Height - 100));
             f.Show(); Host.ForceForeground(f.Handle);
             await f.InitWebAsync(env, root, "youtube/youtube.html?theme=" + theme, scale);
@@ -233,7 +233,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
         value = new { pret, connecte = page.Connecte, compte = page.Compte, bloqueur = page.Bloqueur, extraction = page.ModeExtraction, veille = Veille.Compte },
     });
 
-    void EnvoyerListe(string vue, string requete, Liste l, bool ajout) => Envoyer(new
+    void EnvoyerListe(string vue, string? requete, Liste l, bool ajout) => Envoyer(new
     {
         type = "liste", vue, requete, ajout, videos = l.Videos, suite = l.Suite, messages = l.Messages, pubs = l.PubsFiltrees,
     });
@@ -268,7 +268,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
         {
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement.Clone();
-            string cmd = r.GetProperty("cmd").GetString();
+            string cmd = r.GetProperty("cmd").GetString() ?? throw new FormatException("cmd null");   // rattrapé plus bas, comme l'était le déréférencement
             if (cmd == "win.overlay") { page.Recouvrir(r.TryGetProperty("on", out var on) && on.ValueKind == JsonValueKind.True); DisposerPleinEcran(); return; }
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             if (Host.CommonMessage(from, cmd, r)) return;
@@ -279,7 +279,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
 
     async Task MessageAsync(string cmd, JsonElement r)
     {
-        string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        string? Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         switch (cmd)
         {
             case "ready":
@@ -323,15 +323,15 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
             case "yt.cmd":
             {
                 // les commandes de notre lecteur : liste blanche, valeurs bornées
-                string a = Str("action");
+                string? a = Str("action");
                 r.TryGetProperty("valeur", out var val);
                 bool okv = a switch
                 {
                     "basculer" or "lire" or "pause" or "suivante" or "precedente" => true,
                     "aller" or "avancer" or "volume" or "vitesse" => val.ValueKind == JsonValueKind.Number,
                     "muet" => val.ValueKind is JsonValueKind.True or JsonValueKind.False,
-                    "qualite" => val.ValueKind == JsonValueKind.String && Regex.IsMatch(val.GetString(), "^[a-z0-9]{2,12}$"),
-                    "soustitres" => val.ValueKind == JsonValueKind.String && Regex.IsMatch(val.GetString(), "^[A-Za-z0-9_-]{0,20}$"),
+                    "qualite" => val.ValueKind == JsonValueKind.String && Regex.IsMatch(val.GetString()!, "^[a-z0-9]{2,12}$"),   // « ! » : une valeur JSON de type texte ne se lit jamais null
+                    "soustitres" => val.ValueKind == JsonValueKind.String && Regex.IsMatch(val.GetString()!, "^[A-Za-z0-9_-]{0,20}$"),   // (de même)
                     "confirmer" => val.ValueKind == JsonValueKind.Number && val.TryGetInt32(out var nb) && nb is >= 0 and < 10,
                     _ => false,
                 };
@@ -344,7 +344,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                     for (int i = 0; i < 20 && page.Bloque; i++) await Task.Delay(250);
                     await page.LireAsync();
                 }
-                else if (okv && page.LecteurAffiche) await page.CommandeAsync(a, val);
+                else if (okv && page.LecteurAffiche) await page.CommandeAsync(a!, val);   // « ! » : okv n'est vrai que pour une action de la liste blanche
                 else if (a == "pleinecran") PleinEcran(!pleinEcran);
                 else Host.Log("commande du lecteur refusée : " + a);
                 return;
@@ -395,7 +395,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                 }
                 case "yt.video":
                 {
-                    string id = Str("id"), liste = Str("liste");
+                    string? id = Str("id"), liste = Str("liste");
                     if (id == null || !Regex.IsMatch(id, "^[A-Za-z0-9_-]{11}$")) break;   // un identifiant de vidéo, rien d'autre
                     if (liste != null && !Regex.IsMatch(liste, "^[A-Za-z0-9_-]{2,80}$")) liste = null;
                     int? index = liste != null && r.TryGetProperty("index", out var ix) && ix.TryGetInt32(out var ixn) && ixn >= 0 ? ixn : null;
@@ -409,7 +409,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                 }
                 case "yt.chaine":
                 {
-                    string id = Str("id"), url = Str("url"), prm = Str("params");
+                    string? id = Str("id"), url = Str("url"), prm = Str("params");
                     if (id == null || !Regex.IsMatch(id, "^UC[A-Za-z0-9_-]{22}$")) break;   // un identifiant de chaîne
                     if (url != null && !Regex.IsMatch(url, "^/(@[^/?#]+|channel/UC[A-Za-z0-9_-]{22})/[a-z]+$")) url = null;   // un onglet de cette chaîne, rien d'autre
                     if (prm != null && !Regex.IsMatch(prm, "^[A-Za-z0-9_%=-]{4,200}$")) prm = null;
@@ -422,7 +422,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                 }
                 case "yt.liste":
                 {
-                    string id = Str("id");
+                    string? id = Str("id");
                     if (id == null || !Regex.IsMatch(id, "^[A-Za-z0-9_-]{10,80}$")) break;
                     Envoyer(new { type = "occupe", value = "Ouverture de la liste…" });
                     var (e, l) = await page.ListeAsync(id);
@@ -444,7 +444,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                 }
                 case "yt.plus":
                 {
-                    string vue = Str("vue") is "recherche" or "abonnements" or "chaine" or "liste" ? Str("vue") : "accueil";
+                    string vue = Str("vue") is { } sv && sv is "recherche" or "abonnements" or "chaine" or "liste" ? sv : "accueil";
                     var l = await page.PlusAsync(vue == "recherche" ? "search" : "browse");
                     Envoyer(new { type = "liste", vue, ajout = true, videos = l?.Videos ?? new List<Video>(), suite = l?.Suite ?? false });
                     break;
@@ -478,6 +478,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
     [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
     void CaptureFenetre(string nom)
     {
+        if (form == null) return;   // (appelé par l'essai, fenêtre ouverte)
         try
         {
             using var bmp = new Bitmap(form.Width, form.Height);
@@ -492,6 +493,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
 
     async Task EssaiAsync()
     {
+        var form = this.form!;   // « ! » : l'essai part de DemarrerPageAsync, qu'Open appelle après avoir créé la fenêtre (qui ne change plus ensuite)
         int echecs = 0;
         void Verifier(bool ok, string quoi) { Host.Log((ok ? "OK      " : "ÉCHEC   ") + quoi); if (!ok) echecs++; }
         async Task Capture(string nom)
@@ -501,7 +503,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
             await using (var f = File.Create(Path.Combine(YtDonnees.Captures, "ui-" + nom + ".png"))) await form.Web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, f);
             await page.CaptureAsync("page-" + nom);
         }
-        async Task<JsonElement> Etat() => JsonDocument.Parse(JsonSerializer.Deserialize<string>(await form.Web.CoreWebView2.ExecuteScriptAsync("JSON.stringify(window.__etat ? window.__etat() : null)"))).RootElement;
+        async Task<JsonElement> Etat() => JsonDocument.Parse(JsonSerializer.Deserialize<string>(await form.Web.CoreWebView2.ExecuteScriptAsync("JSON.stringify(window.__etat ? window.__etat() : null)")) ?? throw new InvalidOperationException("état de la page illisible")).RootElement;   // (une exception, comme avant : l'essai la note en échec)
         // Une demande faite comme la page la fait ; on attend la réponse (liste, fiche) ou une erreur. Rend vrai si une réponse est arrivée.
         async Task<bool> Demander(object m, int s = 30)
         {
@@ -523,6 +525,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
             Verifier(uiPrete, "interface chargée");
             Verifier(page.Bloqueur != null, "uBOL : " + (page.Bloqueur ?? "absent"));
             Host.Log("session : " + (page.Connecte ? "connecté" : "non connecté"));
+            var accueil = this.accueil!;   // « ! » : DemarrerPageAsync l'a lu juste avant d'appeler l'essai (et l'essai ne demande pas l'accueil avant la dernière lecture ci-dessous)
             foreach (var v in accueil.Videos.Take(5)) Host.Log($"   accueil · {v.Titre} [{v.Chaine}] {v.Duree} · {v.Vues} · {v.Date}");
             Verifier(!page.Connecte || accueil.Videos.Count > 0, $"accueil initial (ytInitialData) : {accueil.Videos.Count} vidéos");
             await Capture("1-accueil");
@@ -539,8 +542,8 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                 Verifier(ok && et2.GetProperty("n").GetInt32() > et.GetProperty("n").GetInt32(), $"suite de la recherche (défilement de la page cachée) : {et.GetProperty("n").GetInt32()} → {et2.GetProperty("n").GetInt32()} vidéos");
             }
 
-            string premier = o.Video ?? et.GetProperty("premier").GetString() ?? accueil.Videos.FirstOrDefault()?.Id;
-            string chaineFiche = null;
+            string? premier = o.Video ?? et.GetProperty("premier").GetString() ?? accueil.Videos.FirstOrDefault()?.Id;
+            string? chaineFiche = null;
             if (premier != null)
             {
                 ok = await Demander(new { cmd = "yt.video", id = premier });
@@ -581,7 +584,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                 await Capture("3-video");
                 CaptureFenetre("3-video-fenetre");
 
-                string sugg = ev.GetProperty("premiereSuggestion").GetString();
+                string? sugg = ev.GetProperty("premiereSuggestion").GetString();
                 if (sugg != null)
                 {
                     ok = await Demander(new { cmd = "yt.video", id = sugg });
@@ -623,7 +626,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                     await form.Web.CoreWebView2.ExecuteScriptAsync("document.getElementById('cReglages').click()");
                     await Task.Delay(300);
                     var em = await Etat();
-                    var entrees = em.GetProperty("menu").EnumerateArray().Select(x => x.GetString()).ToList();
+                    var entrees = em.GetProperty("menu").EnumerateArray().Select(x => x.GetString() ?? "").ToList();
                     Verifier(entrees.Count(x => x.StartsWith("Vitesse") || x.StartsWith("Qualité") || x.StartsWith("Sous-titres")) == 3 && !em.GetProperty("recouvert").GetBoolean() && page.LecteurAffiche,
                         "menu de l'engrenage : " + string.Join(" / ", entrees) + (em.GetProperty("recouvert").GetBoolean() ? " (vidéo masquée)" : " (vidéo restée visible)"));
                     await form.Web.CoreWebView2.ExecuteScriptAsync(Clic("Vitesse"));
@@ -648,7 +651,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                     var lq = await L();
                     var qualites = lq.GetProperty("qualites").EnumerateArray().Select(x => x.GetString()).ToList();
                     Verifier(qualites.Count >= 2, "qualités proposées : " + string.Join(", ", qualites) + " (actuelle " + lq.GetProperty("qualite").GetString() + ")");
-                    string basse = qualites.LastOrDefault(x => x != "auto");
+                    string? basse = qualites.LastOrDefault(x => x != "auto");
                     if (basse != null)
                     {
                         await Cmd(new { action = "qualite", valeur = basse });
@@ -659,7 +662,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                     var pistes = lq.GetProperty("pistes").EnumerateArray().ToList();
                     if (pistes.Count > 0)
                     {
-                        string code = pistes[0].GetProperty("code").GetString();
+                        string? code = pistes[0].GetProperty("code").GetString();
                         await Cmd(new { action = "soustitres", valeur = code });
                         await Task.Delay(1200);
                         Verifier((await L()).GetProperty("piste").GetString() == code, $"sous-titres « {code} » : piste active {(await L()).GetProperty("piste").GetString()}");
@@ -744,7 +747,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
 
                     // le lecteur change de vidéo de lui-même (ici un clic sur un lien de la page YouTube, comme l'écran de fin) : la fiche suit
                     string lien = "";
-                    for (int i = 0; i < 32 && lien.Length != 11; i++) { lien = JsonSerializer.Deserialize<string>(await page.ScriptAsync("(() => { const cur = new URLSearchParams(location.search).get('v'); const a = [...document.querySelectorAll('a[href*=\"watch?v=\"]')].find(x => !x.closest('ytd-ad-slot-renderer, ytd-in-feed-ad-layout-renderer, ytd-promoted-sparkles-web-renderer, #player-ads, [class*=\"ad-slot\"], [class*=\"promoted\"]') && !x.getAttribute('href').includes(cur) && !x.getAttribute('href').includes('list=')); return a ? new URLSearchParams(a.getAttribute('href').split('?')[1]).get('v') : ''; })()")); if (lien.Length != 11) await Task.Delay(250); }
+                    for (int i = 0; i < 32 && lien.Length != 11; i++) { lien = JsonSerializer.Deserialize<string>(await page.ScriptAsync("(() => { const cur = new URLSearchParams(location.search).get('v'); const a = [...document.querySelectorAll('a[href*=\"watch?v=\"]')].find(x => !x.closest('ytd-ad-slot-renderer, ytd-in-feed-ad-layout-renderer, ytd-promoted-sparkles-web-renderer, #player-ads, [class*=\"ad-slot\"], [class*=\"promoted\"]') && !x.getAttribute('href').includes(cur) && !x.getAttribute('href').includes('list=')); return a ? new URLSearchParams(a.getAttribute('href').split('?')[1]).get('v') : ''; })()")) ?? ""; if (lien.Length != 11) await Task.Delay(250); }
                     if (lien.Length == 11)
                     {
                         Host.Log("   liens de vidéo dans la page YouTube : " + await page.ScriptAsync("document.querySelectorAll('a[href*=\"watch?v=\"]').length") + " ; clic sur " + lien);
@@ -757,7 +760,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                 }
             }
 
-            string idAvantAccueil = (await Etat()).GetProperty("id").GetString();
+            string? idAvantAccueil = (await Etat()).GetProperty("id").GetString();
             bool lectureAvant = page.LecteurAffiche;
             if (lectureAvant)
             {
@@ -836,7 +839,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
 
             // ---------- chaînes et listes ----------
             if (page.Connecte) Verifier(page.Compte != null, "nom du compte (menu de l'avatar) : " + (page.Compte ?? "illisible"));
-            string S(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            string? S(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
             if (chaineFiche != null)
             {
                 ok = await Demander(new { cmd = "yt.chaine", id = chaineFiche });
@@ -860,7 +863,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
             else Verifier(false, "la fiche n'a pas donné d'identifiant de chaîne");
 
             // une liste : sa page, puis « Tout lire » (lecture dans l'ordre de la liste), puis la vidéo suivante de la liste
-            string idListe = o.Liste;
+            string? idListe = o.Liste;
             if (idListe == null)
             {
                 var ep = await Etat();
@@ -873,7 +876,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
             Verifier(ok && el.GetProperty("vue").GetString() == "liste" && el.GetProperty("n").GetInt32() > 0 && ent.ValueKind == JsonValueKind.Object && S(ent, "titre") != null,
                 $"liste {idListe} : « {(ent.ValueKind == JsonValueKind.Object ? S(ent, "titre") : "?")} » de {(ent.ValueKind == JsonValueKind.Object ? S(ent, "auteur") : "?")}, {el.GetProperty("n").GetInt32()} vidéos");
             await Capture("7-liste");
-            string premierListe = ent.ValueKind == JsonValueKind.Object ? S(ent, "premierId") : null;
+            string? premierListe = ent.ValueKind == JsonValueKind.Object ? S(ent, "premierId") : null;
             if (premierListe != null)
             {
                 ok = await Demander(new { cmd = "yt.video", id = premierListe, liste = idListe, index = 0 });
@@ -886,7 +889,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                 Verifier(page.LecteurAffiche && lt.GetProperty("id").GetString() == premierListe && lt.GetProperty("pause").ValueKind == JsonValueKind.False, $"la liste se lit : {lt.GetRawText()}");
                 await Capture("8-liste-lecture");
                 CaptureFenetre("8-liste-lecture-fenetre");
-                string deuxieme = li.ValueKind == JsonValueKind.Object ? S(li, "deuxieme") : null;
+                string? deuxieme = li.ValueKind == JsonValueKind.Object ? S(li, "deuxieme") : null;
                 if (deuxieme != null)
                 {
                     ok = await Demander(new { cmd = "yt.video", id = deuxieme, liste = idListe, index = 1 });
@@ -912,7 +915,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
                 await Task.Delay(500);
                 var eb = await Etat();
                 var bl = eb.GetProperty("blocage");
-                Verifier(ok && page.Bloque && !page.VueVisible && bl.ValueKind == JsonValueKind.Object && bl.GetProperty("texte").GetString().Length > 0,
+                Verifier(ok && page.Bloque && !page.VueVisible && bl.ValueKind == JsonValueKind.Object && bl.GetProperty("texte").GetString() is { Length: > 0 },
                     $"vidéo {o.Bloquee} remplacée par un écran de YouTube : vue native effacée ({(page.VueVisible ? "ENCORE visible" : "oui")}), message dans la fiche : {(bl.ValueKind == JsonValueKind.Object ? bl.GetRawText() : "aucun")}");
                 CaptureFenetre("9-blocage");
                 if (bl.ValueKind == JsonValueKind.Object && bl.GetProperty("boutons").GetArrayLength() > 0)

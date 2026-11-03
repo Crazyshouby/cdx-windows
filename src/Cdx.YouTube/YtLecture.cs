@@ -22,24 +22,25 @@ namespace Cdx;
 // Genre : video, short, direct, liste (liste de lecture, podcast, émission), mix. Pour une liste ou un mix : ListeId est la liste, Id sa première vidéo (peut manquer),
 // Duree le nombre de vidéos (« 124 vidéos »). Pour une vidéo d'une liste : ListeId et Index la situent dans la liste (lecture dans l'ordre de la liste).
 // Vu : la part déjà regardée (0-100), quand YouTube la montre sous la miniature (compte connecté, vidéo commencée).
-public sealed record Video(string Id, string Titre, string Chaine, string ChaineId, string Duree, string Miniature, string Vues, string Date, string Genre, string ListeId = null, int? Index = null, int? Vu = null);
+// Ce que YouTube n'a pas donné reste null (et part tel quel vers la page) ; seul Genre est toujours renseigné.
+public sealed record Video(string? Id, string? Titre, string? Chaine, string? ChaineId, string? Duree, string? Miniature, string? Vues, string? Date, string Genre, string? ListeId = null, int? Index = null, int? Vu = null);
 
 // Un chapitre d'une vidéo (barre de lecture de YouTube) : son titre et son début en secondes.
-public sealed class Chapitre { public string Titre; public double Debut; }
+public sealed class Chapitre { public string Titre = ""; public double Debut; }   // Titre : toujours donné à la création
 
-public sealed class Onglet { public string Titre, Url, Params; public bool Actif; }
+public sealed class Onglet { public string? Titre, Url, Params; public bool Actif; }
 
 public sealed class Chaine
 {
-    public string Id, Nom, Avatar, Pseudo, Abonnes, NbVideos, Description;
+    public string? Id, Nom, Avatar, Pseudo, Abonnes, NbVideos, Description;   // null : absent des données de YouTube
     public List<Onglet> Onglets = new();
 }
 
-public sealed class EnteteListe { public string Id, Titre, Auteur, AuteurId, Infos, Description, PremierId; }
+public sealed class EnteteListe { public string? Id, Titre, Auteur, AuteurId, Infos, Description, PremierId; }
 
 public sealed class ListeEnCours
 {
-    public string Id, Titre, Auteur, AuteurId;
+    public string? Id, Titre, Auteur, AuteurId;
     public int Index, Total;
     public List<Video> Videos = new();
 }
@@ -56,10 +57,10 @@ public sealed class Liste
 
 public sealed class Fiche
 {
-    public string Id, Titre, Chaine, ChaineId, Avatar, Abonnes, Vues, Date, Description, Miniature;
+    public string? Id, Titre, Chaine, ChaineId, Avatar, Abonnes, Vues, Date, Description, Miniature;   // null : absent des données de YouTube
     public List<Video> Suggestions = new();
     public List<Chapitre> Chapitres = new();   // vides si la vidéo n'a pas de chapitres (la page les cherche alors dans la description)
-    public ListeEnCours Liste;   // la vidéo est lue dans une liste (playlist.playlist de la réponse) ; absent pour un mix
+    public ListeEnCours? Liste;   // la vidéo est lue dans une liste (playlist.playlist de la réponse) ; absent pour un mix
     public int PubsFiltrees;
 }
 
@@ -100,7 +101,7 @@ public static class YtLecture
     }
 
     // Parcourt l'arbre dans l'ordre du document. `parent` : la clé sous laquelle se trouve l'élément (pour reconnaître les éléments d'une liste de contenus).
-    static int Parcourir(JsonElement e, string parent, Liste l, HashSet<string> vus, int profondeur)
+    static int Parcourir(JsonElement e, string? parent, Liste l, HashSet<string> vus, int profondeur)
     {
         if (profondeur > 60) return 0;
         int trouves = 0;
@@ -117,7 +118,7 @@ public static class YtLecture
                 var t = new[] { "title", "subtitle", "text", "bodyText" }.Select(c => Texte(p.Value, c)).Where(x => !string.IsNullOrWhiteSpace(x));
                 l.Messages.Add(string.Join(" ", t)); continue;
             }
-            Video v = null; bool connu = true;
+            Video? v = null; bool connu = true;
             if (Classiques.Contains(k)) v = Classique(p.Value, k);
             else if (k == "lockupViewModel")
             {
@@ -132,8 +133,8 @@ public static class YtLecture
             if (connu)
             {
                 // une liste se reconnaît à sa liste, une vidéo à son identifiant (la même vidéo peut être à la fois seule et première d'une liste)
-                string cle = v == null ? null : v.Genre is "liste" or "mix" ? "L:" + v.ListeId : v.Id;
-                if (cle != null && cle != "L:" && vus.Add(cle)) { l.Videos.Add(v); trouves++; }
+                string? cle = v == null ? null : v.Genre is "liste" or "mix" ? "L:" + v.ListeId : v.Id;
+                if (v != null && cle != null && cle != "L:" && vus.Add(cle)) { l.Videos.Add(v); trouves++; }   // (v != null : déjà vrai quand cle l'est)
                 continue;
             }
             int sous = Parcourir(p.Value, k, l, vus, profondeur + 1);
@@ -146,26 +147,26 @@ public static class YtLecture
         return trouves;
     }
 
-    static Video Classique(JsonElement r, string genre)
+    static Video? Classique(JsonElement r, string genre)
     {
-        string id = Str(r, "videoId"); if (id == null) return null;
-        string titre = Texte(r, "title") ?? Texte(r, "headline");
+        string? id = Str(r, "videoId"); if (id == null) return null;
+        string? titre = Texte(r, "title") ?? Texte(r, "headline");
         if (titre == null) { Veille.Noter("format", genre + " sans titre lisible"); return null; }
-        string chaine = Texte(r, "ownerText") ?? Texte(r, "longBylineText") ?? Texte(r, "shortBylineText");
-        string chaineId = null;
+        string? chaine = Texte(r, "ownerText") ?? Texte(r, "longBylineText") ?? Texte(r, "shortBylineText");
+        string? chaineId = null;
         foreach (var c in new[] { "ownerText", "longBylineText", "shortBylineText" })
             if (Chemin(r, c, "runs") is { ValueKind: JsonValueKind.Array } runs && runs.GetArrayLength() > 0 && Chemin(runs[0], "navigationEndpoint", "browseEndpoint") is { } be) { chaineId = Str(be, "browseId"); break; }
-        string duree = Texte(r, "lengthText"), g = genre == "reelItemRenderer" ? "short" : "video";
+        string? duree = Texte(r, "lengthText"); string g = genre == "reelItemRenderer" ? "short" : "video";
         if (r.TryGetProperty("thumbnailOverlays", out var ov) && ov.ValueKind == JsonValueKind.Array)
             foreach (var o in ov.EnumerateArray())
                 if (o.TryGetProperty("thumbnailOverlayTimeStatusRenderer", out var ts))
                 {
                     duree ??= Texte(ts, "text");
-                    string style = Str(ts, "style");
+                    string? style = Str(ts, "style");
                     if (style == "LIVE") g = "direct"; else if (style == "SHORTS") g = "short";
                 }
         if (r.TryGetProperty("badges", out var bd) && bd.ToString().Contains("BADGE_STYLE_TYPE_LIVE_NOW")) g = "direct";
-        string vues = Texte(r, "viewCountText") ?? Texte(r, "shortViewCountText");
+        string? vues = Texte(r, "viewCountText") ?? Texte(r, "shortViewCountText");
         var we = Chemin(r, "navigationEndpoint", "watchEndpoint");
         return new Video(id, titre, chaine, chaineId, duree, Miniature(Chemin(r, "thumbnail", "thumbnails")), vues, Texte(r, "publishedTimeText"), g,
             we == null ? null : Str(we.Value, "playlistId"), we != null && we.Value.TryGetProperty("index", out var ix) && ix.TryGetInt32(out var ixn) ? ixn : null,
@@ -173,31 +174,31 @@ public static class YtLecture
     }
 
     // playlistRenderer / radioRenderer (ancien format, résultats de recherche) : une liste de lecture, ou un mix
-    static Video AncienneListe(JsonElement r, bool mix)
+    static Video? AncienneListe(JsonElement r, bool mix)
     {
-        string id = Str(r, "playlistId"), titre = Texte(r, "title");
+        string? id = Str(r, "playlistId"), titre = Texte(r, "title");
         if (id == null || titre == null) { Veille.Noter("format", (mix ? "radioRenderer" : "playlistRenderer") + " sans playlistId ou sans titre"); return null; }
-        string chaine = Texte(r, "shortBylineText") ?? Texte(r, "longBylineText");
-        string chaineId = Chercher(Chemin(r, "shortBylineText") ?? default, "browseEndpoint", 6) is { } be ? Str(be, "browseId") : null;
-        string nombre = Texte(r, "videoCountText") ?? (Str(r, "videoCount") is { } n ? n + " vidéos" : null);
+        string? chaine = Texte(r, "shortBylineText") ?? Texte(r, "longBylineText");
+        string? chaineId = Chercher(Chemin(r, "shortBylineText") ?? default, "browseEndpoint", 6) is { } be ? Str(be, "browseId") : null;
+        string? nombre = Texte(r, "videoCountText") ?? (Str(r, "videoCount") is { } n ? n + " vidéos" : null);
         var thumbs = Chemin(r, "thumbnails") is { ValueKind: JsonValueKind.Array } ta && ta.GetArrayLength() > 0 ? Chemin(ta[0], "thumbnails") : Chemin(r, "thumbnail", "thumbnails");
-        string premier = Str(Chemin(r, "navigationEndpoint", "watchEndpoint") ?? default, "videoId");
+        string? premier = Str(Chemin(r, "navigationEndpoint", "watchEndpoint") ?? default, "videoId");
         return new Video(premier, titre, mix ? null : chaine, chaineId, mix ? "Mix" : nombre, Miniature(thumbs), null, null, mix || id.StartsWith("RD") ? "mix" : "liste", id);
     }
 
-    static Video Lockup(JsonElement r)
+    static Video? Lockup(JsonElement r)
     {
-        string type = Str(r, "contentType");
+        string? type = Str(r, "contentType");
         bool liste = type is "LOCKUP_CONTENT_TYPE_PLAYLIST" or "LOCKUP_CONTENT_TYPE_PODCAST" or "LOCKUP_CONTENT_TYPE_SHOW" or "LOCKUP_CONTENT_TYPE_COURSE";
         bool estShort = type == "LOCKUP_CONTENT_TYPE_SHORT";   // vu le 02/11/2026 dans les suggestions
         if (type != null && type != "LOCKUP_CONTENT_TYPE_VIDEO" && !liste && !estShort) { Veille.Noter("format", "lockupViewModel d'un genre inconnu, ignoré : " + type); return null; }
-        string id = Str(r, "contentId");
+        string? id = Str(r, "contentId");
         var m = Chemin(r, "metadata", "lockupMetadataViewModel");
         if (id == null || m == null) { Veille.Noter("format", "lockupViewModel sans contentId ou sans lockupMetadataViewModel"); return null; }
         // le lien de l'élément : pour une vidéo d'une liste, sa liste et sa place ; pour une liste, sa première vidéo
         var we = Chemin(r, "rendererContext", "commandContext", "onTap", "innertubeCommand", "watchEndpoint");
         if (liste) return LockupListe(r, m.Value, id, we);
-        string titre = Texte(m.Value, "title");
+        string? titre = Texte(m.Value, "title");
         // Les métadonnées, en lignes de « parts ». Deux formes vues le 02/11/2026 :
         //   une ligne    [chaîne, « 552 k » (icône PLAY_ARROW), « il y a 2 j »]                         (accueil)
         //   deux lignes  [chaîne, « et France TV » (collaboration)] puis [« 253 k vues », « il y a 1 j »]   (suggestions)
@@ -206,7 +207,7 @@ public static class YtLecture
         if (Chemin(m.Value, "metadata", "contentMetadataViewModel", "metadataRows") is { ValueKind: JsonValueKind.Array } rows)
             foreach (var row in rows.EnumerateArray())
                 if (Chemin(row, "metadataParts") is { ValueKind: JsonValueKind.Array } ps && ps.GetArrayLength() > 0) lignes.Add(ps.EnumerateArray().ToList());
-        string chaine = null, chaineId = null, vues = null, date = null;
+        string? chaine = null, chaineId = null, vues = null, date = null;
         // Sur la page d'une chaîne, YouTube n'écrit pas son nom : la première part est alors déjà les vues (« 4,5 k », icône PLAY_ARROW) ou la date.
         if (lignes.Count > 0 && (EstVues(lignes[0][0]) || EstDate(Texte(lignes[0][0], "text"))))
             lignes.Insert(0, new List<JsonElement>());
@@ -214,7 +215,7 @@ public static class YtLecture
         {
             foreach (var x in lignes.Skip(1).SelectMany(x => x))
             {
-                string t = Texte(x, "text"); if (string.IsNullOrWhiteSpace(t)) continue;
+                string? t = Texte(x, "text"); if (string.IsNullOrWhiteSpace(t)) continue;
                 if (vues == null && EstVues(x)) vues = t; else date ??= t;
             }
         }
@@ -230,14 +231,14 @@ public static class YtLecture
                 foreach (var x in lignes[0].Skip(1)) if (Texte(x, "text") is { Length: > 0 } t) chaine += " " + t;
             foreach (var x in autres)
             {
-                string t = Texte(x, "text"); if (string.IsNullOrWhiteSpace(t)) continue;
+                string? t = Texte(x, "text"); if (string.IsNullOrWhiteSpace(t)) continue;
                 bool icone = Str(Chemin(x, "leadingIcon") ?? default, "name")?.StartsWith("PLAY_ARROW") == true;
                 if (vues == null && (icone || Regex.IsMatch(t, @"\bvues?\b|\bviews?\b|spectateur|watching", RegexOptions.IgnoreCase))) vues = t;
                 else date ??= t;
             }
         }
         chaineId ??= Str(Chemin(m.Value, "image", "decoratedAvatarViewModel", "rendererContext", "commandContext", "onTap", "innertubeCommand", "browseEndpoint") ?? default, "browseId");
-        string duree = null, g = estShort ? "short" : "video";
+        string? duree = null; string g = estShort ? "short" : "video";
         var vm = Chemin(r, "contentImage", "thumbnailViewModel");
         if (vm != null && Chemin(vm.Value, "overlays") is { ValueKind: JsonValueKind.Array } ov)
             foreach (var o in ov.EnumerateArray())
@@ -248,7 +249,7 @@ public static class YtLecture
                 foreach (var x in b.EnumerateArray())
                 {
                     var bv = Chemin(x, "thumbnailBadgeViewModel"); if (bv == null) continue;
-                    string t = Str(bv.Value, "text"); if (t == null) continue;
+                    string? t = Str(bv.Value, "text"); if (t == null) continue;
                     if (Str(bv.Value, "badgeStyle") == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE" || Regex.IsMatch(t, "^(EN DIRECT|LIVE)$", RegexOptions.IgnoreCase)) g = "direct";
                     else if (Regex.IsMatch(t, @"^\d+(:\d\d)+$")) duree = t;
                 }
@@ -279,7 +280,7 @@ public static class YtLecture
         {
             if (p.Name == "chapterRenderer" && p.Value.ValueKind == JsonValueKind.Object)
             {
-                string t = Texte(p.Value, "title");
+                string? t = Texte(p.Value, "title");
                 if (t != null && p.Value.TryGetProperty("timeRangeStartMillis", out var ms) && ms.TryGetDouble(out var d) && !res.Any(c => c.Debut == d / 1000))
                     res.Add(new Chapitre { Titre = t, Debut = d / 1000 });
             }
@@ -294,26 +295,26 @@ public static class YtLecture
             || Regex.IsMatch(t, @"\bvues?\b|\bviews?\b|spectateur|watching", RegexOptions.IgnoreCase)
             || Regex.IsMatch(t, @"^[\d\s,.\u202f]+\s?(k|M|Md|B)?$");
     }
-    static bool EstDate(string t) => t != null && Regex.IsMatch(t, @"^(il y a|Diffusé|Streamed|Premiered|Première|Planifié|\d+ (an|mois|sem|jour|h|min))|ago$", RegexOptions.IgnoreCase);
+    static bool EstDate(string? t) => t != null && Regex.IsMatch(t, @"^(il y a|Diffusé|Streamed|Premiered|Première|Planifié|\d+ (an|mois|sem|jour|h|min))|ago$", RegexOptions.IgnoreCase);
 
     // Une liste de lecture (ou un podcast, une émission, un mix) au format lockupViewModel : miniature dans collectionThumbnailViewModel, nombre de vidéos dans
     // le badge (« 124 vidéos »), chaîne dans la première part si elle mène à une chaîne (sur l'onglet Playlists d'une chaîne, la première part est « Playlist »).
-    static Video LockupListe(JsonElement r, JsonElement m, string id, JsonElement? we)
+    static Video? LockupListe(JsonElement r, JsonElement m, string id, JsonElement? we)
     {
-        string titre = Texte(m, "title");
+        string? titre = Texte(m, "title");
         if (titre == null) { Veille.Noter("format", "lockupViewModel de liste sans titre"); return null; }
-        string chaine = null, chaineId = null;
+        string? chaine = null, chaineId = null;
         if (Chemin(m, "metadata", "contentMetadataViewModel", "metadataRows") is { ValueKind: JsonValueKind.Array } rows && rows.GetArrayLength() > 0
             && Chemin(rows[0], "metadataParts") is { ValueKind: JsonValueKind.Array } ps && ps.GetArrayLength() > 0)
         {
             var be = Chercher(ps[0], "browseEndpoint", 8);
-            string t0 = Texte(ps[0], "text");
+            string? t0 = Texte(ps[0], "text");
             // sur l'onglet Playlists d'une chaîne, la seule part est le genre (« Playlist »), avec un lien vers la chaîne : ce n'est pas un nom de chaîne
             if (be != null && Str(be.Value, "browseId") is { } bid && bid.StartsWith("UC") && !Regex.IsMatch(t0 ?? "", "^(Playlist|Podcast|Émission|Show|Mix|Liste de lecture)$", RegexOptions.IgnoreCase))
             { chaine = t0; chaineId = bid; }
         }
         var tv = Chemin(r, "contentImage", "collectionThumbnailViewModel", "primaryThumbnail", "thumbnailViewModel") ?? Chemin(r, "contentImage", "thumbnailViewModel");
-        string nombre = null;
+        string? nombre = null;
         if (tv != null && Chercher(tv.Value, "thumbnailBadgeViewModel", 8) is { } bv) nombre = Str(bv, "text");
         bool mix = id.StartsWith("RD");
         return new Video(we == null ? null : Str(we.Value, "videoId"), titre, chaine, chaineId, nombre ?? (mix ? "Mix" : null), tv == null ? null : Miniature(Chemin(tv.Value, "image", "sources")),
@@ -322,7 +323,7 @@ public static class YtLecture
 
     // ---------- chaîne : en-tête et onglets (réponse « browse » d'une chaîne) ----------
 
-    public static Chaine LireChaine(JsonElement racine, string id)
+    public static Chaine LireChaine(JsonElement racine, string? id)   // id null (--lire) : celui des données
     {
         var c = new Chaine { Id = id };
         var h = Chemin(racine, "header", "pageHeaderRenderer", "content", "pageHeaderViewModel");
@@ -354,7 +355,7 @@ public static class YtLecture
             {
                 if (!t.TryGetProperty("tabRenderer", out var tr)) continue;
                 var be = Chemin(tr, "endpoint", "browseEndpoint");
-                string url = Str(Chemin(tr, "endpoint", "commandMetadata", "webCommandMetadata") ?? default, "url");
+                string? url = Str(Chemin(tr, "endpoint", "commandMetadata", "webCommandMetadata") ?? default, "url");
                 if (be == null || url == null) continue;
                 c.Onglets.Add(new Onglet { Titre = Str(tr, "title"), Url = url, Params = Str(be.Value, "params"), Actif = tr.TryGetProperty("selected", out var sel) && sel.ValueKind == JsonValueKind.True });
             }
@@ -364,7 +365,7 @@ public static class YtLecture
 
     // ---------- page d'une liste de lecture : son en-tête ----------
 
-    public static EnteteListe LireEnteteListe(JsonElement racine, string id)
+    public static EnteteListe LireEnteteListe(JsonElement racine, string? id)
     {
         var e = new EnteteListe { Id = id };
         var h = Chemin(racine, "header", "pageHeaderRenderer", "content", "pageHeaderViewModel");
@@ -394,10 +395,10 @@ public static class YtLecture
         return e;
     }
 
-    static Video Short(JsonElement r)
+    static Video? Short(JsonElement r)
     {
-        string id = Str(Chemin(r, "onTap", "innertubeCommand", "reelWatchEndpoint") ?? default, "videoId");
-        string titre = Str(Chemin(r, "overlayMetadata", "primaryText") ?? default, "content");
+        string? id = Str(Chemin(r, "onTap", "innertubeCommand", "reelWatchEndpoint") ?? default, "videoId");
+        string? titre = Str(Chemin(r, "overlayMetadata", "primaryText") ?? default, "content");
         if (id == null || titre == null) { Veille.Noter("format", "shortsLockupViewModel sans identifiant ou sans titre"); return null; }
         // miniature verticale : thumbnailViewModel.thumbnailViewModel.image.sources (02/11/2026), auparavant thumbnail.sources
         var img = Chemin(r, "thumbnailViewModel", "thumbnailViewModel", "image", "sources") ?? Chemin(r, "thumbnail", "sources");
@@ -420,17 +421,17 @@ public static class YtLecture
         return r;
     }
 
-    public static string IdDeChaine(JsonElement r) => Str(Chemin(r, "metadata", "channelMetadataRenderer") ?? default, "externalId");
+    public static string? IdDeChaine(JsonElement r) => Str(Chemin(r, "metadata", "channelMetadataRenderer") ?? default, "externalId");
 
     // Le compte connecté : réponse account/account_menu (menu de l'avatar), activeAccountHeaderRenderer.
-    public static string LireCompte(JsonElement r)
+    public static string? LireCompte(JsonElement r)
     {
         if (Chercher(r, "activeAccountHeaderRenderer", 20) is not { } h) { Veille.Noter("format", "compte : activeAccountHeaderRenderer absent du menu du compte"); return null; }
-        string nom = Texte(h, "accountName"), pseudo = Texte(h, "channelHandle"), mail = Texte(h, "email");
+        string? nom = Texte(h, "accountName"), pseudo = Texte(h, "channelHandle"), mail = Texte(h, "email");
         return nom == null ? null : nom + (pseudo != null ? " (" + pseudo + ")" : mail != null ? " (" + mail + ")" : "");
     }
 
-    public static string IdDeFiche(JsonElement r) => Str(Chemin(r, "currentVideoEndpoint", "watchEndpoint") ?? default, "videoId");
+    public static string? IdDeFiche(JsonElement r) => Str(Chemin(r, "currentVideoEndpoint", "watchEndpoint") ?? default, "videoId");
 
     public static Fiche LireFiche(JsonElement racine)
     {
@@ -506,13 +507,13 @@ public static class YtLecture
     // ---------- aides ----------
 
     // Une miniature de taille raisonnable pour une grille : la plus petite d'au moins `largeur` px, sinon la plus grande.
-    static string Miniature(JsonElement? sources, int largeur = 320)
+    static string? Miniature(JsonElement? sources, int largeur = 320)
     {
         if (sources is not { ValueKind: JsonValueKind.Array } s || s.GetArrayLength() == 0) return null;
         var l = s.EnumerateArray().Select(x => (url: Str(x, "url"), w: x.TryGetProperty("width", out var w) && w.TryGetInt32(out var wi) ? wi : 0)).Where(x => x.url != null).ToList();
         if (l.Count == 0) return null;
         var choix = l.Where(x => x.w >= largeur).OrderBy(x => x.w).FirstOrDefault();
-        string u = (choix.url ?? l.OrderByDescending(x => x.w).First().url);
+        string u = (choix.url ?? l.OrderByDescending(x => x.w).First().url)!;   // « ! » : la liste ne garde que les url non null (Where ci-dessus)
         return u.StartsWith("//") ? "https:" + u : u;
     }
 
@@ -522,10 +523,10 @@ public static class YtLecture
         return e;
     }
 
-    static string Str(JsonElement e, string k) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+    static string? Str(JsonElement e, string k) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
     // Un texte YouTube : chaîne, {simpleText}, {runs:[{text}]} ou {content}.
-    static string Texte(JsonElement e, string k)
+    static string? Texte(JsonElement e, string k)
     {
         if (e.ValueKind != JsonValueKind.Object || !e.TryGetProperty(k, out var t)) return null;
         if (t.ValueKind == JsonValueKind.String) return t.GetString();

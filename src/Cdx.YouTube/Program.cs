@@ -21,7 +21,8 @@ namespace Cdx;
 //   passe une réponse brute de YouTube dans la couche de lecture (YtLecture) et écrit ce qu'elle en tire ; aucune fenêtre, aucun réseau.
 sealed class Options
 {
-    public string Theme, Requete = "documentaire espace", FichierALire, Video, Liste, Bloquee = "Cr381pDsSsA";
+    public string? Theme, FichierALire, Video, Liste;   // null : option absente
+    public string Requete = "documentaire espace", Bloquee = "Cr381pDsSsA";
     public List<string> Sonder = new();
     public bool PageVisible, Essai, SondeMini;   // SondeMini : pendant l'essai, la vidéo continue-t-elle quand la page cachée part ailleurs ? (mesure, puis fin)
     public PageCachee.Extraction Extraction = PageCachee.Extraction.CSharp;
@@ -117,7 +118,7 @@ static class Program
 
             var app = new YouTubeApp(o);
             Bus.Listen("youtube", app.OnBus);
-            if (!o.Essai) Suite.RegisterApp("youtube", Environment.ProcessPath);
+            if (!o.Essai && Environment.ProcessPath is { } exe) Suite.RegisterApp("youtube", exe);   // ProcessPath peut manquer (rare) : rien n'est alors inscrit, plutôt qu'un chemin null écrit par-dessus le bon dans apps.json
             app.Anchor.BeginInvoke(new Action(app.Open));   // dans la boucle de messages : WebView2 en a besoin
             Host.StartControlPipe("youtube", app.Anchor, CdxApp.Control(app), () => app.Closing);
             Application.Run(app);
