@@ -31,7 +31,6 @@ static class Program
             Suite.RegisterApp("explorer", Environment.ProcessPath);
             app.Anchor.BeginInvoke(new Action(() => app.Open(target)));   // dans la boucle de messages : WebView2 en a besoin
             Host.StartControlPipe("explorer", app.Anchor, app.HandleControl, () => app.Closing);
-            Host.StartPilotPipe("explorer", app.Anchor, app.HandleControl, () => app.Closing);
             Application.Run(app);
         }
     }

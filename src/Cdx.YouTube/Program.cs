@@ -124,7 +124,6 @@ static class Program
             if (!o.Essai) Suite.RegisterApp("youtube", Environment.ProcessPath);
             app.Anchor.BeginInvoke(new Action(app.Open));   // dans la boucle de messages : WebView2 en a besoin
             Host.StartControlPipe("youtube", app.Anchor, app.HandleControl, () => app.Closing);
-            Host.StartPilotPipe("youtube", app.Anchor, app.HandleControl, () => app.Closing);
             Application.Run(app);
             Host.Log($"=== fin, code {app.Code} ===");
             return app.Code;

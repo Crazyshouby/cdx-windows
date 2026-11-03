@@ -237,7 +237,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
         type = "liste", vue, requete, ajout, videos = l.Videos, suite = l.Suite, messages = l.Messages, pubs = l.PubsFiltrees,
     });
 
-    // ---------- bus, canal de test et de pilotage ----------
+    // ---------- bus et canal de test ----------
 
     // « show » : un second lancement (ou une autre application de la suite) demande à la première instance de passer devant.
     public bool OnBus(string type, string from, JsonElement data)
@@ -246,7 +246,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
         Open(); return true;
     }
 
-    // Canal de test (debug.txt) : state · eval <js> (page de l'interface) · page <js> (page YouTube cachée) · sans-connexion (referme la fenêtre de connexion Google) · cmd <json> ; canal de pilotage : state · cmd <json> (commandes de la page, validées comme si elles venaient d'elle).
+    // Canal de test (debug.txt) : state · eval <js> (page de l'interface) · page <js> (page YouTube cachée) · sans-connexion (referme la fenêtre de connexion Google) · cmd <json>.
     public async Task<string> HandleControl(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
@@ -254,7 +254,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
         {
             case "state": return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", page cachée " + (pret ? "prête" : "en chargement") + ", " + (page.Connecte ? "connecté" : "non connecté") + ", " + (page.Bloqueur ?? "SANS bloqueur") + ", veille " + Veille.Compte;
             case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
-            case "page": return pret ? await page.ScriptAsync(a) : "page cachée en chargement";   // canal de test seulement (le pilotage n'accepte que state et cmd)
+            case "page": return pret ? await page.ScriptAsync(a) : "page cachée en chargement";
             case "sans-connexion": await page.AnnulerConnexionAsync(); return "fenêtre de connexion refermée";
             case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";

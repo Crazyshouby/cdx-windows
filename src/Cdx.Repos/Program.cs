@@ -29,7 +29,6 @@ static class Program
             Suite.RegisterApp("repos", Environment.ProcessPath);
             app.Anchor.BeginInvoke(new Action(() => app.Open()));   // dans la boucle de messages : WebView2 en a besoin
             Host.StartControlPipe("repos", app.Anchor, app.HandleControl, () => app.Closing);
-            Host.StartPilotPipe("repos", app.Anchor, app.HandleControl, () => app.Closing);
             Application.Run(app);
         }
     }

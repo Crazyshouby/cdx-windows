@@ -24,7 +24,6 @@ static class Program
             Suite.RegisterApp("transfers", Environment.ProcessPath);
             app.Anchor.BeginInvoke(new Action(() => app.Open()));   // dans la boucle de messages : WebView2 en a besoin
             Host.StartControlPipe("transfers", app.Anchor, app.HandleControl, () => app.Closing);
-            Host.StartPilotPipe("transfers", app.Anchor, app.HandleControl, () => app.Closing);
             Application.Run(app);
         }
     }

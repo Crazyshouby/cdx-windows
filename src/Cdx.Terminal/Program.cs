@@ -32,7 +32,6 @@ static class Program
             Suite.RegisterApp("terminal", Environment.ProcessPath);
             app.Anchor.BeginInvoke(new Action(() => app.Open()));   // dans la boucle de messages : WebView2 en a besoin
             Host.StartControlPipe("terminal", app.Anchor, app.HandleControl, () => app.Closing);
-            Host.StartPilotPipe("terminal", app.Anchor, app.HandleControl, () => app.Closing);
             Application.Run(app);
         }
     }

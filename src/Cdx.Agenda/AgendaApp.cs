@@ -262,7 +262,6 @@ sealed class AgendaApp : ApplicationContext, IHostApp
     }
 
     // Canal de test (debug.txt) : state · eval <js> · cmd <json> · google-url (l'adresse de consentement en attente).
-    static readonly JsonSerializerOptions PilotJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     public async Task<string> HandleControl(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
@@ -270,20 +269,6 @@ sealed class AgendaApp : ApplicationContext, IHostApp
         {
             case "state": return JsonSerializer.Serialize(new { connected = GoogleAuth.IsConnected, email = GoogleAuth.Email, hasClient = GoogleAuth.HasClient, busy, error = lastError, hidden, from = lastFrom, to = lastTo });
             case "google-url": return GoogleAuth.PendingUrl ?? "";
-            // ---- le pilotage (Pilote / Claude) : lire les événements d'une plage de jours et les tâches ----
-            case "events":
-            {
-                if (!GoogleAuth.IsConnected) return "ERREUR compte Google non relié dans Agenda";
-                var parts = a.Split(' ', StringSplitOptions.RemoveEmptyEntries); if (parts.Length < 2) return "ERREUR attendu : events AAAA-MM-JJ AAAA-MM-JJ";
-                await LoadEventsAsync(parts[0], parts[1]);
-                return lastError.Length > 0 ? "ERREUR " + lastError : JsonSerializer.Serialize(lastEvents, PilotJson);
-            }
-            case "tasks":
-            {
-                if (!GoogleAuth.IsConnected) return "ERREUR compte Google non relié dans Agenda";
-                await LoadTasksAsync();
-                return lastError.Length > 0 ? "ERREUR " + lastError : JsonSerializer.Serialize(lastTasks, PilotJson);
-            }
             case "eval": return form == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
             case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";

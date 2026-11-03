@@ -55,7 +55,6 @@ class Shell : IHostApp
         TaskbarState.AutoHide();
         InstallKeyboardHook();
         Host.StartControlPipe("shell", Bar, HandleControl, () => cleaned);
-        Host.StartPilotPipe("shell", Bar, HandleControl, () => cleaned, "state", "notifs", "pins", "audio", "tray");   // Pilote lit l'état de la barre ; jamais launch ni evalbar
 
         env = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
         await Bar.InitWebAsync(env, root, "shell/bar.html?theme=" + theme, scale);

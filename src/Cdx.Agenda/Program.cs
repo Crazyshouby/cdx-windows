@@ -23,7 +23,6 @@ static class Program
             Suite.RegisterApp("agenda", Environment.ProcessPath);
             app.Anchor.BeginInvoke(new Action(() => app.Open()));   // dans la boucle de messages : WebView2 en a besoin
             Host.StartControlPipe("agenda", app.Anchor, app.HandleControl, () => app.Closing);
-            Host.StartPilotPipe("agenda", app.Anchor, app.HandleControl, () => app.Closing, "state", "cmd", "events", "tasks");
             Application.Run(app);
         }
     }
