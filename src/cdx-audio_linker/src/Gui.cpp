@@ -159,6 +159,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             else if (LOWORD(lParam) == WM_RBUTTONUP) ShowTrayMenu(hwnd);
             return 0;
         }
+        case WM_HK_CAPTURED:
+            HandleHotkeyCaptured(wParam, lParam);
+            return 0;
         case WM_HOTKEY:
             if (wParam == HOTKEY_TOGGLE_GROUP) {
                 ToggleGroup(hwnd);

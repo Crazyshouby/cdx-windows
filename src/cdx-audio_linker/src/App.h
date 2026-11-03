@@ -109,6 +109,11 @@ constexpr UINT WM_JOURNAL = WM_APP + 4;
 // The link with the other CDX applications (CdxLink.cpp): WPARAM 0 = a client connected, 1 = a command (LPARAM owns a
 // heap-allocated std::wstring), 2 = the client asks for the state.
 constexpr UINT WM_CDX_LINK = WM_APP + 5;
+// The hotkey-capture keyboard hook only decides and posts this (Hotkeys.cpp): a low-level hook that takes too long is silently
+// removed by Windows. WPARAM = MAKEWPARAM(capture id or 0, modifiers), LPARAM = virtual key; id 0 = no combo (LPARAM 0 : cancelled,
+// 1 : a key without any modifier). The window procedure does the rebinding, the config save and the page refresh.
+constexpr UINT WM_HK_CAPTURED = WM_APP + 6;
+void HandleHotkeyCaptured(WPARAM wParam, LPARAM lParam);
 constexpr int HOTKEY_TOGGLE_GROUP = 1;   // Ctrl+Alt+G
 constexpr int HOTKEY_SETUP_SWITCHER = 2; // Ctrl+Alt+S
 // Ctrl+Shift+1..9 applies setup #1..9 directly. Ctrl+Alt+digit is off-limits:

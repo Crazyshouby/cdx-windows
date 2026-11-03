@@ -105,9 +105,11 @@ LRESULT CALLBACK HotkeyCaptureHookProc(int code, WPARAM wParam, LPARAM lParam) {
     }
     if (!isDown) return 1; // ignore key-ups of non-modifier keys entirely
 
+    // From here on the hook only decides and posts (WM_HK_CAPTURED): no JSON, no WebView2, no config file write inside a
+    // low-level hook -- if it takes too long, Windows removes it without notice.
     if (vk == VK_ESCAPE) {
         StopHotkeyCapture();
-        SendState(); // re-renders the button back to its current combo
+        PostMessageW(g_mainWnd, WM_HK_CAPTURED, 0, 0); // re-renders the button back to its current combo
         return 1;
     }
 
@@ -122,13 +124,28 @@ LRESULT CALLBACK HotkeyCaptureHookProc(int code, WPARAM wParam, LPARAM lParam) {
     // capturing doesn't leak through to whatever has focus underneath, and
     // stay in capture mode so the user can just try again immediately.
     if (mods == 0) {
-        SendError(L"Aucun modificateur détecté : maintiens Ctrl, Alt, Maj ou Win enfoncé "
-                  L"PENDANT que tu appuies sur l'autre touche, sans le relâcher avant.");
+        PostMessageW(g_mainWnd, WM_HK_CAPTURED, 0, 1);
         return 1;
     }
 
     int id = g_hotkeyCaptureId;
     StopHotkeyCapture();
+    PostMessageW(g_mainWnd, WM_HK_CAPTURED, MAKEWPARAM(id, mods), vk);
+    return 1; // swallow: the combo shouldn't also act on whatever has focus
+}
+
+// On the UI thread (WndProc), after the hook posted WM_HK_CAPTURED.
+void HandleHotkeyCaptured(WPARAM wParam, LPARAM lParam) {
+    int id = LOWORD(wParam);
+    UINT mods = HIWORD(wParam), vk = static_cast<UINT>(lParam);
+    if (id == 0) {
+        if (lParam == 1)
+            SendError(L"Aucun modificateur détecté : maintiens Ctrl, Alt, Maj ou Win enfoncé "
+                      L"PENDANT que tu appuies sur l'autre touche, sans le relâcher avant.");
+        else
+            SendState();
+        return;
+    }
     bool ok = false;
     if (id == HOTKEY_TOGGLE_GROUP) {
         ok = RebindHotkey(g_mainWnd, HOTKEY_TOGGLE_GROUP, g_toggleHotkeyMods, g_toggleHotkeyVk, mods, vk);
@@ -138,7 +155,6 @@ LRESULT CALLBACK HotkeyCaptureHookProc(int code, WPARAM wParam, LPARAM lParam) {
     if (ok) SaveConfig();
     else SendError(L"Cette combinaison est déjà utilisée par une autre application.");
     SendState();
-    return 1; // swallow: the combo shouldn't also act on whatever has focus
 }
 
 void StartHotkeyCapture(int id) {
