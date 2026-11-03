@@ -190,6 +190,18 @@ sealed class BrowserApp : ApplicationContext, IHostApp
             }
             case "eval": return b == null ? "pas de navigateur" : await b.EvalAsync(a, false);
             case "evalui": return b == null ? "pas de navigateur" : await b.EvalAsync(a, true);
+            // tap <sélecteur CSS> : un clic sur l'élément par le protocole DevTools, donc un événement « de confiance » (isTrusted) comme un vrai clic,
+            // sans toucher à la souris de la session. Canal de test seulement (debug.txt).
+            case "tap":
+            {
+                var cw = b?.Active?.Web.CoreWebView2; if (cw == null) return "pas de page";
+                string pos = JsonSerializer.Deserialize<string>(await b.EvalAsync("(() => { const e = document.querySelector(" + JsonSerializer.Serialize(a) + "); if (!e) return ''; const r = e.getBoundingClientRect(); return Math.round(r.left + r.width / 2) + ',' + Math.round(r.top + r.height / 2); })()", false));
+                if (string.IsNullOrEmpty(pos)) return "élément introuvable";
+                var xy = pos.Split(',');
+                foreach (var kind in new[] { "mousePressed", "mouseReleased" })
+                    await cw.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent", JsonSerializer.Serialize(new { type = kind, x = int.Parse(xy[0]), y = int.Parse(xy[1]), button = "left", clickCount = 1 }));
+                return "ok";
+            }
             case "cmd": { using var d = JsonDocument.Parse(a); string cm = d.RootElement.GetProperty("cmd").GetString(); if (cm.StartsWith("win.") && b != null) Host.WindowCommand(b, cm, d.RootElement); else b?.Command(cm, d.RootElement); return "ok"; }
             default: return "commande inconnue";
         }

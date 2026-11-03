@@ -192,7 +192,15 @@ Check "la page annonce le résultat (2 ajoutés, 1 déjà là)" ((Ctl 'eval docu
 Ctl ('eval post({ cmd: "in.import.passwords", path: ' + ("$srvdir2\mdp.csv" | ConvertTo-Json) + ' })') | Out-Null; Start-Sleep 2
 Check "mots de passe importés : chiffrés sur le disque (motsdepasse.bin, rien en clair)" ((Test-Path "$data\motsdepasse.bin") -and -not ([Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes("$data\motsdepasse.bin")) -match 'secret-1'))
 Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/login.html"}' | Out-Null; Start-Sleep 4
-Check "page de connexion du même site : identifiant et mot de passe remplis" ((Ctl 'eval document.querySelector("[name=u]").value + "/" + document.querySelector("[name=p]").value') -eq '"moi/secret-1"')
+$vals = 'eval document.querySelector("[name=u]").value + "/" + document.querySelector("[name=p]").value'
+Check "page de connexion : rien n'est rempli tant que l'utilisateur n'a pas touché au formulaire" ((Ctl $vals) -eq '"/"')
+Ctl 'eval (() => { const p = document.querySelector("[name=p]"); p.focus(); p.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); p.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true })); return 1; })()' | Out-Null; Start-Sleep -Milliseconds 500
+Check "un script de la page (focus, faux clic, fausse touche) ne déclenche pas le remplissage" ((Ctl $vals) -eq '"/"')
+Ctl 'tap [name=p]' | Out-Null; Start-Sleep -Milliseconds 500
+Check "un vrai clic dans le champ mot de passe : identifiant et mot de passe remplis" ((Ctl $vals) -eq '"moi/secret-1"')
+Ctl 'cmd {"cmd":"br.go","url":"http://localhost:8767/login.html"}' | Out-Null; Start-Sleep 4
+Ctl 'tap [name=p]' | Out-Null; Start-Sleep -Milliseconds 500
+Check "une autre origine (localhost au lieu de 127.0.0.1) : rien n'est rempli, même après un clic" ((Ctl $vals) -eq '"/"')
 Ctl 'cmd {"cmd":"br.internal","p":"motsdepasse"}' | Out-Null; Start-Sleep 3
 $pwt = Ctl 'eval document.body.innerText'
 Check "cdx://motsdepasse liste l'identifiant sans montrer le mot de passe" (($pwt -match 'moi') -and ($pwt -notmatch 'secret-1'))

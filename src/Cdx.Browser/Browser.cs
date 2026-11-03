@@ -282,7 +282,8 @@ class BrowserForm : HostForm
     }
     public void ApplySettingsAll() { foreach (var t in Tabs) ApplySettings(t); }
 
-    // Nos identifiants importés : posés une fois par adresse, sur les pages http(s) qui ont un champ mot de passe.
+    // Nos identifiants importés : un script posé une fois par adresse, sur une page de la même origine (https, ou http en boucle locale),
+    // qui ne remplit qu'au premier vrai geste de l'utilisateur dans un champ de connexion (voir Passwords.FillScript).
     void Autofill(BrowserTab t)
     {
         if (!S.Autofill || t.Filled == t.Url) return;
@@ -495,9 +496,19 @@ class BrowserForm : HostForm
                 }
                 case "in.import.passwords":
                 {
-                    string p = Str("path");
-                    if (p == null) { using var dlg = new OpenFileDialog { Title = "Mots de passe exportés (CSV)", Filter = "Export CSV|*.csv|Tous|*.*" }; if (dlg.ShowDialog(this) != DialogResult.OK) break; p = dlg.FileName; }
-                    try { var (a, sk) = Passwords.ImportCsv(p); Reply(new { type = "done", what = "passwords", added = a, skipped = sk }); Host.Log($"mots de passe importés de {Path.GetFileName(p)} : {a} ajoutés, {sk} ignorés"); }
+                    string p = Str("path"); bool picked = false;
+                    if (p == null) { using var dlg = new OpenFileDialog { Title = "Mots de passe exportés (CSV)", Filter = "Export CSV|*.csv|Tous|*.*" }; if (dlg.ShowDialog(this) != DialogResult.OK) break; p = dlg.FileName; picked = true; }
+                    try
+                    {
+                        var (a, sk) = Passwords.ImportCsv(p); Reply(new { type = "done", what = "passwords", added = a, skipped = sk }); Host.Log($"mots de passe importés de {Path.GetFileName(p)} : {a} ajoutés, {sk} ignorés");
+                        // L'export CSV contient tous les mots de passe en clair : maintenant qu'ils sont chiffrés ici, proposer de l'effacer (pas à la corbeille).
+                        if (picked && MessageBox.Show(this, $"Les mots de passe sont maintenant chiffrés dans le navigateur.\n\n« {Path.GetFileName(p)} » les contient en clair : le supprimer définitivement ?",
+                                "Export de mots de passe", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                        {
+                            try { File.Delete(p); Host.Log("export CSV des mots de passe supprimé après import"); }
+                            catch (Exception ex) { MessageBox.Show(this, "Impossible de supprimer le fichier : " + ex.Message, "Export de mots de passe", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                        }
+                    }
                     catch (Exception ex) { Reply(new { type = "done", what = "passwords", error = ex.Message }); }
                     Reply(DataPayload()); break;
                 }

@@ -19,7 +19,25 @@ static class SelfTest
         File.WriteAllText(Path.Combine(ext, "manifest.json"), "{\"manifest_version\":3,\"name\":\"cdx-test\",\"version\":\"1.0\",\"content_scripts\":[{\"matches\":[\"https://cdx.shell/*\"],\"js\":[\"c.js\"],\"run_at\":\"document_start\"}]}");
         File.WriteAllText(Path.Combine(ext, "c.js"), "document.documentElement.setAttribute('data-cdx-ext','appliquée');");
 
-        var lines = new List<string>(); bool done = false;
+        var lines = new List<string>(); bool done = false; int bad = 0;
+        void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
+
+        // ---- logique pure : à quelles pages vont les mots de passe importés (rien n'est écrit : la liste est rendue telle quelle) ----
+        var savedCreds = Passwords.All.ToList(); Passwords.All.Clear();
+        try
+        {
+            Passwords.All.Add(new Credential { Url = "https://exemple.fr/connexion", User = "a", Password = "p" });
+            Passwords.All.Add(new Credential { Url = "https://compte.exemple.net/", User = "b", Password = "p" });
+            Passwords.All.Add(new Credential { Url = "http://exemple.org/", User = "c", Password = "p" });
+            Passwords.All.Add(new Credential { Url = "http://127.0.0.1:8767/login.html", User = "d", Password = "p" });
+            int N(string url) => Passwords.For(url).Count;
+            Check("mots de passe : même origine https, autre chemin : proposé", N("https://exemple.fr/autre/page") == 1 && N("https://EXEMPLE.fr/") == 1);
+            Check("mots de passe : sous-domaine, domaine parent, autre port : jamais", N("https://www.exemple.fr/") == 0 && N("https://exemple.net/") == 0 && N("https://exemple.fr:8443/") == 0);
+            Check("mots de passe : jamais sur http (ni une entrée http sur sa page http), sauf la boucle locale", N("http://exemple.fr/") == 0 && N("http://exemple.org/") == 0 && N("http://127.0.0.1:8767/x") == 1 && N("http://localhost:8767/x") == 0);
+            Check("mots de passe : adresse invalide ou schéma inconnu : rien", N("pas une adresse") == 0 && N("file:///C:/x.html") == 0 && N(null) == 0);
+        }
+        catch (Exception ex) { Check("mots de passe : exception " + ex.Message, false); }
+        finally { Passwords.All.Clear(); Passwords.All.AddRange(savedCreds); }
         var form = new Form { FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-32000, -32000), Size = new Size(300, 200) };
         var web = new WebView2 { Dock = DockStyle.Fill }; form.Controls.Add(web);
 
@@ -27,7 +45,7 @@ static class SelfTest
         {
             if (done) return; done = true;
             File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-browser.txt"), lines);
-            Environment.ExitCode = ok ? 0 : 1;
+            Environment.ExitCode = ok && bad == 0 ? 0 : 1;
             try { Directory.Delete(ext, true); } catch { }
             Application.ExitThread();
         }

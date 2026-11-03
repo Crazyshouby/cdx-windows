@@ -249,12 +249,20 @@ static class Passwords
         catch (Exception ex) { Host.Log("mots de passe : " + ex.Message); }
     }
 
-    static string HostOf(string url) { try { return new Uri(url).Host.ToLowerInvariant(); } catch { return ""; } }
-    // Les identifiants valables pour une page : même hôte, ou l'hôte enregistré est un domaine parent (accounts.exemple.fr ⊂ exemple.fr).
+    // L'origine d'une adresse (schéma, hôte, port), ou null. Seules comptent https, et http sur la boucle locale (rien ne passe sur le réseau) :
+    // sur un http ordinaire, n'importe quel intermédiaire lirait le mot de passe posé dans la page.
+    static string OriginOf(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return null;
+        if (u.Scheme != Uri.UriSchemeHttps && !(u.Scheme == Uri.UriSchemeHttp && u.IsLoopback)) return null;
+        return u.Scheme + "://" + u.IdnHost.ToLowerInvariant() + ":" + u.Port;
+    }
+    // Les identifiants valables pour une page : exactement la même origine. Plus de domaine parent ni de sous-domaine (un identifiant de x.github.io
+    // ne part pas sur github.io, ni l'inverse), plus de http.
     public static List<Credential> For(string url)
     {
-        string h = HostOf(url); if (h.Length == 0) return new();
-        return All.Where(c => { string ch = HostOf(c.Url); return ch.Length > 0 && (h == ch || h.EndsWith("." + ch) || ch.EndsWith("." + h)); }).ToList();
+        string o = OriginOf(url); if (o == null) return new();
+        return All.Where(c => OriginOf(c.Url) == o).ToList();
     }
     public static bool Remove(string url, string user) { int n = All.RemoveAll(c => c.Url == url && c.User == user); if (n > 0) Save(); return n > 0; }
 
@@ -297,14 +305,19 @@ static class Passwords
         return rows;
     }
 
-    // Le script posé dans une page de connexion : remplit le premier champ « mot de passe » et le champ de texte qui le précède, puis réessaie quelques secondes
-    // (formulaires construits après coup). Les valeurs sont passées en JSON (jamais concaténées dans du code).
-    public static string FillScript(Credential c) => "(() => { const c = " + JsonSerializer.Serialize(new { user = c.User, password = c.Password }) + @";
-const set = (el, v) => { const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value'); d.set.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
-const fill = () => { const pw = [...document.querySelectorAll('input[type=password]')].find(e => e.offsetParent !== null); if (!pw || pw.dataset.cdxFilled) return !!pw;
-  const all = [...document.querySelectorAll('input')]; let u = null; for (let i = all.indexOf(pw) - 1; i >= 0; i--) { const t = (all[i].type || 'text').toLowerCase(); if (['text', 'email', 'tel'].includes(t) && all[i].offsetParent !== null) { u = all[i]; break; } }
-  if (u && !u.value) set(u, c.user); if (!pw.value) set(pw, c.password); pw.dataset.cdxFilled = '1'; return true; };
-if (!fill()) { let n = 0; const t = setInterval(() => { if (fill() || ++n > 16) clearInterval(t); }, 500); } })();";
+    // Le script posé dans une page de connexion. Il ne remplit RIEN tout seul : il attend un vrai geste de l'utilisateur (clic ou touche, isTrusted :
+    // un script de la page ne peut pas en fabriquer, contrairement à focus()) dans le champ « mot de passe » ou le champ de texte du même formulaire, puis
+    // remplit l'identifiant et le mot de passe. Les valeurs restent dans la fermeture du script, jamais dans une variable globale lisible par la page ;
+    // elles sont passées en JSON (jamais concaténées dans du code).
+    public static string FillScript(Credential c) => "(() => { if (window.__cdxFillArmed) return; window.__cdxFillArmed = true; const c = " + JsonSerializer.Serialize(new { user = c.User, password = c.Password }) + @";
+const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+const set = (el, v) => { desc.set.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+const visible = e => e.offsetParent !== null;
+const userOf = pw => { const all = [...(pw.form || document).querySelectorAll('input')]; for (let i = all.indexOf(pw) - 1; i >= 0; i--) { const t = (all[i].type || 'text').toLowerCase(); if (['text', 'email', 'tel'].includes(t) && visible(all[i])) return all[i]; } return null; };
+const pwFor = el => { if (!(el instanceof HTMLInputElement)) return null; const t = (el.type || 'text').toLowerCase(); if (t === 'password') return el;
+  if (!['text', 'email', 'tel'].includes(t)) return null; return [...(el.form || document).querySelectorAll('input[type=password]')].find(visible) || null; };
+const on = e => { if (!e.isTrusted) return; const pw = pwFor(e.target); if (!pw || pw.dataset.cdxFilled) return; const u = userOf(pw); if (u && !u.value) set(u, c.user); if (!pw.value) set(pw, c.password); pw.dataset.cdxFilled = '1'; };
+document.addEventListener('pointerdown', on, true); document.addEventListener('keyup', on, true); })();";
 }
 
 // ---------- la session : fenêtres, onglets, groupes (session.json, réécrit à chaque changement, pas seulement à la fermeture) ----------
