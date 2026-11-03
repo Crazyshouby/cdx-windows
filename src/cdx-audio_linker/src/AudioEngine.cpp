@@ -12,6 +12,7 @@
 #include <wrl/client.h>
 #include <avrt.h>
 #include <timeapi.h>
+#include <pmmintrin.h>
 #include <algorithm>
 #include <chrono>
 #include <climits>
@@ -110,7 +111,11 @@ public:
         return E_NOINTERFACE;
     }
     ULONG STDMETHODCALLTYPE AddRef() override { return ref_.fetch_add(1) + 1; }
-    ULONG STDMETHODCALLTYPE Release() override { return ref_.fetch_sub(1) - 1; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG r = ref_.fetch_sub(1) - 1;
+        if (r == 0) delete this;
+        return r;
+    }
 
     HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA data) override {
         if (!data) return S_OK;
@@ -125,9 +130,20 @@ private:
     std::atomic<bool>* muted_;
 };
 
+// Denormal floats (the tail of every IIR filter decaying on silence) cost
+// up to ~100x per operation on x86: flush them to zero on each audio thread
+// (MXCSR is per thread, so every thread entry point sets it).
+static void EnableFlushToZero() {
+    _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+    _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+}
+
 // Bridges ActivateAudioInterfaceAsync (used for process loopback) back to a
 // plain event wait. IAgileObject spares COM the marshaling of the callback
-// (we run in the MTA). Stack lifetime, like the other callback shims here.
+// (we run in the MTA). Heap-allocated and truly reference-counted: Windows
+// keeps its own reference until ActivateCompleted has run, so giving up the
+// wait after 3 s (break) can no longer leave it calling into a destroyed
+// stack object.
 class ActivateCompletionHandler : public IActivateAudioInterfaceCompletionHandler {
 public:
     ActivateCompletionHandler() { event_ = CreateEventW(nullptr, TRUE, FALSE, nullptr); }
@@ -145,7 +161,11 @@ public:
         return E_NOINTERFACE;
     }
     ULONG STDMETHODCALLTYPE AddRef() override { return ref_.fetch_add(1) + 1; }
-    ULONG STDMETHODCALLTYPE Release() override { return ref_.fetch_sub(1) - 1; }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG r = ref_.fetch_sub(1) - 1;
+        if (r == 0) delete this;
+        return r;
+    }
 
     HRESULT STDMETHODCALLTYPE ActivateCompleted(IActivateAudioInterfaceAsyncOperation*) override {
         SetEvent(event_);
@@ -728,6 +748,7 @@ void AudioEngine::markSourceLost(unsigned long sourcePid, bool lost) {
 
 void AudioEngine::captureThreadProc(std::wstring sourceId, bool loopback, std::wstring masterVolumeDeviceId,
                                      unsigned long sourcePid) {
+    EnableFlushToZero();
     ComScope com;
     TimerResolutionScope timerRes;
     HANDLE mmcssHandle = EnableProAudioMmcss();
@@ -809,12 +830,13 @@ AudioEngine::CaptureSessionEnd AudioEngine::runCaptureSession(
             activateParams.blob.cbSize = sizeof(activationParams);
             activateParams.blob.pBlobData = reinterpret_cast<BYTE*>(&activationParams);
 
-            ActivateCompletionHandler completion;
+            ComPtr<ActivateCompletionHandler> completion;
+            completion.Attach(new ActivateCompletionHandler());   // our reference; the async operation takes its own
             ComPtr<IActivateAudioInterfaceAsyncOperation> asyncOp;
             if (FAILED(ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
                                                     __uuidof(IAudioClient), &activateParams,
-                                                    &completion, asyncOp.GetAddressOf()))) break;
-            if (!completion.wait(3000)) break;
+                                                    completion.Get(), asyncOp.GetAddressOf()))) break;
+            if (!completion->wait(3000)) break;
             HRESULT hrActivate = E_FAIL;
             ComPtr<IUnknown> activated;
             if (FAILED(asyncOp->GetActivateResult(&hrActivate, activated.GetAddressOf())) ||
@@ -1017,6 +1039,7 @@ AudioEngine::CaptureSessionEnd AudioEngine::runCaptureSession(
 }
 
 void AudioEngine::renderThreadProc(OutputState* state) {
+    EnableFlushToZero();
     ComScope com;
     HANDLE mmcssHandle = EnableProAudioMmcss();
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <vector>
@@ -35,6 +36,11 @@ public:
 
         const double pi = 3.14159265358979323846;
         double A = std::pow(10.0, dBgain / 40.0);
+        // The top band sits at 12 kHz: on a 16-24 kHz output (Bluetooth
+        // hands-free) that is at or above Nyquist, sin(w0) turns zero or
+        // negative and the poles leave the unit circle (noise, then NaN).
+        // Keep every centre frequency safely below Nyquist.
+        if (sampleRate > 0) f0 = (std::min)(f0, 0.45 * sampleRate);
         double w0 = 2.0 * pi * f0 / sampleRate;
         double cw = std::cos(w0), sw = std::sin(w0);
         double a0;
@@ -90,6 +96,9 @@ public:
                 float x = data[f * ch_ + c];
                 float y = static_cast<float>(b0_ * x + b1_ * x1_[c] + b2_ * x2_[c]
                                              - a1_ * y1_[c] - a2_ * y2_[c]);
+                // Safety net: a non-finite value would poison the state for
+                // good and reach the mixer. Reset this channel instead.
+                if (!std::isfinite(y)) { x1_[c] = x2_[c] = y1_[c] = y2_[c] = 0.0f; y = 0.0f; x = 0.0f; }
                 x2_[c] = x1_[c];
                 x1_[c] = x;
                 y2_[c] = y1_[c];
