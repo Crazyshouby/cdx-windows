@@ -4,7 +4,7 @@
 // « yt.lecteur »), dont toute l'interface est masquée ; les commandes sont les nôtres (.commandes, sous la vidéo), qui pilotent l'API du lecteur de YouTube
 // (« yt.cmd ») et suivent son état (« lecture », 4 fois par seconde). Tout ce qui recouvrirait la vue native (menus, dialogues) l'efface un instant (win.overlay).
 //   demandes :  ready · yt.accueil · yt.abonnements · yt.recherche { q } · yt.video { id, liste, index } · yt.chaine { id, url, params } · yt.liste { id }
-//               yt.plus { vue } · yt.connexion · yt.deconnexion · yt.changer · yt.lecteur { visible, x, y, w, h } · yt.cmd { action, valeur }
+//               yt.plus { vue } · yt.connexion · yt.deconnexion · yt.changer · yt.lecteur { visible, x, y, w, h } · yt.cmd { action, valeur } (dont confirmer : un bouton de l'écran de YouTube)
 //               (et celles de host.js : log, suite.accent, win.*)
 //   réponses :  etat { pret, connecte, compte, bloqueur, extraction, veille } · liste { vue, requete, ajout, reinit, videos, suite, messages, pubs, chaine, entete }
 //               fiche (spontanee : le lecteur est passé seul à une autre vidéo) · lecture (état du lecteur) · pleinecran · occupe · erreur · theme
@@ -115,7 +115,9 @@
       <div class="cote">${liste}<div class="sec">Suggestions (${(f.suggestions || []).length})</div><div class="sugs">${sug || '<div class="vide">Aucune suggestion.</div>'}</div></div>
     </div>`;
     CdxFrame.title('YouTube — ' + (f.titre || ''));
-    const on = document.querySelector('#encours .sug.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+    blocageAffiche = '';   // un nouveau rectangle du lecteur : le message éventuel sera remis par le prochain état du lecteur
+    if (lecture && lecture.blocage && lecture.id === f.id) majBlocage(lecture.blocage);
+    const on =document.querySelector('#encours .sug.on'); if (on) on.scrollIntoView({ block: 'nearest' });
     suivreLecteur();
   }
 
@@ -162,9 +164,31 @@
   }
   // la charte dessine la barre d'accent du curseur à la taille de background-size : chaque page la règle selon la valeur
   const remplir = r => { const mx = +r.max || 0, mn = +r.min || 0; r.style.backgroundSize = (mx > mn ? Math.round((r.value - mn) / (mx - mn) * 1000) / 10 : 0) + '% 100%'; };
+  // Un écran de YouTube à la place de la vidéo (avertissement d'âge ou de contenu sensible, vidéo indisponible, connexion demandée) : le programme efface
+  // la vue native, et le rectangle du lecteur montre le message de YouTube avec ses boutons ; un clic actionne le vrai bouton dans la page cachée.
+  let blocageAffiche = '';
+  function majBlocage(b) {
+    const l = $('lecteur'); if (!l) return;
+    const cle = b ? JSON.stringify(b) + etat.connecte : '';
+    if (cle === blocageAffiche) return;
+    blocageAffiche = cle;
+    l.classList.toggle('bloque', !!b);
+    if (!b) { l.innerHTML = '<span>Chargement du lecteur…</span>'; return; }
+    // le détail répète parfois le titre, et finit par un lien « En savoir plus » (vers l'aide de Google) qu'on ne suit pas
+    const detail = (b.detail || '').replace(/\s*(En savoir plus|Learn more)\.?\s*$/i, '').replace(b.raison ? new RegExp('^' + b.raison.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.?\\s*') : /^$/, '');
+    const lignes = b.raison ? [b.raison, detail].filter(Boolean) :(b.texte || '').split('\n').filter(x => x.trim() && !(b.boutons || []).includes(x.trim()));
+    const titre = lignes.shift() || 'YouTube ne montre pas cette vidéo.';
+    const boutons = (b.boutons || []).map((t, i) => `<button class="btn${i === 0 ? ' primary' : ''}" data-a="confirmer" data-i="${i}">${esc(t)}</button>`);
+    if (b.connexion && !etat.connecte) boutons.push('<button class="btn" data-a="connexion">Se connecter</button>');
+    l.innerHTML = `<div class="blocage"><div class="titre">${esc(titre)}</div>${lignes.length ? `<div class="detail">${esc(lignes.join('\n'))}</div>` : ''}`
+      + (boutons.length ? `<div class="actions">${boutons.join('')}</div>` : '') + '</div>';
+    statut(b.boutons && b.boutons.length ? 'Confirmation demandée par YouTube' : 'Vidéo non lue (voir le message)', 'amber');
+  }
+
   function majCommandes(s) {
     lecture = s;
     if (cur.vue !== 'video' || !$('commandes')) return;
+    majBlocage(s.blocage || null);
     $('cLire').innerHTML = s.pause === false ? IC.pause : IC.lire;
     if (!glisse) { $('cPos').max = s.duree || 0; $('cPos').value = s.t || 0; $('cTemps').textContent = `${temps(s.t)} / ${temps(s.duree)}`; remplir($('cPos')); }
     $('cPos').title = `Position (← →) · chargé : ${Math.round((s.charge || 0) * 100)} %`;
@@ -299,6 +323,7 @@
     if (a) {
       if (a.dataset.a === 'plus' && !plusEnCours) { demander('yt.plus', { vue: cur.vue }); rendre(); }
       else if (a.dataset.a === 'connexion') post('yt.connexion');
+      else if (a.dataset.a === 'confirmer') { a.disabled = true; statut('Confirmation envoyée à YouTube…', 'amber'); cmd('confirmer', +a.dataset.i); }
       else if (a.dataset.a === 'toutlire' && cur.entete) demander('yt.video', { id: cur.entete.premierId, liste: cur.entete.id, index: 0 });
       return;
     }
@@ -353,6 +378,7 @@
     affichage: $('commandes') ? { temps: $('cTemps').textContent, pos: +$('cPos').value, max: +$('cPos').max, vol: +$('cVol').value, boutons: $('commandes').querySelectorAll('button, select').length } : null,
     barre: barreVisible, recouvert, menu: [...document.querySelectorAll('.menu[data-cdx] .menu-item')].map(x => x.innerText.trim()), compte: etat.compte || null, connecte: etat.connecte,
     texteVue: $('vue').innerText.slice(0, 400),
+    blocage: $('lecteur') && $('lecteur').classList.contains('bloque') ? { texte: $('lecteur').innerText.trim(), boutons: [...$('lecteur').querySelectorAll('button')].map(b => b.innerText.trim()) } : null,
   });
 
   fillPix();

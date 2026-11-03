@@ -84,5 +84,15 @@ body.plein .fiche .lecteur { visibility: hidden; }   /* en plein écran, le rect
 body.plein .commandes { position: fixed; left: 0; right: 0; bottom: 0; width: auto; height: 30px; padding: 0 6px; background: var(--panel); z-index: 6; }
 body.plein.sans-barre .commandes { display: none; }
 
+/* un écran de YouTube à la place de la vidéo (âge, contenu sensible, vidéo indisponible) : son message et ses boutons, dans le rectangle du lecteur
+   (la vue native est alors effacée) ; en plein écran, le message prend la place de la vidéo */
+.fiche .lecteur.bloque { overflow: auto; }
+.blocage { display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 600px; padding: 16px 20px; text-align: center; }
+.blocage .titre { color: var(--text); line-height: 18px; }
+.blocage .detail { color: var(--faint); line-height: 16px; white-space: pre-wrap; }
+.blocage .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.blocage .actions .btn { padding: 0 12px; }
+body.plein .fiche .lecteur.bloque { visibility: visible; position: fixed; left: 0; top: 0; right: 0; bottom: 30px; width: auto; aspect-ratio: auto; border: 0; z-index: 5; }
+
 .status { flex: none; }
 .status .st2 { margin-left: auto; padding-left: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

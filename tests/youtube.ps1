@@ -2,8 +2,8 @@
 # l'accueil, et sans compte la fenêtre de connexion affichée puis recachée), sur le vrai YouTube. Aucune entrée simulée ; résultat lu dans journal-youtube.log.
 #   pwsh -File tests\youtube.ps1 [-Bin <dossier des .exe>]            avec les vraies données (session Google, uBOL) : cdx-youtube ne doit pas tourner
 #   pwsh -File tests\youtube.ps1 -Isole [-Bin …]                       profil neuf et anonyme dans un dossier temporaire (uBOL installé, consentement UE refusé)
-#   options transmises : -Requete "…" -Video <id> -Extraction fetch
-param([string]$Bin, [switch]$Isole, [string]$Requete, [string]$Video, [string]$Extraction)
+#   options transmises : -Requete "…" -Video <id> -Extraction fetch -Bloquee <id> (une vidéo remplacée par un écran de YouTube : avertissement, vidéo supprimée)
+param([string]$Bin, [switch]$Isole, [string]$Requete, [string]$Video, [string]$Extraction, [string]$Bloquee)
 $ErrorActionPreference = 'Continue'
 $root = Split-Path $PSScriptRoot
 if (-not $Bin) { $Bin = "$root\bin" }
@@ -19,6 +19,7 @@ $a = @('--essai')
 if ($Requete) { $a += '--requete', ('"' + $Requete + '"') }
 if ($Video) { $a += '--video', $Video }
 if ($Extraction) { $a += '--extraction', $Extraction }
+if ($Bloquee) { $a += '--bloquee', $Bloquee }
 $p = Start-Process "$Bin\cdx-youtube.exe" -ArgumentList ($a -join ' ') -PassThru -Wait
 Get-Content $journal -Encoding utf8 | Select-Object -Skip $avant
 "code de sortie : $($p.ExitCode)$(if ($p.ExitCode -eq 4) { ' (cdx-youtube tourne déjà : le fermer avant l''essai)' })"

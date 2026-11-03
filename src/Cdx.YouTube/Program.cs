@@ -10,9 +10,10 @@ namespace Cdx;
 //   --page-visible   montre la page YouTube « cachée » à côté (mise au point), avec les outils de développement
 //   --extraction     csharp (défaut : WebResourceResponseReceived) ou fetch (crochet sur fetch dès le départ, pour comparer)
 //   --trace          écrit au journal chaque requête faite à youtube.com par la page cachée, et garde les réponses sous youtube\brut\
-// cdx-youtube.exe --essai [--requete "…"] [--video <id>]
+// cdx-youtube.exe --essai [--requete "…"] [--video <id>] [--bloquee <id>]
 //   parcours automatique (accueil, recherche, suite, fiche, suggestion, retour, et sans compte la fenêtre de connexion) ; résultat dans
-//   journal-youtube.log, code de sortie 0 si tout passe. Ne montre jamais la fenêtre de connexion d'elle-même. Voir tests\youtube.ps1.
+//   journal-youtube.log, code de sortie 0 si tout passe. --bloquee : une vidéo que YouTube remplace par un écran (par défaut une vidéo supprimée ;
+//   une vidéo avec avertissement d'âge ou de contenu : son bouton « Je comprends… » est aussi essayé). Ne montre jamais la fenêtre de connexion d'elle-même. Voir tests\youtube.ps1.
 // cdx-youtube.exe --sonder <chemin> [--sonder <chemin>…]
 //   mise au point et veille : la page cachée charge chaque adresse de YouTube (/@chaine/videos, /playlist?list=…) et garde son ytInitialData sous
 //   youtube\brut\ (à rejouer avec --lire), puis le programme s'arrête.
@@ -20,7 +21,7 @@ namespace Cdx;
 //   passe une réponse brute de YouTube dans la couche de lecture (YtLecture) et écrit ce qu'elle en tire ; aucune fenêtre, aucun réseau.
 sealed class Options
 {
-    public string Theme, Requete = "documentaire espace", FichierALire, Video, Liste;
+    public string Theme, Requete = "documentaire espace", FichierALire, Video, Liste, Bloquee = "Cr381pDsSsA";
     public List<string> Sonder = new();
     public bool PageVisible, Essai;
     public PageCachee.Extraction Extraction = PageCachee.Extraction.CSharp;
@@ -41,6 +42,7 @@ sealed class Options
                 case "--requete": o.Requete = Suivant(); break;
                 case "--video": o.Video = Suivant(); break;
                 case "--liste": o.Liste = Suivant(); break;
+                case "--bloquee": o.Bloquee = Suivant(); break;
                 case "--lire": o.FichierALire = Suivant(); break;
                 case "--sonder": o.Sonder.Add(Suivant()); break;
                 default: throw new ArgumentException("option inconnue : " + a[i]);

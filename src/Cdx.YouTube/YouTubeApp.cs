@@ -26,7 +26,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
     FormWindowState etatAvantPleinEcran;
     readonly System.Windows.Forms.Timer veilleLecture = new() { Interval = 5000 };
     readonly System.Windows.Forms.Timer suiviLecture = new() { Interval = 250 };   // l'état du lecteur, pour nos commandes
-    string dernierEtatLecture; bool suiviEnCours;
+    string dernierEtatLecture, dernierBlocage; bool suiviEnCours;
     // plein écran : la barre de commandes s'efface après un moment sans mouvement de la souris (pendant la lecture), et revient au moindre mouvement
     readonly System.Windows.Forms.Timer souris = new() { Interval = 200 };
     static readonly TimeSpan DelaiBarre = TimeSpan.FromSeconds(3);
@@ -56,7 +56,25 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
             try
             {
                 string e = await page.EtatLecteurAsync();
-                if (e != dernierEtatLecture) { dernierEtatLecture = e; form.Web.CoreWebView2.PostWebMessageAsJson("{\"type\":\"lecture\",\"value\":" + e + "}"); }
+                // (le lecteur recaché oublie son blocage : à son retour, l'état est relu même s'il n'a pas changé)
+                if (e != dernierEtatLecture || page.Bloque != (dernierBlocage != null))
+                {
+                    dernierEtatLecture = e;
+                    // un écran de YouTube à la place de la vidéo (âge, contenu sensible, vidéo indisponible) : la vue native s'efface, la fiche montre le message
+                    using (var d = JsonDocument.Parse(e))
+                    {
+                        var b = d.RootElement.TryGetProperty("blocage", out var x) && x.ValueKind == JsonValueKind.Object ? x : default;
+                        string cle = b.ValueKind == JsonValueKind.Object ? b.GetRawText() : null;
+                        if (cle != dernierBlocage || page.Bloque != (cle != null))
+                        {
+                            dernierBlocage = cle;
+                            page.Bloquer(cle != null);
+                            Host.Log(cle == null ? "écran de YouTube disparu : la vidéo est de nouveau visible"
+                                : $"écran de YouTube à la place de la vidéo : {b.GetProperty("statut").GetString()} « {b.GetProperty("raison").GetString()} », boutons : {string.Join(", ", b.GetProperty("boutons").EnumerateArray().Select(y => y.GetString()))}");
+                        }
+                    }
+                    form.Web.CoreWebView2.PostWebMessageAsJson("{\"type\":\"lecture\",\"value\":" + e + "}");
+                }
             }
             catch (Exception ex) { Host.Log("suivi de la lecture : " + ex.Message); }
             finally { suiviEnCours = false; }
@@ -208,7 +226,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
         Open(); return true;
     }
 
-    // Canal de test (debug.txt) : state · eval <js> · cmd <json> ; canal de pilotage : state · cmd <json> (commandes de la page, validées comme si elles venaient d'elle).
+    // Canal de test (debug.txt) : state · eval <js> (page de l'interface) · page <js> (page YouTube cachée) · sans-connexion (referme la fenêtre de connexion Google) · cmd <json> ; canal de pilotage : state · cmd <json> (commandes de la page, validées comme si elles venaient d'elle).
     public async Task<string> HandleControl(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
@@ -216,6 +234,8 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
         {
             case "state": return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", page cachée " + (pret ? "prête" : "en chargement") + ", " + (page.Connecte ? "connecté" : "non connecté") + ", " + (page.Bloqueur ?? "SANS bloqueur") + ", veille " + Veille.Compte;
             case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
+            case "page": return pret ? await page.ScriptAsync(a) : "page cachée en chargement";   // canal de test seulement (le pilotage n'accepte que state et cmd)
+            case "sans-connexion": await page.AnnulerConnexionAsync(); return "fenêtre de connexion refermée";
             case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";
         }
@@ -276,10 +296,19 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                     "muet" => val.ValueKind is JsonValueKind.True or JsonValueKind.False,
                     "qualite" => val.ValueKind == JsonValueKind.String && Regex.IsMatch(val.GetString(), "^[a-z0-9]{2,12}$"),
                     "soustitres" => val.ValueKind == JsonValueKind.String && Regex.IsMatch(val.GetString(), "^[A-Za-z0-9_-]{0,20}$"),
+                    "confirmer" => val.ValueKind == JsonValueKind.Number && val.TryGetInt32(out var nb) && nb is >= 0 and < 10,
                     _ => false,
                 };
                 Activite();
-                if (okv && page.LecteurAffiche) await page.CommandeAsync(a, val);
+                if (okv && a == "confirmer")
+                {
+                    // un bouton de l'écran de YouTube (« Je comprends et je souhaite continuer ») : cliqué dans la page cachée, puis la lecture repart
+                    if (!page.LecteurAffiche || !page.Bloque) return;
+                    await page.ConfirmerAsync(val.GetInt32());
+                    for (int i = 0; i < 20 && page.Bloque; i++) await Task.Delay(250);
+                    await page.LireAsync();
+                }
+                else if (okv && page.LecteurAffiche) await page.CommandeAsync(a, val);
                 else if (a == "pleinecran") PleinEcran(!pleinEcran);
                 else Host.Log("commande du lecteur refusée : " + a);
                 return;
@@ -748,6 +777,30 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                 string src = await page.ScriptAsync("location.search");
                 Verifier(ok && (await Etat()).GetProperty("id").GetString() == premier && src.Contains("list=RD") && lm.GetProperty("pause").ValueKind == JsonValueKind.False, $"mix de {premier} : {src} ; {lm.GetRawText()}");
             }
+            // une vidéo remplacée par un écran de YouTube (supprimée, ou avertissement d'âge / de contenu) : la vue native s'efface, la fiche montre le
+            // message et les boutons de YouTube ; s'il y a un bouton (« Je comprends et je souhaite continuer »), il est cliqué et la vidéo doit se lire
+            if (o.Bloquee != null)
+            {
+                ok = await Demander(new { cmd = "yt.video", id = o.Bloquee });
+                for (int i = 0; i < 40 && !page.Bloque; i++) await Task.Delay(250);
+                await Task.Delay(500);
+                var eb = await Etat();
+                var bl = eb.GetProperty("blocage");
+                Verifier(ok && page.Bloque && !page.VueVisible && bl.ValueKind == JsonValueKind.Object && bl.GetProperty("texte").GetString().Length > 0,
+                    $"vidéo {o.Bloquee} remplacée par un écran de YouTube : vue native effacée ({(page.VueVisible ? "ENCORE visible" : "oui")}), message dans la fiche : {(bl.ValueKind == JsonValueKind.Object ? bl.GetRawText() : "aucun")}");
+                CaptureFenetre("9-blocage");
+                if (bl.ValueKind == JsonValueKind.Object && bl.GetProperty("boutons").GetArrayLength() > 0)
+                {
+                    await form.Web.CoreWebView2.ExecuteScriptAsync("document.querySelector('#lecteur [data-a=confirmer]').click()");
+                    for (int i = 0; i < 40 && page.Bloque; i++) await Task.Delay(250);
+                    // 8 s : l'avertissement revenait environ 2 s après le démarrage (le lecteur redemandait ses données sans l'accord, 03/11/2026)
+                    await Task.Delay(8000);
+                    var lb = JsonDocument.Parse(await page.EtatLecteurAsync()).RootElement;
+                    Verifier(!page.Bloque && page.VueVisible && lb.GetProperty("pause").ValueKind == JsonValueKind.False, $"bouton de l'écran de YouTube cliqué : la vidéo se lit ({lb.GetRawText()})");
+                    CaptureFenetre("9b-blocage-confirme");
+                }
+            }
+
             ok = await Demander(new { cmd = "yt.accueil" });
 
             // sans compte (essai isolé) : la déconnexion efface les cookies du profil et recharge YouTube ; avec le vrai compte, on n'y touche pas

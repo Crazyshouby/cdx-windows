@@ -80,6 +80,10 @@ sealed class PageCachee
 
         Bloqueur = await Ubol.PreparerAsync(core.Profile);
         core.WebResourceResponseReceived += RecuParCSharp;   // reçoit toutes les réponses, sans filtre à déclarer
+        // les requêtes du lecteur, pour y ajouter l'accord donné à un avertissement de contenu (voir AjouterAccord)
+        foreach (var u in new[] { "https://www.youtube.com/youtubei/v1/player*", "https://www.youtube.com/youtubei/v1/get_watch*" })
+            core.AddWebResourceRequestedFilter(u, CoreWebView2WebResourceContext.All);
+        core.WebResourceRequested += AjouterAccord;
         if (mode == Extraction.Fetch) await PoserCrochetAsync();
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -429,14 +433,14 @@ sealed class PageCachee
         web.Bounds = r; web.BringToFront();
         await ModeLecteurAsync(true);
         await Task.Delay(250);
-        if (LecteurAffiche) { web.Visible = !recouvert; Host.Log($"lecteur affiché ({r.Width} × {r.Height})"); }
+        if (LecteurAffiche) { web.Visible = !recouvert && !Bloque; Host.Log($"lecteur affiché ({r.Width} × {r.Height})"); }
     }
 
     // Le lecteur quitte l'interface : en pause, la page reprend sa forme et retourne dans sa fenêtre cachée.
     public async Task CacherLecteurAsync()
     {
         if (!LecteurAffiche) return;
-        LecteurAffiche = false;
+        LecteurAffiche = false; Bloque = false;
         await PauseAsync();
         await ModeLecteurAsync(false);
         web.Parent?.Controls.Remove(web);
@@ -448,7 +452,7 @@ sealed class PageCachee
     // Un menu de la fenêtre s'ouvre par-dessus : le lecteur (une vue native, toujours au-dessus de la page) s'efface le temps du menu.
     bool recouvert;
     public bool Recouvert => recouvert;
-    public void Recouvrir(bool menuOuvert) { recouvert = menuOuvert; if (LecteurAffiche) web.Visible = !menuOuvert; }
+    public void Recouvrir(bool menuOuvert) { recouvert = menuOuvert; if (LecteurAffiche) web.Visible = !menuOuvert && !Bloque; }
 
     // En plein écran, la barre effacée : le curseur disparaît aussi au-dessus de la vidéo (le style « lecteur seul » le force sinon à la flèche).
     public async Task CurseurCacheAsync(bool cache)
@@ -509,9 +513,116 @@ sealed class PageCachee
         try { await core.ExecuteScriptAsync("(() => { const p = document.getElementById('movie_player'); if (p && p.pauseVideo) p.pauseVideo(); const v = document.querySelector('video'); if (v) v.pause(); })()"); } catch { }
     }
 
+    // L'écran de YouTube qui remplace la vidéo : avertissement d'âge ou de contenu sensible, vidéo supprimée ou indisponible, connexion demandée. Le style
+    // « lecteur seul » le masque avec le reste de la page : l'interface en affiche le message et les boutons (blocage), et un clic sur l'un d'eux fait ce que
+    // fait le bouton de YouTube (ConfirmerAsync). Deux formes, vues le 03/11/2026 :
+    //   - avertissement de contenu (CONTENT_CHECK_REQUIRED, « Réservé à un public averti ») : playabilityStatus.errorScreen.playerInterstitialRenderer
+    //     .content.interstitialViewModel { title, description, primaryButton.buttonViewModel { titleFormatted, onTap.innertubeCommand } } ; la commande
+    //     du bouton est une navigation vers la même vidéo avec contentCheckOk et racyCheckOk. Aucun <button> dans la page : on rejoue la commande ;
+    //   - vidéo supprimée ou indisponible : #error-screen (yt-playability-error-supported-renderers) sans l'attribut hidden, son texte et ses <button>.
+    // Les textes de la page sont lus par textContent : sous le style « lecteur seul », la page est invisible et innerText y est vide.
+    const string EcranYtJs = """
+        () => { if (!location.pathname.startsWith('/watch')) return null;
+          const e = document.getElementById('error-screen') || document.querySelector('yt-playability-error-supported-renderers');
+          let ps = null; try { ps = document.getElementById('movie_player').getPlayerResponse().playabilityStatus; } catch (x) {}
+          const es = ps && ps.errorScreen || {};
+          const iv = es.playerInterstitialRenderer && es.playerInterstitialRenderer.content && es.playerInterstitialRenderer.content.interstitialViewModel || null;
+          const visible = !!(e && !e.hidden);
+          if (!visible && !(iv && ps.status !== 'OK')) return null;
+          if (ps && ps.status === 'OK' && !iv) return null;   // pendant le chargement d'une vidéo lisible, #error-screen peut rester un instant affiché
+          const txt = n => !n ? '' : typeof n === 'string' ? n : n.content || n.simpleText || (n.runs || []).map(r => r.text).join('');
+          const lu = n => (n.innerText || n.textContent || n.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ');
+          const boutons = [];
+          if (iv) for (const k of ['primaryButton', 'secondaryButton']) {
+            const b = iv[k] && iv[k].buttonViewModel, c = b && b.onTap && b.onTap.innertubeCommand;
+            // seulement une commande qui rouvre la vidéo (watchEndpoint) : « En savoir plus » (urlEndpoint) ferait quitter YouTube à la page cachée
+            if (c && c.watchEndpoint) boutons.push({ texte: txt(b.titleFormatted) || b.title || 'Continuer', commande: c });
+          }
+          if (!boutons.length && visible) for (const b of e.querySelectorAll('button')) { const t = lu(b); if (t) boutons.push({ texte: t, element: b }); }
+          const er = es.playerErrorMessageRenderer || es.playerLegacyDesktopYpcTrailerRenderer || null;
+          const texte = visible ? lu(e) : '';
+          const raison = iv ? txt(iv.title) : txt(er && er.reason) || (ps && ps.reason) || '';
+          const detail = iv ? txt(iv.description) : txt(er && er.subreason);
+          if (!texte && !raison && !boutons.length) return null;
+          const liens = visible ? [...e.querySelectorAll('a[href]')].map(a => a.href) : [];
+          return { statut: ps && ps.status || '', raison, detail, texte, boutons,
+            connexion: (ps && ps.status === 'LOGIN_REQUIRED') || liens.some(h => /accounts\.google\.com|ServiceLogin|\/signin/i.test(h)) }; }
+        """;
+
+    // Rend null, ou { statut, raison, detail, texte, boutons (leurs textes), connexion }.
+    static readonly string BlocageJs = "(() => { const r = (" + EcranYtJs + ")(); return r && Object.assign({}, r, { boutons: r.boutons.map(b => b.texte) }); })()";
+
+    public bool Bloque { get; private set; }
+    public bool VueVisible => web.Visible;
+
+    // Une vidéo bloquée par un écran de YouTube : la vue native s'efface pour laisser voir, dessous, le message de l'interface.
+    public void Bloquer(bool on) { Bloque = on; if (LecteurAffiche) web.Visible = !recouvert && !Bloque; }
+
+    // Le n-ième bouton de l'écran de YouTube (dans l'ordre de BlocageJs) : sa commande rejouée par la navigation interne de YouTube (comme un clic sur un
+    // lien), ou le bouton de la page cliqué comme par l'utilisateur. YouTube recharge alors le lecteur.
+    public async Task<string> ConfirmerAsync(int n)
+    {
+        string js = "(() => { const r = (" + EcranYtJs + ")(); if (!r) return 'pas d\\'écran'; const b = r.boutons[" + n + "]; if (!b) return 'pas de bouton';"
+            + " if (b.commande) { const app = document.querySelector('ytd-app'); if (!app) return 'ytd-app absent';"
+            + "   const we = b.commande.watchEndpoint; const ok = we && (we.contentCheckOk || we.racyCheckOk) ? '[accord:' + we.videoId + '] ' : '';"
+            + "   app.dispatchEvent(new CustomEvent('yt-navigate', { bubbles: true, composed: true, detail: { endpoint: b.commande } })); return ok + 'commande rejouée : ' + b.texte; }"
+            + " b.element.click(); return 'bouton cliqué : ' + b.texte; })()";
+        try
+        {
+            // la commande donne l'accord pour cette vidéo : il est noté AVANT de la rejouer, pour que les requêtes suivantes du lecteur le portent aussi
+            using var d = JsonDocument.Parse(await GesteAsync(js));
+            string r = d.RootElement.TryGetProperty("result", out var res) && res.TryGetProperty("value", out var v) ? v.ToString() : d.RootElement.GetRawText();
+            var m = Regex.Match(r, @"^\[accord:([A-Za-z0-9_-]{11})\] ");
+            if (m.Success) { lock (accords) accords.Add(m.Groups[1].Value); r = r[m.Length..] + " (accord gardé pour " + m.Groups[1].Value + ")"; }
+            Host.Log("écran de YouTube, bouton " + n + " : " + r);
+            return r;
+        }
+        catch (Exception ex) { Host.Log("écran de YouTube, bouton " + n + " : " + ex.Message); return "erreur"; }
+    }
+
+    // Les vidéos dont l'avertissement a été accepté (pour ce lancement). Vu le 03/11/2026 : après « Je comprends et je souhaite poursuivre », la vidéo démarre,
+    // puis le lecteur de YouTube redemande ses données (youtubei/v1/player) environ deux secondes plus tard SANS contentCheckOk, et l'avertissement revient.
+    // Chaque requête player / get_watch d'une de ces vidéos reçoit donc contentCheckOk et racyCheckOk, comme le fait la commande du bouton de YouTube.
+    readonly HashSet<string> accords = new();
+
+    void AjouterAccord(object s, CoreWebView2WebResourceRequestedEventArgs e)
+    {
+        try
+        {
+            lock (accords) if (accords.Count == 0) return;
+            if (e.Request.Method != "POST" || e.Request.Content == null) return;
+            using var ms = new MemoryStream();
+            e.Request.Content.CopyTo(ms);
+            byte[] corps = ms.ToArray();
+            // le lecteur envoie son corps compressé (gzip, Content-Encoding: gzip) : décompressé pour le lire, recompressé après
+            bool gzip = corps.Length > 2 && corps[0] == 0x1f && corps[1] == 0x8b;
+            byte[] json = corps;
+            if (gzip) { using var z = new System.IO.Compression.GZipStream(new MemoryStream(corps), System.IO.Compression.CompressionMode.Decompress); using var o2 = new MemoryStream(); z.CopyTo(o2); json = o2.ToArray(); }
+            e.Request.Content = new MemoryStream(corps);   // par défaut, le corps d'origine
+            if (System.Text.Json.Nodes.JsonNode.Parse(json) is not System.Text.Json.Nodes.JsonObject o) return;
+            bool change = false;
+            // player : { videoId, … } ; get_watch : { playerRequest: { videoId, … }, watchNextRequest: { videoId, … } }
+            foreach (var cible in new[] { o, o["playerRequest"] as System.Text.Json.Nodes.JsonObject, o["watchNextRequest"] as System.Text.Json.Nodes.JsonObject })
+            {
+                if (cible == null || cible["videoId"]?.GetValue<string>() is not { } vid) continue;
+                lock (accords) if (!accords.Contains(vid)) continue;
+                if (cible["contentCheckOk"] is null) { cible["contentCheckOk"] = true; change = true; }
+                if (cible["racyCheckOk"] is null) { cible["racyCheckOk"] = true; change = true; }
+            }
+            if (!change) return;
+            byte[] nouveau = Encoding.UTF8.GetBytes(o.ToJsonString());
+            if (gzip) { using var o3 = new MemoryStream(); using (var z = new System.IO.Compression.GZipStream(o3, System.IO.Compression.CompressionLevel.Fastest, true)) z.Write(nouveau); nouveau = o3.ToArray(); }
+            e.Request.Content = new MemoryStream(nouveau);
+            Host.Log("accord de l'avertissement ajouté à " + Court(e.Request.Uri));
+        }
+        catch (Exception ex) { Host.Log("accord de l'avertissement : " + ex.Message); }
+    }
+
     // L'état du lecteur, pour les commandes de l'interface et l'essai : position, durée, chargé, pause, état, volume, vitesse, qualité, sous-titres, place dans
-    // une liste, pub en cours (classe ad-showing). Lu par l'API du lecteur de YouTube (#movie_player). Rend du JSON.
-    public Task<string> EtatLecteurAsync() => core.ExecuteScriptAsync("""
+    // une liste, pub en cours (classe ad-showing), écran de YouTube à la place de la vidéo (blocage). Lu par l'API du lecteur de YouTube (#movie_player). Rend du JSON.
+    public Task<string> EtatLecteurAsync() => core.ExecuteScriptAsync("(blocage => Object.assign(" + EtatJs + ", { blocage }))(" + BlocageJs + ")");
+
+    const string EtatJs = """
         (() => { const p = document.getElementById('movie_player'), v = document.querySelector('#movie_player video') || document.querySelector('video');
           const f = (g, d) => { try { const x = g(); return x === undefined ? d : x; } catch (e) { return d; } };
           // includeAsr : les sous-titres automatiques aussi (sans lui, la liste est vide alors que YouTube en affiche)
@@ -525,7 +636,7 @@ sealed class PageCachee
             qualite: f(() => p.getPlaybackQuality(), ''), qualites: f(() => p.getAvailableQualityLevels(), []),
             pistes, piste, dansListe: !!(liste && liste.length), place: f(() => p.getPlaylistIndex(), -1), taille: liste ? liste.length : 0,
             largeur: innerWidth, hauteur: innerHeight, lecteur: p ? Math.round(p.getBoundingClientRect().width) + ' x ' + Math.round(p.getBoundingClientRect().height) : null }; })()
-        """);
+        """;
 
     // Une commande des boutons de l'interface, passée à l'API du lecteur de YouTube. Les valeurs viennent de la page de l'interface : vérifiées par l'appelant.
     public async Task<string> CommandeAsync(string action, JsonElement valeur)
@@ -709,6 +820,20 @@ sealed class PageCachee
             if (brut.Length == 0) Host.Log("sonde : " + await core.ExecuteScriptAsync("JSON.stringify({ titre: document.title, yid: typeof window.ytInitialData, pm: !!document.querySelector('ytd-page-manager'), app: !!document.querySelector('ytd-app') })"));
             string nom = "sonde-" + Regex.Replace(chemin, "[^A-Za-z0-9_-]+", "_").Trim('_');
             Veille.GarderBrut(nom, brut);
+            if (chemin.StartsWith("/watch"))
+            {
+                // une vidéo : aussi ce que dit son lecteur (playabilityStatus) et l'écran d'avertissement de YouTube (âge, contenu sensible), s'il y en a un
+                await Task.Delay(4000);
+                string sonde = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync("""
+                    JSON.stringify((() => { const p = document.getElementById('movie_player'); let pr = null; try { pr = p.getPlayerResponse(); } catch (e) {}
+                      const ecr = [...document.querySelectorAll('#error-screen, yt-playability-error-supported-renderers, ytd-player-error-message-renderer')];
+                      return { playability: pr && pr.playabilityStatus, videoId: pr && pr.videoDetails && pr.videoDetails.videoId,
+                        flexy: [...(document.querySelector('ytd-watch-flexy') || { attributes: [] }).attributes].map(a => a.name + '=' + a.value.slice(0, 40)),
+                        ecrans: ecr.map(e => ({ nom: e.tagName + '#' + e.id, hidden: e.hidden, rects: e.getClientRects().length, texte: (e.innerText || '').slice(0, 600),
+                          boutons: [...e.querySelectorAll('button, a, yt-button-renderer, yt-button-view-model')].map(b => b.tagName + ' « ' + (b.innerText || b.getAttribute('aria-label') || '').trim().slice(0, 80) + ' » ' + (b.getAttribute('href') || '')) })) }; })())
+                    """));
+                Veille.GarderBrut(nom + "-lecteur", sonde);
+            }
             Host.Log($"sonde {chemin} : {core.Source} ; ytInitialData {brut.Length / 1024} Ko → brut\\…-{nom}.json");
         }
         catch (Exception ex) { Host.Log($"sonde {chemin} : {ex.Message}"); }
