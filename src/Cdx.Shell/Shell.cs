@@ -645,18 +645,25 @@ class Shell : IHostApp
                 active = g.Many ? g.Active : r.Active, min = g.Many ? g.Min : r.Min, count = g.Windows.Count, g = g.Many ? g.Key : (string)null
             };
         }).ToList();
-        Bar.Send(new { type = "tasks", items });
+        // La liste n'est envoyée à la page que si elle a changé (ou toutes les 5 s, au cas où la page aurait été rechargée) : avant, sérialisation et
+        // message deux fois par seconde même sans rien de neuf.
+        string json = JsonSerializer.Serialize(new { type = "tasks", items });
+        if (json != lastTasks || tick % 10 == 0) { lastTasks = json; Bar.Web.CoreWebView2.PostWebMessageAsJson(json); }
         if (++tick % 4 == 0) SendStats();
     }
+    string lastTasks;
 
-    // Les fenêtres de la barre des tâches, dans l'ordre où elles sont apparues.
+    // Les fenêtres de la barre des tâches, dans l'ordre où elles sont apparues. Le chemin de l'exécutable d'une fenêtre ne change pas : il est lu une fois
+    // (OpenProcess + QueryFullProcessImageName à chaque tour, pour chaque fenêtre, coûtaient le plus cher de ce minuteur).
+    readonly Dictionary<IntPtr, string> exeOf = new();
     List<TaskWin> TaskWins()
     {
-        var found = new List<IntPtr>();
-        N.EnumWindows((h, _) => { if (IsTaskWindow(h)) found.Add(h); return true; }, IntPtr.Zero);
+        var found = new List<IntPtr>(); var alive = new HashSet<IntPtr>();
+        N.EnumWindows((h, _) => { if (IsTaskWindow(h)) { found.Add(h); alive.Add(h); } return true; }, IntPtr.Zero);
         foreach (var h in found) if (!order.ContainsKey(h)) order[h] = ++seq;
-        foreach (var dead in order.Keys.Where(k => !found.Contains(k)).ToList()) order.Remove(dead);
-        return found.OrderBy(h => order[h]).Select(h => new TaskWin(h, N.ExePathOf(h) ?? "", N.TitleOf(h), h == lastFg && !N.IsIconic(h), N.IsIconic(h))).ToList();
+        foreach (var dead in order.Keys.Where(k => !alive.Contains(k)).ToList()) { order.Remove(dead); exeOf.Remove(dead); }
+        string Exe(IntPtr h) { if (!exeOf.TryGetValue(h, out var e) || string.IsNullOrEmpty(e)) exeOf[h] = e = N.ExePathOf(h) ?? ""; return e; }
+        return found.OrderBy(h => order[h]).Select(h => { bool iconic = N.IsIconic(h); return new TaskWin(h, Exe(h), N.TitleOf(h), h == lastFg && !iconic, iconic); }).ToList();
     }
 
     // Le nom d'une application pour son bouton groupé : la description du programme (« Google Chrome »…), gardée en mémoire.

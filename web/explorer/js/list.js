@@ -170,4 +170,9 @@
     if (busy()) { t.dirty = true; return; }
     reload();
   };
-  setInterval(() => { const t = T(); if (t && t.dirty && !busy()) { t.dirty = false; reload(); } }, 700);
+  // la relecture différée d'un dossier « sale » : seulement fenêtre visible (une fenêtre réduite n'a rien à redessiner ; elle relit en revenant)
+  let dirtyTimer = null;
+  const dirtyTick = () => { const t = T(); if (t && t.dirty && !busy()) { t.dirty = false; reload(); } };
+  const watchDirty = on => { clearInterval(dirtyTimer); dirtyTimer = on ? setInterval(dirtyTick, 700) : null; if (on) dirtyTick(); };
+  document.addEventListener('visibilitychange', () => watchDirty(!document.hidden));
+  watchDirty(!document.hidden);

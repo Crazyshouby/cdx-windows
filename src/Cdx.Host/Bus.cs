@@ -132,6 +132,10 @@ static class Bus
         return false;
     }
 
+    // La même chose hors du fil appelant : avec `launch`, Send peut attendre jusqu'à ~6 s (40 essais). Depuis le fil de l'interface, toujours celle-ci.
+    public static Task<bool> SendAsync(string to, string type, object data = null, string from = null, bool launch = false)
+        => Task.Run(() => Send(to, type, data, from, launch));
+
     public static string Compose(string type, string from, object data)
         => JsonSerializer.Serialize(new { type, from, data = data ?? new { } });
 }

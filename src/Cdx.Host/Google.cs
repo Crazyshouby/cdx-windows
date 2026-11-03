@@ -92,7 +92,8 @@ static class GoogleAuth
         };
         string url = c.AuthUri + (c.AuthUri.Contains('?') ? "&" : "?") + string.Join('&', q.Select(kv => kv.Key + "=" + Uri.EscapeDataString(kv.Value)));
         PendingUrl = url; Host.Log("Google : page de consentement ouverte (port " + port + ")");
-        if (!OpenUrl(url)) Host.Log("Google : impossible d'ouvrir le navigateur ; adresse : " + url);
+        // OpenUrl peut attendre jusqu'à ~6 s que le navigateur CDX démarre (Bus.Send avec launch) : jamais sur le fil de l'interface d'Agenda ou de Courrier.
+        if (!await Task.Run(() => OpenUrl(url)).ConfigureAwait(false)) Host.Log("Google : impossible d'ouvrir le navigateur ; adresse : " + url);
         string code = null, err = null;
         try
         {

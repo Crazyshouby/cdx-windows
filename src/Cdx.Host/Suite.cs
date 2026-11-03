@@ -41,26 +41,45 @@ static class Suite
         AtomicFile.WriteJson(FilePath, new { version = 1, accent });
     }
 
-    // Surveille le fichier (sondage toutes les 250 ms : date et taille) ; `onChange` reçoit le nouvel accent, sur le fil qui a appelé Watch,
-    // seulement quand il change vraiment.
+    // Surveille le fichier ; `onChange` reçoit le nouvel accent, sur le fil qui a appelé Watch, seulement quand il change vraiment.
+    // Par événement (FileSystemWatcher sur le dossier : l'écriture atomique arrive en « Renamed ») et un sondage de secours toutes les 5 s si un
+    // événement se perd. Avant : un sondage toutes les 250 ms dans chaque programme, une cinquantaine d'accès disque par seconde avec la suite ouverte,
+    // pour un fichier qui change quelques fois par mois.
     public static IDisposable Watch(string current, Action<string> onChange)
     {
         var ctx = SynchronizationContext.Current;
-        string cur = current; (DateTime, long) last = Stamp();
-        var timer = new System.Threading.Timer(_ =>
+        string cur = current; (DateTime, long) last = Stamp(); var gate = new object();
+        void Check()
         {
             try
             {
-                var s = Stamp(); if (s == last) return; last = s;
-                string a = ReadAccent(cur);
-                if (a == cur) return;
-                cur = a;
+                string a;
+                lock (gate)
+                {
+                    var s = Stamp(); if (s == last) return; last = s;
+                    a = ReadAccent(cur);
+                    if (a == cur) return;
+                    cur = a;
+                }
                 if (ctx != null) ctx.Post(__ => onChange(a), null); else onChange(a);
             }
             catch (Exception ex) { Host.Log("suite.json : " + ex.Message); }
-        }, null, 250, 250);
-        return timer;
+        }
+        FileSystemWatcher fsw = null;
+        try
+        {
+            Directory.CreateDirectory(Dir);
+            fsw = new FileSystemWatcher(Dir, "suite.json") { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size };
+            fsw.Changed += (s, e) => Check(); fsw.Created += (s, e) => Check(); fsw.Renamed += (s, e) => Check();
+            fsw.Error += (s, e) => Check();
+            fsw.EnableRaisingEvents = true;
+        }
+        catch (Exception ex) { Host.Log("suite.json : surveillance par événement impossible (" + ex.Message + "), sondage seul"); fsw?.Dispose(); fsw = null; }
+        var timer = new System.Threading.Timer(_ => Check(), null, fsw == null ? 250 : 5000, fsw == null ? 250 : 5000);
+        return new Both(fsw, timer);
     }
+
+    sealed class Both(IDisposable a, IDisposable b) : IDisposable { public void Dispose() { a?.Dispose(); b?.Dispose(); } }
 
     static (DateTime, long) Stamp()
     {
