@@ -13,7 +13,7 @@ static class Program
         if (args.Length > 0 && args[0] == "--selftest-pty") { SelfTest.Run(); return; }
 
         var (theme, target) = Host.ParseArgs(args);
-        string startDir = TerminalApp.ValidDir(target);
+        string? startDir = TerminalApp.ValidDir(target);
         if (!SingleInstance.Acquire("terminal", out var mutex))
         {
             if (startDir != null) SingleInstance.Relay("terminal", "open-path", new { path = startDir }); else SingleInstance.Relay("terminal", "show", new { });

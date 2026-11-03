@@ -16,12 +16,12 @@ namespace Cdx;
 //   pty.Write(Encoding.UTF8.GetBytes("dir\r"));  pty.Resize(100, 40);  pty.Dispose();
 sealed class ConPty : IDisposable
 {
-    public event Action<byte[]> Output;
-    public event Action<int> Exited;
+    public event Action<byte[]>? Output;
+    public event Action<int>? Exited;
 
     IntPtr hPC, hProcess, hThread;
-    SafeFileHandle inWrite, outRead;
-    FileStream input, output;
+    SafeFileHandle? inWrite, outRead;   // posés par Launch (null avant, ou s'il a échoué en route : Dispose s'en accommode)
+    FileStream? input, output;
     readonly BlockingCollection<byte[]> toShell = new();
     volatile bool disposed;
     int closedPc;   // 1 quand ClosePseudoConsole a été appelé (une seule fois)
@@ -29,7 +29,7 @@ sealed class ConPty : IDisposable
 
     ConPty() { }
 
-    public static ConPty Start(string commandLine, string workDir, int cols, int rows, IDictionary<string, string> extraEnv = null)
+    public static ConPty Start(string commandLine, string? workDir, int cols, int rows, IDictionary<string, string>? extraEnv = null)   // workDir null : le dossier courant
     {
         var p = new ConPty();
         try { p.Launch(commandLine, workDir, cols, rows, extraEnv); }
@@ -37,7 +37,7 @@ sealed class ConPty : IDisposable
         return p;
     }
 
-    void Launch(string commandLine, string workDir, int cols, int rows, IDictionary<string, string> extraEnv)
+    void Launch(string commandLine, string? workDir, int cols, int rows, IDictionary<string, string>? extraEnv)
     {
         // Deux tubes : ce que nous écrivons (clavier) et ce que nous lisons (écran). Chacun a un côté pour nous et un côté pour la pseudo-console.
         if (!CreatePipe(out var inRead, out inWrite, IntPtr.Zero, 0)) throw new Win32Exception();
@@ -99,7 +99,7 @@ sealed class ConPty : IDisposable
         {
             while (true)
             {
-                int n = output.Read(buf, 0, buf.Length);
+                int n = output!.Read(buf, 0, buf.Length);   // « ! » : Launch pose output avant de démarrer ce fil
                 if (n <= 0) break;
                 var chunk = new byte[n]; Buffer.BlockCopy(buf, 0, chunk, 0, n);
                 Output?.Invoke(chunk);
@@ -117,7 +117,7 @@ sealed class ConPty : IDisposable
         {
             foreach (var data in toShell.GetConsumingEnumerable())
             {
-                input.Write(data, 0, data.Length);
+                input!.Write(data, 0, data.Length);   // « ! » : Launch pose input avant de démarrer ce fil
                 input.Flush();
             }
         }
@@ -155,10 +155,10 @@ sealed class ConPty : IDisposable
     }
 
     // Le bloc d'environnement du programme : celui de ce processus, plus ce qui dit aux programmes qu'ils sont dans un terminal en couleurs vraies.
-    static IntPtr BuildEnvironment(IDictionary<string, string> extra)
+    static IntPtr BuildEnvironment(IDictionary<string, string>? extra)
     {
-        var vars = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables()) vars[(string)e.Key] = (string)e.Value;
+        var vars = new SortedDictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry e in Environment.GetEnvironmentVariables()) vars[(string)e.Key] = (string?)e.Value;
         vars["COLORTERM"] = "truecolor";
         vars["TERM_PROGRAM"] = "CDX";
         if (extra != null) foreach (var kv in extra) vars[kv.Key] = kv.Value;
@@ -191,8 +191,8 @@ sealed class ConPty : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool UpdateProcThreadAttribute(IntPtr lpAttributeList, uint dwFlags, IntPtr attribute, IntPtr lpValue, IntPtr cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize);
     [DllImport("kernel32.dll")] static extern void DeleteProcThreadAttributeList(IntPtr lpAttributeList);
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    static extern bool CreateProcessW(string lpApplicationName, StringBuilder lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles,
-        uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory, ref STARTUPINFOEX lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
+    static extern bool CreateProcessW(string? lpApplicationName, StringBuilder lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, bool bInheritHandles,
+        uint dwCreationFlags, IntPtr lpEnvironment, string? lpCurrentDirectory, ref STARTUPINFOEX lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
     [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr h, uint ms);
     [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr h, out uint code);
     [DllImport("kernel32.dll")] static extern bool TerminateProcess(IntPtr h, uint code);

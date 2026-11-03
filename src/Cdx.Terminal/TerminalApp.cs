@@ -14,28 +14,28 @@ namespace Cdx;
 // Le numéro de session (sid) est choisi par la page ; le programme refuse un numéro déjà pris.
 sealed class TerminalApp : ApplicationContext, ICdxApp, IPageApp
 {
-    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
+    public HostForm? ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     // Une session : un shell dans sa pseudo-console. Les octets lus pendant que l'interface était occupée sont envoyés ensemble : un shell qui crache beaucoup de
     // texte ne fait pas un message par lecture.
     sealed class Session
     {
-        public int Sid; public ConPty Pty;
+        public int Sid; public required ConPty Pty;
         public readonly MemoryStream Pending = new(); public bool FlushQueued;
     }
 
     const int MaxSessions = 64, MaxMessage = 256 * 1024;
 
     string theme; readonly string root;
-    readonly IDisposable watch;
-    TerminalForm form;
-    CoreWebView2Environment env;
+    readonly IDisposable? watch;   // null : thème imposé par --theme, pas de suivi de suite.json
+    TerminalForm? form;
+    CoreWebView2Environment? env;
     readonly Dictionary<int, Session> sessions = new();   // fil de l'interface seulement
     int focusSid;                                           // le volet qui a le focus (le canal de test y écrit)
-    string pendingDir;                                      // dossier demandé avant que la page soit prête : le premier onglet s'y ouvre
+    string? pendingDir;                                     // dossier demandé avant que la page soit prête : le premier onglet s'y ouvre
     bool pageReady;
     public Control Anchor { get; } = new Control();         // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
-    public TerminalApp(string theme, string startDir = null)
+    public TerminalApp(string? theme, string? startDir = null)
     {
         pendingDir = startDir;
         this.theme = theme ?? Suite.ReadAccent(); root = Host.FindWebRoot();
@@ -72,7 +72,7 @@ sealed class TerminalApp : ApplicationContext, ICdxApp, IPageApp
     }
 
     // Un dossier qu'on accepte comme dossier de départ d'un shell : chemin complet, qui existe (un fichier donne son dossier). Sinon null.
-    public static string ValidDir(string p)
+    public static string? ValidDir(string? p)
     {
         try
         {
@@ -88,7 +88,7 @@ sealed class TerminalApp : ApplicationContext, ICdxApp, IPageApp
     {
         if (type == "show") { Open(); return true; }
         if (type != "open-path") return false;
-        string dir = data.TryGetProperty("path", out var pv) && pv.ValueKind == JsonValueKind.String ? ValidDir(pv.GetString()) : null;
+        string? dir = data.TryGetProperty("path", out var pv) && pv.ValueKind == JsonValueKind.String ? ValidDir(pv.GetString()) : null;
         if (dir == null) return false;
         if (pageReady && form != null && !form.IsDisposed) { form.Send(new { type = "open-tab", cwd = dir }); Host.ForceForeground(form.Handle); }
         else { pendingDir = dir; Open(); }
@@ -136,14 +136,13 @@ sealed class TerminalApp : ApplicationContext, ICdxApp, IPageApp
         return "\"" + Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe") + "\" -NoLogo";
     }
 
-    void StartSession(int sid, int cols, int rows, string cwd)
+    void StartSession(int sid, int cols, int rows, string? cwd)
     {
         if (sessions.ContainsKey(sid) || sessions.Count >= MaxSessions) { Host.Log("session " + sid + " refusée (déjà prise ou trop de sessions)"); return; }
         try
         {
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var s = new Session { Sid = sid };
-            s.Pty = ConPty.Start(ShellCommand(), ValidDir(cwd) ?? (Directory.Exists(home) ? home : null), cols, rows);
+            var s = new Session { Sid = sid, Pty = ConPty.Start(ShellCommand(), ValidDir(cwd) ?? (Directory.Exists(home) ? home : null), cols, rows) };
             sessions[sid] = s;
             if (focusSid == 0) focusSid = sid;
             s.Pty.Output += bytes => OnOutput(s, bytes);
@@ -202,14 +201,14 @@ sealed class TerminalApp : ApplicationContext, ICdxApp, IPageApp
         {
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
-            string cmd = r.GetProperty("cmd").GetString();
+            string cmd = r.GetProperty("cmd").GetString() ?? throw new FormatException("cmd null");   // rattrapé plus bas, comme l'était le déréférencement
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             if (Host.CommonMessage(from, cmd, r)) return;
             int Int(string k, int d) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i) ? i : d;
-            string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            string? Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
             int Cols() => Math.Clamp(Int("cols", 80), 2, 1000);
             int Rows() => Math.Clamp(Int("rows", 24), 1, 1000);
-            Session Sess() => sessions.TryGetValue(Int("sid", -1), out var s) ? s : null;
+            Session? Sess() => sessions.TryGetValue(Int("sid", -1), out var s) ? s : null;
             switch (cmd)
             {
                 case "ready": pageReady = true; from.Send(new { type = "hello", build = Environment.OSVersion.Version.Build, cwd = pendingDir }); pendingDir = null; break;
@@ -227,7 +226,7 @@ sealed class TerminalApp : ApplicationContext, ICdxApp, IPageApp
                 case "term.paste":
                     {
                         if (Sess() == null) break;
-                        string s = null;
+                        string? s = null;
                         try { if (Clipboard.ContainsText()) s = Clipboard.GetText(); } catch (Exception ex) { Host.Log("presse-papiers : " + ex.Message); }
                         if (!string.IsNullOrEmpty(s)) from.Send(new { type = "paste", sid = Int("sid", -1), text = s });
                         break;
