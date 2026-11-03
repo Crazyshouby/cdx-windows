@@ -5,7 +5,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
     <AssemblyName>cdx-transfers</AssemblyName>
     <RootNamespace>Cdx</RootNamespace>
     <ApplicationIcon>..\..\icons\transferts.ico</ApplicationIcon>

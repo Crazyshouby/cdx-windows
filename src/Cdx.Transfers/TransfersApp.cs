@@ -9,7 +9,7 @@ namespace Cdx;
 // et leur renvoie les ordres de la page (« xfer-ctl »). Ce qu'il garde sur disque : les derniers transferts terminés (transferts.json).
 sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
 {
-    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
+    public HostForm? ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     sealed class Entry
     {
         public string Key = "", App = "", Kind = "", Title = "", State = "", From = "", To = "", Current = "", Error = "", Path = "";
@@ -26,9 +26,9 @@ sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
 
     string theme;
     readonly string root;
-    readonly IDisposable watch;
-    TransfersForm form;
-    CoreWebView2Environment env;
+    readonly IDisposable? watch;   // null : thème imposé par --theme, pas de suivi de suite.json
+    TransfersForm? form;
+    CoreWebView2Environment? env;
     readonly Dictionary<string, Entry> entries = new();
     readonly HashSet<string> dirty = new(), removed = new();
     readonly System.Windows.Forms.Timer flush = new() { Interval = 250 }, sweep = new() { Interval = 3000 };
@@ -37,7 +37,7 @@ sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
 
     static string HistFile => Path.Combine(Host.DataDir, "transferts.json");
 
-    public TransfersApp(string theme)
+    public TransfersApp(string? theme)
     {
         this.theme = theme ?? Suite.ReadAccent(); root = Host.FindWebRoot();
         _ = Anchor.Handle;
@@ -60,7 +60,7 @@ sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
             using var d = JsonDocument.Parse(File.ReadAllText(HistFile));
             foreach (var v in d.RootElement.GetProperty("items").EnumerateArray())
             {
-                string S(string k) => v.TryGetProperty(k, out var x) && x.ValueKind == JsonValueKind.String ? x.GetString() : "";
+                string S(string k) => v.TryGetProperty(k, out var x) && x.ValueKind == JsonValueKind.String ? x.GetString() ?? "" : "";
                 long L(string k) => v.TryGetProperty(k, out var x) && x.ValueKind == JsonValueKind.Number && x.TryGetInt64(out var n) ? n : 0;
                 var e = new Entry { Key = "h" + (++histSeq), App = S("app"), Kind = S("kind"), Title = S("title"), State = S("state"), From = S("from"), To = S("to"), Error = S("error"), Path = S("path"),
                     Done = L("done"), Total = L("total"), Items = (int)L("items"), Hist = true, Started = DateTimeOffset.FromUnixTimeMilliseconds(L("started")).UtcDateTime, Ended = DateTimeOffset.FromUnixTimeMilliseconds(L("ended")).UtcDateTime };
@@ -102,7 +102,7 @@ sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
             var f = new TransfersForm(this); form = f;
             f.FormClosed += (s, e) => ExitThread();
             double scale = f.DeviceDpi / 96.0;
-            var wa = Screen.PrimaryScreen.WorkingArea;
+            var wa = (Screen.PrimaryScreen ?? Screen.FromControl(f)).WorkingArea;   // PrimaryScreen n'est null que sans écran du tout
             int w = (int)(760 * scale), h = (int)(520 * scale);
             f.Bounds = new Rectangle(wa.Right - w - (int)(24 * scale), wa.Bottom - h - (int)(24 * scale), w, h);   // en bas à droite, hors du chemin
             f.Show(); Host.ForceForeground(f.Handle);
@@ -122,7 +122,7 @@ sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
         if (type == "show") { Open(); return true; }
         if (type != "xfer") return false;
         if (!Bus.Apps.Contains(from) || from == "transfers") return false;
-        string S(string k, int max = 300) { if (data.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String) { string s = v.GetString(); return s.Length > max ? s[..max] : s; } return ""; }
+        string S(string k, int max = 300) { if (data.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String) { string s = v.GetString() ?? ""; return s.Length > max ? s[..max] : s; } return ""; }
         long L(string k) => data.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n) ? Math.Max(n, -1) : 0;
         double D(string k) => data.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var n) && !double.IsNaN(n) && !double.IsInfinity(n) ? Math.Max(n, 0) : 0;
         bool B(string k) => data.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.True;
@@ -132,7 +132,7 @@ sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
 
         string key = from + "#" + id;
         bool isNew = !entries.TryGetValue(key, out var e);
-        if (isNew) { e = new Entry { Key = key, App = from, Id = id, Started = DateTime.UtcNow }; entries[key] = e; }
+        if (e == null) { e = new Entry { Key = key, App = from, Id = id, Started = DateTime.UtcNow }; entries[key] = e; }
         else if (!e.Live && state is "queued" or "running" or "paused") { e.Started = DateTime.UtcNow; e.Ended = default; }   // le même numéro repart (nouvel essai)
         bool wasLive = !isNew && e.Live;
         e.Kind = kind; e.Title = S("title"); e.State = state; e.From = S("from"); e.To = S("to"); e.Current = S("current"); e.Error = S("error", 500); e.Path = S("path", 520);
@@ -188,11 +188,11 @@ sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
         {
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
-            string cmd = r.GetProperty("cmd").GetString();
+            string cmd = r.GetProperty("cmd").GetString() ?? throw new FormatException("cmd null");   // rattrapé plus bas, comme l'était le déréférencement
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             if (Host.CommonMessage(from, cmd, r)) return;
-            string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-            Entry E() => Str("key") is { } k && entries.TryGetValue(k, out var e) ? e : null;
+            string? Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            Entry? E() => Str("key") is { } k && entries.TryGetValue(k, out var e) ? e : null;
             switch (cmd)
             {
                 case "ready":
@@ -201,7 +201,7 @@ sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
                     AskSync(); break;
                 case "xf.ctl":
                     {
-                        var e = E(); string action = Str("action");
+                        var e = E(); string? action = Str("action");
                         if (e == null || !e.Live && action != "retry" || action is not ("pause" or "resume" or "cancel" or "retry")) break;
                         if (e.Hist) break;
                         string app = e.App; int id = e.Id;
@@ -221,14 +221,14 @@ sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
     }
 
     // « Ouvrir » : le fichier ou le dossier du transfert, sauf s'il peut s'exécuter (un programme téléchargé ne se lance pas d'un clic ici : on l'affiche dans son dossier).
-    void Open(Entry e)
+    void Open(Entry? e)
     {
         if (e == null || e.State != "done" || e.Path.Length == 0 || !Path.IsPathRooted(e.Path) || !Path.Exists(e.Path)) return;
         if (File.Exists(e.Path) && Risky.Contains(Path.GetExtension(e.Path).ToLowerInvariant())) { Reveal(e); return; }
         try { Process.Start(new ProcessStartInfo(e.Path) { UseShellExecute = true }); } catch (Exception ex) { Host.Log("ouvrir " + e.Path + " : " + ex.Message); }
     }
 
-    void Reveal(Entry e)
+    void Reveal(Entry? e)
     {
         if (e == null || e.Path.Length == 0 || !Path.IsPathRooted(e.Path)) return;
         string p = e.Path;
