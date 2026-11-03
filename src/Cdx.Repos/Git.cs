@@ -34,6 +34,10 @@ static class Git
         };
         psi.ArgumentList.Add("--no-optional-locks");
         psi.ArgumentList.Add("-c"); psi.ArgumentList.Add("core.quotepath=false");
+        // Un dépôt cloné peut déclarer dans .git/config un programme lancé par « git status » (core.fsmonitor) : Dépôts lit des dépôts
+        // qu'il n'a pas créés et ne doit jamais exécuter leur code. Les -c de la ligne de commande l'emportent sur la configuration du dépôt.
+        psi.ArgumentList.Add("-c"); psi.ArgumentList.Add("core.fsmonitor=false");
+        psi.ArgumentList.Add("-c"); psi.ArgumentList.Add("core.untrackedCache=false");
         if (dir != null) { psi.ArgumentList.Add("-C"); psi.ArgumentList.Add(dir); }
         foreach (var a in args) psi.ArgumentList.Add(a);
         psi.Environment["GIT_OPTIONAL_LOCKS"] = "0";

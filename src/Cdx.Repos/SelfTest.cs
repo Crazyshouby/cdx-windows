@@ -76,6 +76,22 @@ static class SelfTest
             Git.Inspect(a);
             Check("lecture seule : aucun index.lock laissé", !File.Exists(idx));
 
+            // --- un dépôt piégé : core.fsmonitor désigne un programme ; la lecture ne doit jamais le lancer ---
+            string trap = Path.Combine(tmp, "projets", "piege"); Directory.CreateDirectory(trap); G(trap, "init", "-b", "main");
+            Write(trap, "x.txt", "x\n"); G(trap, "add", "."); G(trap, "commit", "-m", "x");
+            string witness = Path.Combine(tmp, "fsmonitor-lance.txt"), hook = Path.Combine(tmp, "hook.sh");
+            File.WriteAllText(hook, "#!/bin/sh\necho lance > '" + witness.Replace('\\', '/') + "'\n");
+            G(trap, "config", "core.fsmonitor", hook.Replace('\\', '/'));
+            // témoin : un git ordinaire, lui, lance bien le programme (sinon l'essai ne prouverait rien)
+            var raw = new System.Diagnostics.ProcessStartInfo("git") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (var x in new[] { "-C", trap, "status", "--porcelain" }) raw.ArgumentList.Add(x);
+            using (var rp = System.Diagnostics.Process.Start(raw)) { rp.StandardOutput.ReadToEnd(); rp.StandardError.ReadToEnd(); rp.WaitForExit(30000); }
+            bool rawRan = File.Exists(witness); try { File.Delete(witness); } catch { }
+            r = Git.Inspect(trap); Git.Changes(trap); Git.Log(trap);
+            Check("dépôt piégé (core.fsmonitor) : Dépôts le lit sans lancer son programme" + (rawRan ? "" : " (témoin : git ordinaire ne l'a pas lancé non plus)"), r.Error == null && !File.Exists(witness) && rawRan);
+            foreach (var f in Directory.EnumerateFiles(trap, "*", SearchOption.AllDirectories)) File.SetAttributes(f, FileAttributes.Normal);
+            Directory.Delete(trap, true);   // hors de la recherche qui suit
+
             // --- recherche ---
             Directory.CreateDirectory(Path.Combine(tmp, "projets", "node_modules", "piege", ".git"));
             Directory.CreateDirectory(Path.Combine(a, "sous-dossier", ".git"));          // un dépôt dans un dépôt : on ne descend pas
