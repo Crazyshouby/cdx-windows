@@ -1,5 +1,3 @@
-// Annotations de nullabilité actives même dans Cdx.Vault, qui compile ce fichier sans les activer.
-#nullable enable
 using System.Text;
 using System.Text.Json;
 

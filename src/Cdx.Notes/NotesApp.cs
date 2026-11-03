@@ -250,7 +250,7 @@ sealed class NotesApp : ApplicationContext, ICdxApp, IPageApp
 
     void Read(HostForm to, string? path)
     {
-        string text = Opened.Read(path, out string hash); var n = Opened.Get(path);
+        string text = Opened.Read(path, out string hash); var n = Opened.Get(path) ?? throw new VaultException("occupé", "La note est utilisée par un autre programme : réessayer dans un instant.");   // lue mais pas encore dans l'index
         known[n.Path] = hash;
         to.Send(new
         {

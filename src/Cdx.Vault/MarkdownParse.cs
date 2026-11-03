@@ -6,18 +6,19 @@ namespace Cdx.Coffre;
 // Un lien [[Note]], [[Note|alias]], [[Note#Titre]] ou une incrustation ![[Note]].
 public sealed class LinkRef
 {
-    public string Target;     // ce qui est écrit avant | et # (« Note » ou « Dossier/Note »)
-    public string Heading;    // après #, sinon null
-    public string Alias;      // après |, sinon null
+    public required string Target;     // ce qui est écrit avant | et # (« Note » ou « Dossier/Note »)
+    public string? Heading;    // après #, sinon null
+    public string? Alias;      // après |, sinon null
     public bool Embed;        // ![[…]]
-    public string Resolved;   // chemin de la note visée (relatif au coffre), null si elle n'existe pas
+    public string? Resolved;   // chemin de la note visée (relatif au coffre), null si elle n'existe pas
     public int Line;          // ligne (1 = première du fichier)
     public int Start, Length; // position du lien entier dans le texte
 }
 
 public sealed class TaskItem
 {
-    public string Path, Text, Due;
+    public required string Path, Text;
+    public string? Due;   // AAAA-MM-JJ, sinon null
     public int Line;
     public bool Done;
 }
@@ -25,7 +26,7 @@ public sealed class TaskItem
 public sealed class Heading
 {
     public int Level, Line;
-    public string Text;
+    public required string Text;
 }
 
 // Ce qu'on sait lire dans un fichier Markdown, sans rien interpréter de plus que ce que fait Obsidian pour les liens, étiquettes et tâches.
@@ -44,7 +45,7 @@ public static class MarkdownParse
     {
         if (text.Length < 4 || !text.StartsWith("---")) return 0;
         int eol = text.IndexOf('\n'); if (eol < 0 || text[..eol].Trim() != "---") return 0;
-        int pos = eol + 1; string lastKey = null;
+        int pos = eol + 1; string? lastKey = null;
         while (pos < text.Length)
         {
             int e = text.IndexOf('\n', pos); string line = e < 0 ? text[pos..] : text[pos..e]; int next = e < 0 ? text.Length : e + 1;

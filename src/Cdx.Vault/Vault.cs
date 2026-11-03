@@ -14,7 +14,7 @@ public sealed class VaultException : Exception
 
 public sealed class NoteInfo
 {
-    public string Path, Title;
+    public required string Path, Title;
     public DateTime Modified; public long Size;
     public Dictionary<string, object> Props = new(StringComparer.OrdinalIgnoreCase);   // en-tête : texte, ou List<string>
     public List<string> Tags = new();
@@ -22,12 +22,12 @@ public sealed class NoteInfo
     public List<TaskItem> Tasks = new();
     public List<Heading> Headings = new();
     public string Folder { get { int i = Path.LastIndexOf('/'); return i < 0 ? "" : Path[..i]; } }
-    public string Prop(string key) => Props.TryGetValue(key, out var v) ? (v is List<string> l ? string.Join(", ", l) : v as string) : null;
+    public string? Prop(string key) => Props.TryGetValue(key, out var v) ? (v is List<string> l ? string.Join(", ", l) : v as string) : null;
 }
 
-public sealed class SearchHit { public string Path, Title, Snippet; public int Score, Line; public List<string> Tags; }
-public sealed class Backlink { public string Path, Title, Context; public int Line; }
-public sealed class ProjectInfo { public string Path, Name, Status, Repo, Priority, Summary; public int OpenTasks, DoneTasks; public DateTime Modified; public string NextDue; }
+public sealed class SearchHit { public required string Path, Title, Snippet; public int Score, Line; public required List<string> Tags; }
+public sealed class Backlink { public required string Path, Title, Context; public int Line; }
+public sealed class ProjectInfo { public required string Path, Name, Status; public string? Repo, Priority, Summary; public int OpenTasks, DoneTasks; public DateTime Modified; public string? NextDue; }   // null : propriété absente, aucune échéance
 
 // Le coffre : un dossier de fichiers .md. Tout chemin est relatif au coffre, avec des « / ». Rien n'écrit hors du coffre, jamais dans un dossier caché (.obsidian, .git…),
 // jamais autre chose qu'un .md ; rien ne se supprime : « retirer » déplace la note dans .trash/ (récupérable).
@@ -35,7 +35,7 @@ public sealed class Vault
 {
     public const int MaxNoteBytes = 2_000_000;
     public string Root { get; }
-    sealed class Entry { public NoteInfo Info; public string Text; public long Ticks, Size; }
+    sealed class Entry { public required NoteInfo Info; public required string Text; public long Ticks, Size; }
     readonly Dictionary<string, Entry> notes = new(StringComparer.OrdinalIgnoreCase);
     Dictionary<string, List<string>> byName = new(StringComparer.OrdinalIgnoreCase);
 
@@ -49,8 +49,8 @@ public sealed class Vault
     // ---------- chemins ----------
     static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase) { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" };
 
-    // Le chemin d'une note, normalisé (« / », « .md » ajouté) ; refuse tout ce qui sortirait du coffre ou toucherait aux dossiers cachés.
-    public static string NormalizePath(string rel, bool addExt = true)
+    // Le chemin d'une note, normalisé (« / », « .md » ajouté) ; refuse tout ce qui sortirait du coffre ou toucherait aux dossiers cachés, et un chemin absent (null) ou vide.
+    public static string NormalizePath(string? rel, bool addExt = true)
     {
         if (string.IsNullOrWhiteSpace(rel)) throw new VaultException("chemin", "Le chemin de la note est vide.");
         rel = rel.Replace('\\', '/').Trim();
@@ -140,7 +140,7 @@ public sealed class Vault
     }
 
     // Comme Obsidian : « Note » désigne la note de ce nom (la moins profondément rangée s'il y en a plusieurs) ; « Dossier/Note » vise un chemin.
-    public string Resolve(string target)
+    public string? Resolve(string target)   // null : aucune note ne correspond
     {
         if (string.IsNullOrWhiteSpace(target)) return null;
         string t = target.Replace('\\', '/').Trim(); if (t.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) t = t[..^3];
@@ -153,7 +153,8 @@ public sealed class Vault
     }
 
     public IReadOnlyList<NoteInfo> Notes => notes.Values.Select(e => e.Info).OrderBy(n => n.Path, StringComparer.OrdinalIgnoreCase).ToList();
-    public NoteInfo Get(string path) { try { return notes.TryGetValue(NormalizePath(path), out var e) ? e.Info : null; } catch (VaultException) { return null; } }
+    // null : chemin absent ou invalide, ou note inconnue de l'index
+    public NoteInfo? Get(string? path) { try { return notes.TryGetValue(NormalizePath(path), out var e) ? e.Info : null; } catch (VaultException) { return null; } }
     public int Count => notes.Count;
 
     // Les dossiers du coffre (y compris vides), sans les cachés.
@@ -171,7 +172,7 @@ public sealed class Vault
     // ---------- images ----------
     public static readonly string[] ImageExtensions = { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp" };
     public const long MaxImageBytes = 25_000_000;
-    public static bool IsImage(string path) => ImageExtensions.Contains(Path.GetExtension(path ?? "").ToLowerInvariant());
+    public static bool IsImage(string? path) => ImageExtensions.Contains(Path.GetExtension(path ?? "").ToLowerInvariant());
 
     // Les images du coffre (chemins relatifs), pour [[image.png]] et ![](image.png). Jamais dans un dossier caché.
     public List<string> Attachments(int max = 20000)
@@ -188,7 +189,7 @@ public sealed class Vault
     }
 
     // Le fichier d'une image du coffre, ou null : chemin sûr, extension d'image, taille raisonnable. C'est la seule porte par laquelle l'application sert un fichier autre qu'une note.
-    public string ImagePath(string rel)
+    public string? ImagePath(string? rel)
     {
         try
         {
@@ -200,7 +201,7 @@ public sealed class Vault
     }
 
     // ---------- lecture ----------
-    public string Read(string path, out string hash)
+    public string Read(string? path, out string hash)
     {
         string rel = NormalizePath(path);
         string full = Full(rel);
@@ -226,34 +227,38 @@ public sealed class Vault
 
     static void CheckSize(string text) { if (Encoding.UTF8.GetByteCount(text) > MaxNoteBytes) throw new VaultException("trop-grande", "La note dépasserait 2 Mo."); }
 
+    // La note qu'on vient d'écrire, telle que l'index la voit. Elle n'y manque que si sa relecture a échoué (tenue par un autre programme) : on le dit au lieu de rendre null.
+    NoteInfo Indexed(string rel) => Get(rel) ?? throw new VaultException("occupé", "La note est enregistrée, mais un autre programme la tient encore : la relire dans un instant.");
+
+    // Les méthodes qui suivent prennent ce que l'appelant a reçu, null compris : NormalizePath refuse un chemin absent par une VaultException.
     // Crée une note ; refuse si elle existe (jamais d'écrasement par mégarde).
-    public NoteInfo Create(string path, string text)
+    public NoteInfo Create(string? path, string? text)
     {
         string rel = NormalizePath(path); CheckSize(text ?? "");
         string full = Full(rel);
         if (File.Exists(full)) throw new VaultException("existe", $"La note « {rel} » existe déjà : la modifier avec son empreinte, ou choisir un autre nom.");
-        WriteAtomic(full, text ?? ""); Refresh(); return Get(rel);
+        WriteAtomic(full, text ?? ""); Refresh(); return Indexed(rel);
     }
 
     // Remplace tout le contenu d'une note qui existe. L'empreinte lue avec Read est exigée : si la note a changé depuis (modifiée dans l'application, par exemple), on refuse.
-    public NoteInfo Overwrite(string path, string text, string expectedHash)
+    public NoteInfo Overwrite(string? path, string? text, string? expectedHash)
     {
         string rel = NormalizePath(path); CheckSize(text ?? "");
         string current = Read(rel, out string h);
         if (string.IsNullOrEmpty(expectedHash)) throw new VaultException("empreinte", "Pour remplacer une note, donner l'empreinte lue avec la note (hash) : cela évite d'écraser un changement qu'on n'a pas vu.");
         if (!string.Equals(expectedHash, h, StringComparison.OrdinalIgnoreCase)) throw new VaultException("conflit", "La note a changé depuis sa lecture : la relire, puis refaire la modification.");
-        WriteAtomic(Full(rel), text ?? ""); Refresh(); return Get(rel);
+        WriteAtomic(Full(rel), text ?? ""); Refresh(); return Indexed(rel);
     }
 
-    public NoteInfo Append(string path, string text)
+    public NoteInfo Append(string? path, string? text)
     {
         string rel = NormalizePath(path); string cur = Read(rel, out _);
         string add = (cur.Length > 0 && !cur.EndsWith("\n") ? "\n" : "") + text;
-        CheckSize(cur + add); WriteAtomic(Full(rel), cur + add); Refresh(); return Get(rel);
+        CheckSize(cur + add); WriteAtomic(Full(rel), cur + add); Refresh(); return Indexed(rel);
     }
 
     // Remplace un passage ; il doit apparaître exactement une fois (sinon on dit combien de fois, pour préciser).
-    public NoteInfo ReplaceText(string path, string oldText, string newText, string expectedHash = null)
+    public NoteInfo ReplaceText(string? path, string? oldText, string? newText, string? expectedHash = null)
     {
         string rel = NormalizePath(path); string cur = Read(rel, out string h);
         if (!string.IsNullOrEmpty(expectedHash) && !string.Equals(expectedHash, h, StringComparison.OrdinalIgnoreCase)) throw new VaultException("conflit", "La note a changé depuis sa lecture : la relire, puis refaire la modification.");
@@ -262,11 +267,11 @@ public sealed class Vault
         if (n == 0) throw new VaultException("introuvable", "Le texte à remplacer n'est pas dans la note.");
         if (n > 1) throw new VaultException("ambigu", $"Le texte à remplacer apparaît {n} fois : en donner davantage pour qu'il soit unique.");
         string next = cur.Replace(oldText, newText ?? "", StringComparison.Ordinal); CheckSize(next);
-        WriteAtomic(Full(rel), next); Refresh(); return Get(rel);
+        WriteAtomic(Full(rel), next); Refresh(); return Indexed(rel);
     }
 
     // Fixe une propriété de l'en-tête (créé au besoin) ; une liste devient « [a, b] ». Le reste de la note est inchangé.
-    public NoteInfo SetProperty(string path, string key, object value)
+    public NoteInfo SetProperty(string? path, string? key, object? value)
     {
         string rel = NormalizePath(path);
         if (string.IsNullOrWhiteSpace(key) || !Regex.IsMatch(key, @"^[\p{L}\p{N}_\- ]{1,40}$")) throw new VaultException("propriété", "Nom de propriété invalide.");
@@ -290,20 +295,20 @@ public sealed class Vault
             else lines.Insert(lines.Count - 1, line);   // avant la ligne « --- » de fin
             next = string.Join(nl, lines) + nl + rest;
         }
-        CheckSize(next); WriteAtomic(Full(rel), next); Refresh(); return Get(rel);
+        CheckSize(next); WriteAtomic(Full(rel), next); Refresh(); return Indexed(rel);
     }
 
     // Une valeur simple s'écrit telle quelle ; sinon entre apostrophes (YAML n'y interprète aucun antislash : un chemin Windows y reste lisible par Obsidian).
     static string Quote(string v) => v.Length > 0 && Regex.IsMatch(v, @"^[^\s:#\[\]{},&*!|>'""%@`\\-][^:#\[\]{},\\]*$") && v == v.Trim() ? v : "'" + v.Replace("'", "''") + "'";
 
-    public void CreateFolder(string path)
+    public void CreateFolder(string? path)
     {
         string rel = NormalizePath(path, addExt: false); Directory.CreateDirectory(Full(rel));
     }
 
     // Déplace ou renomme une note ; les liens [[…]] qui la visent sont réécrits dans tout le coffre. Rend le nombre de notes dont des liens ont changé.
     // Les liens à réécrire sont repérés AVANT le déplacement, avec la résolution de ce moment-là : deux notes de même nom ne se confondent pas.
-    public int Move(string from, string to, bool updateLinks = true)
+    public int Move(string? from, string? to, bool updateLinks = true)
     {
         string a = NormalizePath(from), b = NormalizePath(to);
         string fa = Full(a), fb = Full(b);
@@ -313,7 +318,7 @@ public sealed class Vault
         string selfKey = notes.Keys.FirstOrDefault(k => k.Equals(a, StringComparison.OrdinalIgnoreCase)) ?? a;
         // note (chemin avant déplacement) -> ses liens qui visaient la note déplacée
         var pending = updateLinks ? notes.Values.Select(e => (Path: e.Info.Path, Text: e.Text, Links: e.Info.Links.Where(l => string.Equals(l.Resolved, a, StringComparison.OrdinalIgnoreCase)).ToList())).Where(x => x.Links.Count > 0).ToList() : null;
-        Directory.CreateDirectory(Path.GetDirectoryName(fb));
+        Directory.CreateDirectory(Path.GetDirectoryName(fb)!);   // « ! » : fb est sous Root, il a toujours un dossier parent
         File.Move(fa, fb, a.Equals(b, StringComparison.OrdinalIgnoreCase));   // renommer seulement la casse : même fichier
         Refresh();   // l'index connaît la note à son nouvel endroit
         int updated = 0;
@@ -346,13 +351,14 @@ public sealed class Vault
     }
 
     // « Retirer » : la note part dans .trash/ (avec son dossier), récupérable à la main. Aucune suppression définitive par ce chemin.
-    public string Trash(string path)
+    public string Trash(string? path)
     {
         string rel = NormalizePath(path); string full = Full(rel);
         if (!File.Exists(full)) throw new VaultException("introuvable", $"La note « {rel} » n'existe pas.");
         string dest = Path.Combine(Root, ".trash", rel.Replace('/', Path.DirectorySeparatorChar));
-        if (File.Exists(dest)) dest = Path.Combine(Path.GetDirectoryName(dest), Path.GetFileNameWithoutExtension(dest) + " (" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ").md");
-        Directory.CreateDirectory(Path.GetDirectoryName(dest)); File.Move(full, dest); Refresh();
+        // « ! » (deux fois) : dest est sous Root\.trash, il a toujours un dossier parent
+        if (File.Exists(dest)) dest = Path.Combine(Path.GetDirectoryName(dest)!, Path.GetFileNameWithoutExtension(dest) + " (" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ").md");
+        Directory.CreateDirectory(Path.GetDirectoryName(dest)!); File.Move(full, dest); Refresh();
         return dest[(Root.Length + 1)..].Replace('\\', '/');
     }
 
@@ -360,7 +366,7 @@ public sealed class Vault
 
     // Déplace ou renomme un dossier : chaque note qui s'y trouve est déplacée (les liens qui la visent sont réécrits), puis les autres fichiers (images…) et les dossiers vides suivent.
     // Rend où est allée chaque note et combien de notes ont vu leurs liens changer.
-    public FolderMove MoveFolder(string from, string to)
+    public FolderMove MoveFolder(string? from, string? to)
     {
         string a = NormalizePath(from, false), b = NormalizePath(to, false);
         string fa = Full(a), fb = Full(b);
@@ -397,7 +403,7 @@ public sealed class Vault
     }
 
     // « Retirer » un dossier : toutes ses notes partent dans .trash ; ce qui n'est pas une note (images…) reste, avec le dossier. Rend les notes retirées.
-    public List<string> TrashFolder(string path)
+    public List<string> TrashFolder(string? path)
     {
         string a = NormalizePath(path, false); string fa = Full(a);
         if (!Directory.Exists(fa)) throw new VaultException("introuvable", $"Le dossier « {a} » n'existe pas.");
@@ -408,7 +414,7 @@ public sealed class Vault
     }
 
     // ---------- liens ----------
-    public List<Backlink> Backlinks(string path)
+    public List<Backlink> Backlinks(string? path)
     {
         string rel = NormalizePath(path); var l = new List<Backlink>();
         foreach (var e in notes.Values)
@@ -443,7 +449,7 @@ public sealed class Vault
     // Termes séparés par des espaces (tous requis, accents et casse ignorés), « phrase entre guillemets », et filtres : tag:projet  in:Projets  type:projet.
     public List<SearchHit> Search(string query, int limit = 20)
     {
-        var terms = new List<string>(); string tag = null, folder = null, type = null;
+        var terms = new List<string>(); string? tag = null, folder = null, type = null;
         foreach (Match m in Regex.Matches(query ?? "", "\"([^\"]+)\"|(\\S+)"))
         {
             string t = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
@@ -460,7 +466,7 @@ public sealed class Vault
             if (tag != null && !n.Tags.Any(x => x.Equals(tag, StringComparison.OrdinalIgnoreCase) || x.StartsWith(tag + "/", StringComparison.OrdinalIgnoreCase))) continue;
             if (folder != null && !(n.Folder.Equals(folder, StringComparison.OrdinalIgnoreCase) || n.Folder.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase))) continue;
             if (type != null && !string.Equals(n.Prop("type"), type, StringComparison.OrdinalIgnoreCase)) continue;
-            int score = 0; bool all = true; int line = 0; string snippet = null;
+            int score = 0; bool all = true; int line = 0; string? snippet = null;
             foreach (var term in terms)
             {
                 int s = 0;
@@ -480,7 +486,8 @@ public sealed class Vault
             else score += Math.Max(0, 3 - n.Path.Count(ch => ch == '/'));   // à égalité, la note la moins profondément rangée passe devant
             hits.Add(new SearchHit { Path = n.Path, Title = n.Title, Score = score, Snippet = snippet ?? "", Line = line, Tags = n.Tags });
         }
-        return hits.OrderByDescending(h => h.Score).ThenByDescending(h => Get(h.Path).Modified).Take(limit).ToList();
+        // h.Path est la clé même de l'index : la date s'y lit sans repasser par NormalizePath (Get rendait null pour une note au chemin de plus de 240 caractères, et la recherche plantait)
+        return hits.OrderByDescending(h => h.Score).ThenByDescending(h => notes[h.Path].Info.Modified).Take(limit).ToList();
     }
 
     static string Snippet(string text, int at, int len)
@@ -495,7 +502,7 @@ public sealed class Vault
     static bool IsTemplate(NoteInfo n) { string f = n.Folder; return f.Equals("Modèles", StringComparison.OrdinalIgnoreCase) || f.StartsWith("Modèles/", StringComparison.OrdinalIgnoreCase) || f.Equals("Templates", StringComparison.OrdinalIgnoreCase) || f.StartsWith("Templates/", StringComparison.OrdinalIgnoreCase); }
     static bool IsProject(NoteInfo n) { if (IsTemplate(n)) return false; var t = n.Prop("type"); return t != null && (t.Equals("projet", StringComparison.OrdinalIgnoreCase) || t.Equals("project", StringComparison.OrdinalIgnoreCase)); }
 
-    public List<ProjectInfo> Projects(string status = null)
+    public List<ProjectInfo> Projects(string? status = null)
     {
         var l = new List<ProjectInfo>();
         foreach (var n in notes.Values.Select(e => e.Info).Where(IsProject))
@@ -513,16 +520,16 @@ public sealed class Vault
     }
 
     // Les tâches « - [ ] » (et faites si demandé) de tout le coffre, ou d'un dossier / d'une note.
-    public List<TaskItem> Tasks(string under = null, bool includeDone = false)
+    public List<TaskItem> Tasks(string? under = null, bool includeDone = false)
     {
-        string u = under?.Replace('\\', '/').Trim('/');
+        string? u = under?.Replace('\\', '/').Trim('/');
         return notes.Values.Select(e => e.Info).Where(n => !IsTemplate(n)).Where(n => u == null || n.Path.Equals(u, StringComparison.OrdinalIgnoreCase) || n.Path.Equals(u + ".md", StringComparison.OrdinalIgnoreCase) || n.Path.StartsWith(u + "/", StringComparison.OrdinalIgnoreCase))
             .SelectMany(n => n.Tasks).Where(t => includeDone || !t.Done).OrderBy(t => t.Due ?? "9999").ThenBy(t => t.Path, StringComparer.OrdinalIgnoreCase).ThenBy(t => t.Line).ToList();
     }
 
     public const string ProjectTemplate = "---\ntype: projet\nstatut: actif\ndepot: {depot}\npriorite: normale\nresume: {resume}\n---\n# {nom}\n\n## Objectif\n\n{resume}\n\n## Prochaines actions\n\n- [ ] \n\n## Notes\n\n## Journal\n";
 
-    public NoteInfo CreateProject(string name, string repo = null, string summary = null)
+    public NoteInfo CreateProject(string? name, string? repo = null, string? summary = null)
     {
         string clean = Regex.Replace(name ?? "", @"[\\/:*?""<>|\x00-\x1f]", " ").Trim().TrimEnd('.');
         if (clean.Length == 0) throw new VaultException("nom", "Le nom du projet est vide.");
