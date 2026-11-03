@@ -437,7 +437,13 @@ static class Extensions
     {
         try
         {
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("cdx-browser");
+            // Le nom devient un dossier sous extensions\ qui est d'abord effacé : jamais « .. », un chemin ou un nom réservé.
+            if (name == null || !System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z0-9_-]{1,40}$")) return "Nom d'extension refusé.";
+            // L'archive vient de GitHub (les publications d'uBOL), ou d'un serveur local (essais) ; rien d'autre.
+            if (!string.IsNullOrEmpty(url) && !(Uri.TryCreate(url, UriKind.Absolute, out var src)
+                    && ((src.Scheme == Uri.UriSchemeHttps && src.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)) || (src.IsLoopback && (src.Scheme == Uri.UriSchemeHttp || src.Scheme == Uri.UriSchemeHttps)))))
+                return "Adresse refusée : seules les archives publiées sur https://github.com sont acceptées.";
+            if (http.DefaultRequestHeaders.UserAgent.Count == 0) http.DefaultRequestHeaders.UserAgent.ParseAdd("cdx-browser");   // une fois (il s'allongeait à chaque installation)
             if (string.IsNullOrEmpty(url))
             {
                 progress("Recherche de la dernière version…");
@@ -449,7 +455,8 @@ static class Extensions
             progress("Téléchargement de " + url + "…");
             string zip = Path.Combine(Path.GetTempPath(), "cdx-ext-" + Guid.NewGuid().ToString("N")[..8] + ".zip");
             await using (var s = await http.GetStreamAsync(url)) await using (var f = File.Create(zip)) await s.CopyToAsync(f);
-            string dst = Path.Combine(Dir, name);
+            string dst = Path.GetFullPath(Path.Combine(Dir, name));
+            if (!dst.StartsWith(Path.GetFullPath(Dir).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)) return "Nom d'extension refusé.";
             progress("Installation…");
             // une version précédente est d'abord retirée du profil, puis le dossier remplacé
             foreach (var kv in folderOf.Where(k => string.Equals(k.Value, dst, StringComparison.OrdinalIgnoreCase)).ToList()) { try { await RemoveAsync(kv.Key); } catch { } }

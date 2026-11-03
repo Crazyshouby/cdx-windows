@@ -38,6 +38,12 @@ static class SelfTest
         }
         catch (Exception ex) { Check("mots de passe : exception " + ex.Message, false); }
         finally { Passwords.All.Clear(); Passwords.All.AddRange(savedCreds); }
+
+        // ---- logique pure : ce que la barre d'adresse (et br.go) accepte d'ouvrir ----
+        string search = BrowserSettings.Current.SearchUrl;
+        Check("adresses : http, https et file s'ouvrent tels quels", BrowserForm.Resolve("https://exemple.fr/a") == "https://exemple.fr/a" && BrowserForm.Resolve("http://exemple.fr") == "http://exemple.fr" && BrowserForm.Resolve("file:///C:/x.html") == "file:///C:/x.html");
+        Check("adresses : javascript://, data: et un schéma inconnu partent en recherche ; une page d'extension s'ouvre", new[] { "javascript://%0Aalert(1)", "data:text/html,<b>x</b>", "ms-word://x", "vbscript://x" }.All(u => BrowserForm.Resolve(u).StartsWith(search)) && BrowserForm.Resolve("chrome-extension://abc/options.html") == "chrome-extension://abc/options.html");
+        Check("adresses : cdx://reglages est une page interne ; cdx://../x et un nom bizarre ramènent au nouvel onglet", BrowserForm.Resolve("cdx://reglages").EndsWith("interne.html?p=reglages") && BrowserForm.Resolve("cdx://../x").EndsWith("p=newtab") && BrowserForm.Resolve("cdx://a&b=c").EndsWith("p=newtab"));
         var form = new Form { FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-32000, -32000), Size = new Size(300, 200) };
         var web = new WebView2 { Dock = DockStyle.Fill }; form.Controls.Add(web);
 

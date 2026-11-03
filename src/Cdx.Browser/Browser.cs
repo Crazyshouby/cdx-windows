@@ -13,6 +13,7 @@ class BrowserTab
     public bool Loading; public int Group;   // 0 : hors groupe
     public CoreWebView2Controller Ctl;
     public string Filled;                    // adresse où nos identifiants ont été posés (une seule fois par page)
+    public bool InternalOk;                  // la prochaine navigation vient du navigateur lui-même (barre d'adresse, cdx://, précédente…) : une page interne y est permise
 }
 class TabGroup { public int Id; public string Name = ""; public string Color = "accent"; public bool Collapsed; }
 
@@ -48,13 +49,19 @@ class BrowserForm : HostForm
     static string InternalName(string u) { var m = Regex.Match(u ?? "", @"[?&]p=([a-z]+)"); return m.Success ? m.Groups[1].Value : "newtab"; }
     static string DisplayUrl(string u) => IsInternalUrl(u) ? (InternalName(u) == "newtab" ? "" : "cdx://" + InternalName(u)) : (u == "about:blank" ? "" : u ?? "");
 
+    static readonly HashSet<string> Schemes = new() { "http", "https", "file", "chrome-extension" };   // chrome-extension : les pages de réglages des extensions installées
+    // Une navigation voulue par le navigateur lui-même (barre d'adresse, cdx://, nouvel onglet) : seule celle-ci peut mener à une page interne.
+    static void Go(BrowserTab t, string url) { t.InternalOk = true; t.Web.CoreWebView2.Navigate(url); }
     // Ce qu'on tape dans la barre d'adresse : une adresse complète, un nom de domaine, une page interne, ou une recherche (moteur des réglages).
     public static string Resolve(string input)
     {
         input = (input ?? "").Trim();
         if (input.Length == 0) return Internal("newtab");
-        if (input.StartsWith("cdx://", StringComparison.OrdinalIgnoreCase)) return Internal(input[6..].Trim('/'));
-        if (Regex.IsMatch(input, @"^[a-zA-Z][a-zA-Z0-9+.\-]*://") || input.StartsWith("about:") || input.StartsWith("data:")) return input;
+        if (input.StartsWith("cdx://", StringComparison.OrdinalIgnoreCase)) { string p = input[6..].Trim('/').ToLowerInvariant(); return Regex.IsMatch(p, "^[a-z]{1,20}$") ? Internal(p) : Internal("newtab"); }
+        // Seuls http, https, file et les pages d'extension s'ouvrent tels quels ; javascript:, data: (hameçonnage), un schéma inconnu partent en recherche.
+        var scheme = Regex.Match(input, @"^([a-zA-Z][a-zA-Z0-9+.\-]*)://");
+        if (scheme.Success) return Schemes.Contains(scheme.Groups[1].Value.ToLowerInvariant()) ? input : S.SearchUrl + Uri.EscapeDataString(input);
+        if (input == "about:blank") return input;
         if (!input.Contains(' ') && (Regex.IsMatch(input, @"^(localhost|\d{1,3}(\.\d{1,3}){3})(:\d+)?(/.*)?$") || Regex.IsMatch(input, @"^[^\s/]+\.[a-zA-Z]{2,}(:\d+)?([/?#].*)?$"))) return "https://" + input;
         return S.SearchUrl + Uri.EscapeDataString(input);
     }
@@ -80,7 +87,7 @@ class BrowserForm : HostForm
         Wire(t);
         await Extensions.LoadAllAsync(t.Web.CoreWebView2.Profile);
         if (activate) Select(t); else Push();
-        if (url != null) t.Web.CoreWebView2.Navigate(Resolve(url));
+        if (url != null) Go(t, Resolve(url));
         return t;
     }
 
@@ -231,7 +238,16 @@ class BrowserForm : HostForm
         c.DocumentTitleChanged += (s, e) => { t.Title = string.IsNullOrWhiteSpace(c.DocumentTitle) ? DisplayUrl(c.Source) : c.DocumentTitle; if (t.Title == "") t.Title = "Nouvel onglet"; Push(); };
         c.SourceChanged += (s, e) => { t.Url = c.Source; Push(); };
         c.HistoryChanged += (s, e) => Push();
-        c.NavigationStarting += (s, e) => { t.Loading = true; t.Status = ""; Push(); };
+        // Les pages internes (réglages, mots de passe, historique) sont servies sous cdx.shell dans chaque onglet : une page web ne doit ni les ouvrir
+        // ni les encadrer. Permis : une navigation lancée par le navigateur (Go, précédente, suivante, recharger), ou d'une page interne à une autre.
+        c.NavigationStarting += (s, e) =>
+        {
+            bool ours = t.InternalOk; t.InternalOk = false;
+            if (e.Uri.StartsWith("https://cdx.shell/", StringComparison.OrdinalIgnoreCase) && !(IsInternalUrl(e.Uri) && (ours || IsInternalUrl(c.Source))))
+            { e.Cancel = true; Host.Log("page interne refusée (ouverte par une page) : " + e.Uri); return; }
+            t.Loading = true; t.Status = ""; Push();
+        };
+        c.FrameNavigationStarting += (s, e) => { if (e.Uri.StartsWith("https://cdx.shell/", StringComparison.OrdinalIgnoreCase)) { e.Cancel = true; Host.Log("cadre interne refusé : " + e.Uri); } };
         c.NavigationCompleted += (s, e) =>
         {
             t.Loading = false; t.Url = c.Source;
@@ -252,6 +268,8 @@ class BrowserForm : HostForm
         c.WindowCloseRequested += (s, e) => CloseTab(t);
         c.NewWindowRequested += async (s, e) =>
         {
+            // une fenêtre que la page ouvre d'elle-même (sans clic de l'utilisateur) : bloquée
+            if (!e.IsUserInitiated) { e.Handled = true; Host.Log("fenêtre surgissante bloquée : " + e.Uri); return; }
             var d = e.GetDeferral();
             try { var nt = await NewTabAsync(null, true, t.Group, Tabs.IndexOf(t)); e.NewWindow = nt.Web.CoreWebView2; e.Handled = true; }   // le nouvel onglet garde le lien « opener » : les fenêtres de connexion fonctionnent
             catch (Exception ex) { Host.Log("nouvel onglet : " + ex.Message); }
@@ -459,7 +477,7 @@ class BrowserForm : HostForm
             switch (cmd)
             {
                 case "in.data": Reply(DataPayload()); break;
-                case "in.navigate": t.Web.CoreWebView2.Navigate(Resolve(Str("url"))); break;
+                case "in.navigate": Go(t, Resolve(Str("url"))); break;
                 case "in.bookmark.remove": { var b = BrowserData.Bookmarks.FirstOrDefault(x => x.Url == Str("url")); if (b != null) { BrowserData.Bookmarks.Remove(b); BrowserData.SaveBookmarks(); } Reply(DataPayload()); sh.PushAll(); break; }
                 case "in.history.clear": BrowserData.History.Clear(); BrowserData.SaveHistory(); Reply(DataPayload()); break;
                 case "in.dl.open": { var d = BrowserData.Downloads.FirstOrDefault(x => x.Id == r.GetProperty("id").GetInt32()); if (d != null && File.Exists(d.Path)) Process.Start(new ProcessStartInfo(d.Path) { UseShellExecute = true }); break; }
@@ -558,10 +576,10 @@ class BrowserForm : HostForm
             case "br.select": { var t = Tab(); if (t != null) Select(t); break; }
             case "br.duplicate": { var t = Tab(); if (t != null) _ = NewTabAsync(t.Url, true, t.Group, Tabs.IndexOf(t)); break; }
             case "br.reopen": ReopenClosed(); break;
-            case "br.go": if (c != null) { c.Navigate(Resolve(Str("url"))); active.Web.Focus(); } break;
-            case "br.back": if (c?.CanGoBack == true) c.GoBack(); break;
-            case "br.fwd": if (c?.CanGoForward == true) c.GoForward(); break;
-            case "br.reload": c?.Reload(); break;
+            case "br.go": if (c != null) { Go(active, Resolve(Str("url"))); active.Web.Focus(); } break;
+            case "br.back": if (c?.CanGoBack == true) { active.InternalOk = true; c.GoBack(); } break;
+            case "br.fwd": if (c?.CanGoForward == true) { active.InternalOk = true; c.GoForward(); } break;
+            case "br.reload": if (c != null) { active.InternalOk = true; c.Reload(); } break;
             case "br.stop": c?.Stop(); break;
             case "br.star": ToggleStar(); break;
             case "br.zoom": Zoom(Int("d")); break;

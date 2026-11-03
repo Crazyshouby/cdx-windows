@@ -75,7 +75,13 @@ sealed class PageCachee
             navigation?.TrySetResult(e.IsSuccess);
             if (enConnexion) await SuivreConnexionAsync();
         };
-        core.NewWindowRequested += (_, e) => { e.Handled = true; core.Navigate(e.Uri); };   // fenêtres surgissantes du login : dans la même vue
+        core.NewWindowRequested += (_, e) => { e.Handled = true; if (EnConnexionPermis(e.Uri)) core.Navigate(e.Uri); };   // fenêtres surgissantes du login : dans la même vue
+        // La page cachée ne quitte jamais YouTube (une publicité ou un lien ne l'emmène pas ailleurs) ; le temps de la connexion, les pages de Google aussi.
+        core.NavigationStarting += (_, e) =>
+        {
+            if (EnConnexionPermis(e.Uri)) return;
+            e.Cancel = true; Veille.Noter("extraction", "navigation hors de YouTube refusée : " + Hote(e.Uri));
+        };
         core.WebMessageReceived += (_, e) => RecuParFetch(e);
 
         Bloqueur = await Ubol.PreparerAsync(core.Profile);
@@ -174,6 +180,16 @@ sealed class PageCachee
     }
 
     // ---------- connexion Google : la page sort de sa cachette le temps de se connecter ----------
+
+    // YouTube et sa page de consentement toujours ; les domaines de Google seulement pendant la connexion. about:blank pour la vue vide.
+    bool EnConnexionPermis(string u)
+    {
+        if (u == "about:blank") return true;
+        if (!Uri.TryCreate(u, UriKind.Absolute, out var x) || x.Scheme != Uri.UriSchemeHttps) return false;
+        string h = x.Host.ToLowerInvariant();
+        if (h == "www.youtube.com" || h == "youtube.com" || h == "m.youtube.com" || h == "consent.youtube.com" || h.StartsWith("consent.google.")) return true;
+        return enConnexion && System.Text.RegularExpressions.Regex.IsMatch(h, @"(^|\.)(google\.[a-z.]+|youtube\.com|gstatic\.com)$");
+    }
 
     public async Task ConnexionAsync()
     {

@@ -83,7 +83,25 @@ $s = St; Show-Tabs $s
 $srvdir = Join-Path $env:TEMP 'cdx-dl-test'; New-Item -ItemType Directory $srvdir -Force | Out-Null
 [IO.File]::WriteAllBytes("$srvdir\cdx-test.bin", (1..200000 | ForEach-Object { [byte]($_ % 251) }))
 $srv = Start-Process python -ArgumentList '-m', 'http.server', '8766', '--bind', '127.0.0.1', '--directory', $srvdir -PassThru -WindowStyle Hidden
+# pages piégées : une page web ne doit ni ouvrir ni encadrer une page interne, ni ouvrir de fenêtre d'elle-même
+'<title>PIEGE</title><script>setTimeout(() => location.href = "https://cdx.shell/browser/interne.html?p=reglages", 300)</script>' | Set-Content "$srvdir\piege.html" -Encoding utf8
+'<title>CADRE</title><iframe src="https://cdx.shell/browser/interne.html?p=motsdepasse"></iframe>' | Set-Content "$srvdir\cadre.html" -Encoding utf8
+'<title>SURGIT</title><script>window.open("http://127.0.0.1:8766/piege.html?surgie")</script>' | Set-Content "$srvdir\surgit.html" -Encoding utf8
 Start-Sleep 2
+"7a. pages internes et fenêtres surgissantes depuis une page web"
+$log = "$data\journal-browser.log"
+Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8766/piege.html"}' | Out-Null; Start-Sleep 3
+$s = St; Check "une page web qui se redirige vers cdx://reglages reste où elle est" ((($s.tabs | Where-Object { $_.Id -eq $s.active }).Url) -like 'http://127.0.0.1:8766/piege.html*' -and ((Get-Content $log -Raw) -match 'page interne refusée'))
+Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8766/cadre.html"}' | Out-Null; Start-Sleep 3
+Check "une page web ne peut pas encadrer une page interne (cadre refusé)" ((Get-Content $log -Raw) -match 'cadre interne refusé')
+$n0 = @((St).tabs).Count
+Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8766/surgit.html"}' | Out-Null; Start-Sleep 3
+Check "une fenêtre ouverte par la page sans clic est bloquée (pas d'onglet de plus)" ((@((St).tabs).Count -eq $n0) -and ((Get-Content $log -Raw) -match 'fenêtre surgissante bloquée'))
+Ctl 'cmd {"cmd":"br.go","url":"cdx://reglages"}' | Out-Null; Start-Sleep 2
+$s = St; Check "cdx://reglages tapé dans la barre d'adresse s'ouvre toujours" ((($s.tabs | Where-Object { $_.Id -eq $s.active }).Url) -like '*interne.html?p=reglages')
+Ctl 'cmd {"cmd":"br.back"}' | Out-Null; Start-Sleep 2
+Ctl 'cmd {"cmd":"br.fwd"}' | Out-Null; Start-Sleep 2
+$s = St; Check "précédente puis suivante ramènent à la page interne (navigation du navigateur)" ((($s.tabs | Where-Object { $_.Id -eq $s.active }).Url) -like '*interne.html?p=reglages')
 Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8766/cdx-test.bin"}' | Out-Null; Start-Sleep 5
 $s = St
 $d = @($s.downloads)[0]
@@ -165,6 +183,11 @@ Ctl 'cmd {"cmd":"br.go","url":"http://127.0.0.1:8767/page.html"}' | Out-Null; St
 Check "sans l'extension : le script passe" ((Ctl 'eval document.title') -eq '"SCRIPT-PASSE"')
 Ctl 'cmd {"cmd":"br.internal","p":"extensions"}' | Out-Null; Start-Sleep 3
 Check "cdx://extensions liste l'extension de test (cdx-test) chargée au démarrage" ((Ctl 'eval document.body.innerText') -match 'cdx-test')
+New-Item -ItemType Directory "$data\temoin-hors-extensions" -Force | Out-Null
+Ctl 'eval post({ cmd: "in.ext.install", url: "http://127.0.0.1:8767/ext.zip", name: "..\\temoin-hors-extensions" })' | Out-Null; Start-Sleep 3
+Check "in.ext.install : un nom qui remonte (..\) est refusé, rien n'est effacé hors de extensions\" ((Test-Path "$data\temoin-hors-extensions") -and ((Ctl 'eval document.body.innerText') -match 'Nom d.extension refus'))
+Ctl 'eval post({ cmd: "in.ext.install", url: "https://exemple.invalid/ext.zip", name: "autre" })' | Out-Null; Start-Sleep 2
+Check "in.ext.install : une archive hors de GitHub est refusée" ((Ctl 'eval document.body.innerText') -match 'Adresse refus')
 Ctl 'eval post({ cmd: "in.ext.install", url: "http://127.0.0.1:8767/ext.zip", name: "bloqueur" })' | Out-Null; Start-Sleep 6
 $lst = Ctl 'eval document.body.innerText'
 Check "l'archive est téléchargée, dépliée sous extensions\bloqueur et chargée (listée avec sa version)" ((Test-Path "$data\extensions\bloqueur\manifest.json") -and $lst -match 'cdx-bloqueur' -and $lst -match '1\.2')
