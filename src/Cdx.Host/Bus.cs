@@ -9,7 +9,7 @@ static class Bus
 {
     public const int MaxLine = 65536;
     public const int MaxInstances = 8;
-    public static readonly string[] Apps = { "shell", "explorer", "browser", "repos", "transfers", "notes", "terminal", "agenda", "mail", "youtube", "audio_linker", "messages" };
+    public static string[] Apps => SuiteApps.Names;   // la liste vit dans SuiteApps.cs
 
     // CDX_PIPE_PREFIX remplace « cdx. » (réservé aux essais : on ne touche pas au vrai bus).
     internal static string Prefix => Environment.GetEnvironmentVariable("CDX_PIPE_PREFIX") is { Length: > 0 } p ? p : "cdx.";

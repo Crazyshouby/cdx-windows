@@ -532,6 +532,17 @@ static class SelfTest
                 Check("retour à un fichier valide : lavande signalé (< 1 s)", Until(() => accents.Contains("lavande"), 1000));
                 Suite.RegisterApp("shell", @"C:\Windows\System32\notepad.exe");
                 Check("apps.json : chemin enregistré, nom hors liste refusé", Suite.AppPath("shell") != null && Suite.AppPath("../evil") == null);
+                // ---- SuiteApps : la seule liste des programmes
+                Check("SuiteApps : le bus et apps.json lisent la même liste, sans doublon", Bus.Apps.SequenceEqual(SuiteApps.Names) && SuiteApps.Names.Distinct().Count() == SuiteApps.All.Length);
+                Check("SuiteApps : cdx:explorer, cdx:explorer?C:\\Dev et cdx:navigateur reconnus ; cdx:reposXYZ et un schéma inconnu non",
+                    SuiteApps.ByTarget("cdx:explorer")?.Name == "explorer" && SuiteApps.ByTarget("CDX:REPOS")?.Name == "repos" && SuiteApps.ByTarget("cdx:navigateur?https://x.fr")?.Name == "browser"
+                    && SuiteApps.ByTarget("cdx:reposXYZ") == null && SuiteApps.ByTarget("cdx:inconnu") == null && SuiteApps.ByTarget(null) == null);
+                Check("SuiteApps : l'argument n'est rendu qu'aux programmes qui en acceptent un",
+                    SuiteApps.ArgumentOf(SuiteApps.ByName("explorer"), "cdx:explorer?C%3A%5CDev") == @"C:\Dev" && SuiteApps.ArgumentOf(SuiteApps.ByName("repos"), "cdx:repos?x") == null);
+                var missing = SuiteApps.All.Where(a => a.DotNet && !File.Exists(Path.Combine(AppContext.BaseDirectory, a.Exe + ".exe"))).Select(a => a.Exe).ToList();
+                Check("SuiteApps : chaque programme .NET de la liste est compilé à côté du shell" + (missing.Count > 0 ? " (manquent : " + string.Join(", ", missing) + ")" : ""), missing.Count == 0);
+                var pinTargets = PinStore.Defaults.Select(p => p.Target).Where(t => t.StartsWith("cdx:")).ToList();
+                Check("SuiteApps : chaque tuile cdx:… du menu Démarrer désigne un programme de la liste", pinTargets.All(t => SuiteApps.ByTarget(t) != null));
                 // plusieurs programmes qui s'inscrivent en même temps : aucune entrée perdue (verrou nommé autour de lire-modifier-écrire)
                 string[] names = { "explorer", "browser", "repos", "transfers", "notes", "terminal", "agenda", "mail" };
                 Parallel.ForEach(names, n => Suite.RegisterApp(n, @"C:\Windows\System32\notepad.exe"));

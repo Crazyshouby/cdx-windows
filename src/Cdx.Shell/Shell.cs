@@ -77,7 +77,7 @@ class Shell : IHostApp
         Bus.Listen("shell", OnBus);
         Suite.RegisterApp("shell", Environment.ProcessPath);
         // Les deux autres programmes sont posés à côté du shell : leur chemin est enregistré même s'ils n'ont pas encore tourné (ou si apps.json garde un ancien dossier).
-        foreach (var other in new[] { "explorer", "browser", "repos", "transfers", "notes", "youtube", "audio_linker" }) { var exe = Path.Combine(AppContext.BaseDirectory, "cdx-" + other + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other, exe); }
+        foreach (var other in SuiteApps.All.Where(a => a.Name != "shell")) { var exe = Path.Combine(AppContext.BaseDirectory, other.Exe + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other.Name, exe); }   // les voisins posés à côté du shell (SuiteApps.cs)
         if (!pinnedTheme) suiteWatch = Suite.Watch(theme, a => { theme = a; foreach (var f in new HostForm[] { Bar, Start, Center, Switch, AudioMenu, BarMenu }) f.Send(new { type = "theme", value = a }); Host.Log("accent de la suite : " + a); });
         StartTray();
         Host.Log($"shell prêt : thème {theme}, échelle {scale}, racine {root}");
@@ -587,16 +587,14 @@ class Shell : IHostApp
 
     void Launch(string target)
     {
-        if (target.StartsWith("cdx:navigateur")) { StartApp("cdx-browser.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
-        if (target.StartsWith("cdx:repos")) { StartApp("cdx-repos.exe", null); return; }
-        if (target.StartsWith("cdx:agenda")) { StartApp("cdx-agenda.exe", null); return; }
-        if (target.StartsWith("cdx:courrier")) { StartApp("cdx-mail.exe", null); return; }
-        if (target.StartsWith("cdx:youtube")) { StartApp("cdx-youtube.exe", null); return; }
-        // Audio Linker (C++, src/cdx-audio_linker) : posé dans bin\ par build.ps1 ; déjà lancé, il passe devant (son instance unique)
-        if (target.StartsWith("cdx:audio_linker")) { StartApp(File.Exists(Path.Combine(AppContext.BaseDirectory, "cdx-audio_linker.exe")) ? "cdx-audio_linker.exe" : Suite.AppPath("audio_linker") ?? "cdx-audio_linker.exe", null); return; }
-        if (target.StartsWith("cdx:terminal")) { StartApp("cdx-terminal.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
-        if (target.StartsWith("cdx:notes")) { StartApp("cdx-notes.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
-        if (target.StartsWith("cdx:explorer")) { StartApp("cdx-explorer.exe", target.Contains('?') ? Uri.UnescapeDataString(target[(target.IndexOf('?') + 1)..]) : null); return; }
+        // un programme de la suite (SuiteApps.cs) : lancé à côté du shell, avec son argument s'il en accepte un
+        if (SuiteApps.ByTarget(target) is { } app)
+        {
+            string exe = app.Exe + ".exe";
+            // Audio Linker (C++) : posé dans bin\ par build.ps1, sinon là où il s'est inscrit ; déjà lancé, il passe devant (son instance unique)
+            if (!app.DotNet && !File.Exists(Path.Combine(AppContext.BaseDirectory, exe))) exe = Suite.AppPath(app.Name) ?? exe;
+            StartApp(exe, SuiteApps.ArgumentOf(app, target)); return;
+        }
         try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); Host.Log("lancé : " + target); }
         catch (Exception ex) { Host.Log($"lancement de {target} échoué : {ex.Message}"); }
     }
