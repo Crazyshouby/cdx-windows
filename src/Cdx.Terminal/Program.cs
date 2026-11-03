@@ -19,20 +19,6 @@ static class Program
             if (startDir != null) SingleInstance.Relay("terminal", "open-path", new { path = startDir }); else SingleInstance.Relay("terminal", "show", new { });
             return;
         }
-        using (mutex)
-        {
-            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.ThreadException += (s, e) => Host.Log("exception (interface) : " + e.Exception);
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => Host.Log("exception fatale : " + e.ExceptionObject);
-
-            var app = new TerminalApp(theme, startDir);
-            Bus.Listen("terminal", app.OnBus);
-            Suite.RegisterApp("terminal", Environment.ProcessPath);
-            app.Anchor.BeginInvoke(new Action(() => app.Open()));   // dans la boucle de messages : WebView2 en a besoin
-            Host.StartControlPipe("terminal", app.Anchor, app.HandleControl, () => app.Closing);
-            Application.Run(app);
-        }
+        using (mutex) CdxApp.Run("terminal", () => new TerminalApp(theme, startDir), app => app.Open());   // le démarrage commun : CdxApp.cs
     }
 }

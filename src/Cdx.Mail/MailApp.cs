@@ -8,14 +8,14 @@ namespace Cdx;
 // Le programme : une fenêtre « Courrier » sur la boîte Gmail du compte Google de la suite (GoogleAuth, portée gmail.modify). La page web/mail/courrier.html
 // dessine les libellés, la liste des fils, le fil ouvert, la fenêtre d'écriture ; le programme parle à l'API Gmail (fils, messages, libellés, envoi, pièces
 // jointes) et garde la dernière liste de la boîte de réception en cache (courrier-cache.json) pour l'afficher hors ligne. Un nouveau courrier est signalé à la barre.
-sealed class MailApp : ApplicationContext, IHostApp
+sealed class MailApp : ApplicationContext, ICdxApp
 {
     string theme;
     readonly string root;
     readonly IDisposable watch;
     MailForm form;
     CoreWebView2Environment env;
-    public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
+    public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
     readonly System.Windows.Forms.Timer poll = new() { Interval = 90_000 };
     bool busy; string lastError = "";
     string curLabel = "INBOX", curQuery = "";

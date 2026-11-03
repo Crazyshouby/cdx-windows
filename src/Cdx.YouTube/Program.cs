@@ -113,11 +113,7 @@ static class Program
         {
             YtDonnees.Migrer();
             Host.Log($"=== cdx-youtube{(o.Essai ? ", essai" : "")}, extraction {o.Extraction} ===");
-            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.ThreadException += (s, e) => Host.Log("exception (interface) : " + e.Exception);
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => Host.Log("exception fatale : " + e.ExceptionObject);
+            CdxApp.ConfigureWinForms();
 
             var app = new YouTubeApp(o);
             Bus.Listen("youtube", app.OnBus);

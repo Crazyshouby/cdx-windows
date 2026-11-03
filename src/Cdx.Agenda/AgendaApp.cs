@@ -8,7 +8,7 @@ namespace Cdx;
 // Le programme : une fenêtre « Agenda » sur le compte Google de la suite (GoogleAuth) : les agendas et leurs événements (Google Calendar), les listes de tâches
 // (Google Tasks). La page web/agenda/agenda.html dessine le mois, la semaine, la liste, les tâches ; le programme parle aux API et garde un cache (agenda-cache.json)
 // pour afficher quelque chose hors ligne. Réglages propres : agenda.json (agendas masqués).
-sealed class AgendaApp : ApplicationContext, IHostApp
+sealed class AgendaApp : ApplicationContext, ICdxApp
 {
     string theme;
     readonly string root;
@@ -21,7 +21,7 @@ sealed class AgendaApp : ApplicationContext, IHostApp
     object lastEvents, lastTasks;        // ce qui a été envoyé en dernier (cache)
     string lastFrom = "", lastTo = "";
     bool busy; string lastError = "";
-    public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
+    public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
     static string SettingsFile => Path.Combine(Host.DataDir, "agenda.json");
     static string CacheFile => Path.Combine(Host.DataDir, "agenda-cache.json");

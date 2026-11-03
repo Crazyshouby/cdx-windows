@@ -7,7 +7,7 @@ namespace Cdx;
 
 // Le programme : une fenêtre qui montre tous les transferts de la suite. Il ne fait aucun transfert lui-même : il tient la liste de ce que les autres programmes annoncent (« xfer »), la montre,
 // et leur renvoie les ordres de la page (« xfer-ctl »). Ce qu'il garde sur disque : les derniers transferts terminés (transferts.json).
-sealed class TransfersApp : ApplicationContext, IHostApp
+sealed class TransfersApp : ApplicationContext, ICdxApp
 {
     sealed class Entry
     {
@@ -32,7 +32,7 @@ sealed class TransfersApp : ApplicationContext, IHostApp
     readonly HashSet<string> dirty = new(), removed = new();
     readonly System.Windows.Forms.Timer flush = new() { Interval = 250 }, sweep = new() { Interval = 3000 };
     bool historyDirty; int histSeq;
-    public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
+    public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
     static string HistFile => Path.Combine(Host.DataDir, "transferts.json");
 

@@ -7,7 +7,7 @@ namespace Cdx;
 // Le programme : un navigateur à plusieurs fenêtres, dont le profil (cookies, sessions) est à part de celui des pages de la barre. Les extensions non
 // empaquetées déposées dans %LOCALAPPDATA%\CdxShell\extensions\<nom> sont chargées à l'ouverture (gestionnaire : cdx://extensions). La session (fenêtres,
 // onglets, groupes) est réécrite à chaque changement et retrouvée au lancement suivant, même après un plantage.
-sealed class BrowserApp : ApplicationContext, IHostApp
+sealed class BrowserApp : ApplicationContext, ICdxApp
 {
     string theme;
     readonly IDisposable watch;
@@ -22,7 +22,7 @@ sealed class BrowserApp : ApplicationContext, IHostApp
     public CoreWebView2Environment BrowserEnv { get; private set; }
     public bool Closing { get; private set; }
     public int WindowCount => windows.Count;
-    public readonly Control Anchor = new Control();   // un fil d'interface où poser les commandes du canal de test
+    public Control Anchor { get; } = new Control();   // un fil d'interface où poser les commandes du canal de test
 
     public BrowserApp(string theme)
     {

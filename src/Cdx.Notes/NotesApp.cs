@@ -7,7 +7,7 @@ namespace Cdx;
 
 // Le programme : une fenêtre sur le coffre de notes. La page demande, le programme lit et écrit les fichiers (Cdx.Vault, les mêmes règles que le serveur MCP de Claude)
 // et prévient la page de tout changement du dossier (ce que fait Claude, ou un autre éditeur, se voit aussitôt).
-sealed class NotesApp : ApplicationContext, IHostApp
+sealed class NotesApp : ApplicationContext, ICdxApp
 {
     string theme; readonly string root; readonly string openAtStart;
     readonly IDisposable watch;
@@ -16,7 +16,7 @@ sealed class NotesApp : ApplicationContext, IHostApp
     Vault vault;
     FileSystemWatcher fsw; System.Threading.Timer debounce;
     readonly Dictionary<string, string> known = new(StringComparer.OrdinalIgnoreCase);   // notes ouvertes dans la page -> empreinte que la page connaît
-    public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
+    public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
     public NotesApp(string theme, string openAtStart)
     {

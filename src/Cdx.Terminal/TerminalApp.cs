@@ -12,7 +12,7 @@ namespace Cdx;
 //   programme → page   hello {build,cwd?} · out {sid,b64} (octets VT/UTF-8 du shell) · exit {sid,code} · paste {sid,text} · open-tab {cwd} · theme {value}
 //   bus                show · open-path {path} (un onglet dans ce dossier ; la fenêtre passe devant)
 // Le numéro de session (sid) est choisi par la page ; le programme refuse un numéro déjà pris.
-sealed class TerminalApp : ApplicationContext, IHostApp
+sealed class TerminalApp : ApplicationContext, ICdxApp
 {
     // Une session : un shell dans sa pseudo-console. Les octets lus pendant que l'interface était occupée sont envoyés ensemble : un shell qui crache beaucoup de
     // texte ne fait pas un message par lecture.
@@ -32,7 +32,7 @@ sealed class TerminalApp : ApplicationContext, IHostApp
     int focusSid;                                           // le volet qui a le focus (le canal de test y écrit)
     string pendingDir;                                      // dossier demandé avant que la page soit prête : le premier onglet s'y ouvre
     bool pageReady;
-    public readonly Control Anchor = new Control();         // installe le contexte de synchronisation de l'interface et sert à y poser un travail
+    public Control Anchor { get; } = new Control();         // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
     public TerminalApp(string theme, string startDir = null)
     {

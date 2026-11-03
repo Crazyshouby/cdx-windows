@@ -18,20 +18,6 @@ static class Program
 
         var (theme, target) = Host.ParseArgs(args);
         if (!SingleInstance.Acquire("explorer", out var mutex)) { SingleInstance.Relay("explorer", "open-path", target == null ? new { } : new { path = target }); return; }
-        using (mutex)
-        {
-            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.ThreadException += (s, e) => Host.Log("exception (interface) : " + e.Exception);
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => Host.Log("exception fatale : " + e.ExceptionObject);
-
-            var app = new ExplorerApp(theme);
-            Bus.Listen("explorer", app.OnBus);
-            Suite.RegisterApp("explorer", Environment.ProcessPath);
-            app.Anchor.BeginInvoke(new Action(() => app.Open(target)));   // dans la boucle de messages : WebView2 en a besoin
-            Host.StartControlPipe("explorer", app.Anchor, app.HandleControl, () => app.Closing);
-            Application.Run(app);
-        }
+        using (mutex) CdxApp.Run("explorer", () => new ExplorerApp(theme), app => app.Open(target));   // le démarrage commun : CdxApp.cs
     }
 }

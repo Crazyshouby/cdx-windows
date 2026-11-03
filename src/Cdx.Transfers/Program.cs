@@ -11,20 +11,6 @@ static class Program
         Host.Init("transfers");
         var (theme, _) = Host.ParseArgs(args);
         if (!SingleInstance.Acquire("transfers", out var mutex)) { SingleInstance.Relay("transfers", "show", new { }); return; }
-        using (mutex)
-        {
-            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.ThreadException += (s, e) => Host.Log("exception (interface) : " + e.Exception);
-            AppDomain.CurrentDomain.UnhandledException += (s, e) => Host.Log("exception fatale : " + e.ExceptionObject);
-
-            var app = new TransfersApp(theme);
-            Bus.Listen("transfers", app.OnBus);
-            Suite.RegisterApp("transfers", Environment.ProcessPath);
-            app.Anchor.BeginInvoke(new Action(() => app.Open()));   // dans la boucle de messages : WebView2 en a besoin
-            Host.StartControlPipe("transfers", app.Anchor, app.HandleControl, () => app.Closing);
-            Application.Run(app);
-        }
+        using (mutex) CdxApp.Run("transfers", () => new TransfersApp(theme), app => app.Open());   // le démarrage commun : CdxApp.cs
     }
 }

@@ -5,7 +5,7 @@ using Microsoft.Web.WebView2.Core;
 namespace Cdx;
 
 // Le programme : une fenêtre qui liste les dépôts git des dossiers choisis. La page demande, le programme lit git (Git.cs) et répond ; rien n'est écrit dans un dépôt.
-sealed class ReposApp : ApplicationContext, IHostApp
+sealed class ReposApp : ApplicationContext, ICdxApp
 {
     string theme; readonly string root;
     readonly IDisposable watch;
@@ -16,7 +16,7 @@ sealed class ReposApp : ApplicationContext, IHostApp
     readonly Dictionary<string, RepoInfo> infos = new(StringComparer.OrdinalIgnoreCase);
     CancellationTokenSource scanCts;
     int scanId;
-    public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
+    public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
     static string RootsFile => Path.Combine(Host.DataDir, "repos.json");
 

@@ -9,7 +9,7 @@ namespace Cdx;
 // abonnements, recherche, vidéo…), le programme fait faire le travail à la page cachée et renvoie le modèle de YtLecture. L'interface ne parle jamais à
 // YouTube (seules les miniatures sont chargées directement depuis i.ytimg.com). Pour lire une vidéo, le lecteur de la page cachée vient se poser dans la
 // fenêtre, sur le rectangle que la fiche lui réserve (message « yt.lecteur »).
-sealed class YouTubeApp : ApplicationContext, IHostApp
+sealed class YouTubeApp : ApplicationContext, ICdxApp
 {
     readonly Options o;
     readonly PageCachee page;
@@ -33,7 +33,7 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
     Point dernierCurseur; DateTime derniereActivite; bool barreVisible = true;
     int demande;
     public int Code;
-    public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
+    public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
     public YouTubeApp(Options o)
     {

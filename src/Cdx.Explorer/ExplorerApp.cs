@@ -5,7 +5,7 @@ using Microsoft.Web.WebView2.Core;
 namespace Cdx;
 
 // Le programme : une ou plusieurs fenêtres de l'Explorateur, qui s'arrête avec la dernière.
-sealed class ExplorerApp : ApplicationContext, IHostApp
+sealed class ExplorerApp : ApplicationContext, ICdxApp
 {
     string theme; readonly string root;
     readonly IDisposable watch;
@@ -17,7 +17,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
     readonly Dictionary<(HostForm, string), CancellationTokenSource> lists = new();   // la lecture de dossier en cours de chaque onglet
     readonly Dictionary<(HostForm, string), CancellationTokenSource> searches = new();    // la recherche dans les sous-dossiers en cours de chaque onglet
     readonly Dictionary<(HostForm, string), DirWatcher> watchers = new();             // la surveillance du dossier de chaque onglet
-    public readonly Control Anchor = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
+    public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
     public ExplorerApp(string theme)
     {
