@@ -6,4 +6,9 @@
     <Product>CDX</Product>
     <Copyright>© Valentin Large</Copyright>
   </PropertyGroup>
+  <!-- Filets du compilateur (audit du 03/11/2026, lot 4.5) : une tâche lancée sans await ni « _ = » est une erreur (son exception se perdrait).
+       Nullable et les analyseurs « recommended » s'activeront projet par projet, en commençant par Cdx.Host (environ 130 avertissements à traiter). -->
+  <PropertyGroup>
+    <WarningsAsErrors>$(WarningsAsErrors);CS4014</WarningsAsErrors>
+  </PropertyGroup>
 </Project>
