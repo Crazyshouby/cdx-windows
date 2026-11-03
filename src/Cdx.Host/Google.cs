@@ -21,10 +21,13 @@ static class GoogleAuth
     static readonly string[] BaseScopes = { "openid", "email" };
 
     sealed class Client { public string Id, Secret, AuthUri = "https://accounts.google.com/o/oauth2/v2/auth", TokenUri = "https://oauth2.googleapis.com/token"; }
-    sealed class Token { public string Access { get; set; } public string Refresh { get; set; } public long Expires { get; set; } public string Scope { get; set; } = ""; public string Email { get; set; } = ""; }
+    // Immuable : un changement crée un nouveau jeton (with), publié d'un coup. Un appel qui a lu « token » une fois garde un objet cohérent même si
+    // DisconnectAsync ou un rafraîchissement passe au même moment (avant : lecture de token.Expires puis token.Access, NullReferenceException possible).
+    sealed record Token { public string Access { get; init; } public string Refresh { get; init; } public long Expires { get; init; } public string Scope { get; init; } = ""; public string Email { get; init; } = ""; }
+    static readonly byte[] Entropy = Encoding.UTF8.GetBytes("CDX/google-token/v1");
 
     static readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(60) };
-    static Token token = LoadToken();
+    static volatile Token token = LoadToken();
     static readonly object gate = new();
     public static string PendingUrl { get; private set; }        // l'adresse de consentement en attente (essais)
     // CDX_GOOGLE_NO_BROWSER=1 (essais) : la page de consentement n'est pas ouverte, l'essai la lit par le canal de test (google-url) et joue le navigateur.
@@ -34,7 +37,7 @@ static class GoogleAuth
     public static bool HasClient => File.Exists(ClientFile);
     public static bool IsConnected => token?.Refresh is { Length: > 0 };
     public static string Email => token?.Email ?? "";
-    public static bool HasScope(string s) => IsConnected && (token.Scope ?? "").Split(' ').Contains(s);
+    public static bool HasScope(string s) { var t = token; return t?.Refresh is { Length: > 0 } && (t.Scope ?? "").Split(' ').Contains(s); }
 
     static Client LoadClient()
     {
@@ -48,15 +51,23 @@ static class GoogleAuth
     }
     static Token LoadToken()
     {
-        try { if (!File.Exists(TokenFile)) return null; return JsonSerializer.Deserialize<Token>(Encoding.UTF8.GetString(Dpapi.Unprotect(File.ReadAllBytes(TokenFile)))); }
+        try
+        {
+            if (!File.Exists(TokenFile)) return null;
+            byte[] blob = File.ReadAllBytes(TokenFile), clear;
+            try { clear = Dpapi.Unprotect(blob, Entropy); }
+            catch (InvalidOperationException) { clear = Dpapi.Unprotect(blob); }   // jeton écrit avant l'entropie (03/11/2026) : relu, puis réécrit avec elle au prochain enregistrement
+            return JsonSerializer.Deserialize<Token>(Encoding.UTF8.GetString(clear));
+        }
         catch (Exception ex) { Host.Log("jeton Google illisible : " + ex.Message); return null; }
     }
     static void SaveToken()
     {
         try
         {
-            if (token == null) { File.Delete(TokenFile); return; }
-            AtomicFile.WriteAllBytes(TokenFile, Dpapi.Protect(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(token)), "CDX Google"));
+            var t = token;
+            if (t == null) { File.Delete(TokenFile); return; }
+            AtomicFile.WriteAllBytes(TokenFile, Dpapi.Protect(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(t)), "CDX Google", Entropy));
         }
         catch (Exception ex) { Host.Log("jeton Google : " + ex.Message); }
     }
@@ -68,7 +79,8 @@ static class GoogleAuth
     public static async Task<string> ConnectAsync(string[] scopes, CancellationToken ct = default)
     {
         Client c; try { c = LoadClient(); } catch (Exception ex) { return "Identifiant client Google introuvable (" + ClientFile + ") : " + ex.Message; }
-        var want = BaseScopes.Concat(scopes).Concat(IsConnected ? token.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries) : Array.Empty<string>()).Distinct().ToArray();
+        var cur = token;
+        var want = BaseScopes.Concat(scopes).Concat(cur?.Refresh is { Length: > 0 } ? (cur.Scope ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries) : Array.Empty<string>()).Distinct().ToArray();
         string verifier = B64Url(RandomNumberGenerator.GetBytes(48)), challenge = B64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier))), state = B64Url(RandomNumberGenerator.GetBytes(16));
         int port = FreePort(); string redirect = $"http://127.0.0.1:{port}/";
         using var listener = new HttpListener(); listener.Prefixes.Add(redirect);
@@ -87,7 +99,7 @@ static class GoogleAuth
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct); cts.CancelAfter(TimeSpan.FromMinutes(5));
             while (code == null && err == null)
             {
-                var ctx = await listener.GetContextAsync().WaitAsync(cts.Token);
+                var ctx = await listener.GetContextAsync().WaitAsync(cts.Token).ConfigureAwait(false);
                 var qs = ctx.Request.QueryString;
                 if (qs["state"] != state) { Answer(ctx, "Demande inattendue", "Cette page ne correspond pas à la connexion en cours.", false); continue; }
                 if (qs["error"] != null) { err = qs["error"]; Answer(ctx, "Connexion refusée", "Google a répondu : " + err + ". Tu peux fermer cet onglet.", false); break; }
@@ -100,10 +112,16 @@ static class GoogleAuth
         if (err != null) return "Google a refusé : " + err;
         try
         {
-            var t = await TokenRequestAsync(c, new Dictionary<string, string> { ["code"] = code, ["client_id"] = c.Id, ["client_secret"] = c.Secret, ["redirect_uri"] = redirect, ["grant_type"] = "authorization_code", ["code_verifier"] = verifier }, ct);
+            var t = await TokenRequestAsync(c, new Dictionary<string, string> { ["code"] = code, ["client_id"] = c.Id, ["client_secret"] = c.Secret, ["redirect_uri"] = redirect, ["grant_type"] = "authorization_code", ["code_verifier"] = verifier }, ct).ConfigureAwait(false);
             lock (gate) { token = t; }
-            try { using var me = await ApiAsync(HttpMethod.Get, "/oauth2/v3/userinfo", null, ct); token.Email = me.RootElement.TryGetProperty("email", out var e) ? e.GetString() : ""; } catch (Exception ex) { Host.Log("Google : adresse du compte non lue : " + ex.Message); }
-            SaveToken(); Host.Log("Google : compte relié (" + token.Email + "), portées : " + token.Scope);
+            try
+            {
+                using var me = await ApiAsync(HttpMethod.Get, "/oauth2/v3/userinfo", null, ct).ConfigureAwait(false);
+                string email = me.RootElement.TryGetProperty("email", out var e) ? e.GetString() : "";
+                lock (gate) { if (token != null) token = token with { Email = email }; }
+            }
+            catch (Exception ex) { Host.Log("Google : adresse du compte non lue : " + ex.Message); }
+            SaveToken(); var now = token; Host.Log("Google : compte relié (" + now?.Email + "), portées : " + now?.Scope);
             return null;
         }
         catch (Exception ex) { return "Échange du code : " + ex.Message; }
@@ -125,34 +143,38 @@ static class GoogleAuth
 
     static async Task<Token> TokenRequestAsync(Client c, Dictionary<string, string> form, CancellationToken ct)
     {
-        using var res = await http.PostAsync(c.TokenUri, new FormUrlEncodedContent(form), ct);
-        string body = await res.Content.ReadAsStringAsync(ct);
+        var old = token;
+        using var res = await http.PostAsync(c.TokenUri, new FormUrlEncodedContent(form), ct).ConfigureAwait(false);
+        string body = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         using var doc = JsonDocument.Parse(body); var r = doc.RootElement;
         if (!res.IsSuccessStatusCode || r.TryGetProperty("error", out _)) throw new InvalidOperationException(r.TryGetProperty("error_description", out var d) ? d.GetString() : r.TryGetProperty("error", out var e) ? e.GetString() : "HTTP " + (int)res.StatusCode);
         var t = new Token
         {
-            Access = r.GetProperty("access_token").GetString(), Refresh = r.TryGetProperty("refresh_token", out var rf) ? rf.GetString() : token?.Refresh,
-            Expires = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + (r.TryGetProperty("expires_in", out var ei) ? ei.GetInt64() : 3600), Scope = r.TryGetProperty("scope", out var sc) ? sc.GetString() : token?.Scope ?? "", Email = token?.Email ?? "",
+            Access = r.GetProperty("access_token").GetString(), Refresh = r.TryGetProperty("refresh_token", out var rf) ? rf.GetString() : old?.Refresh,
+            Expires = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + (r.TryGetProperty("expires_in", out var ei) ? ei.GetInt64() : 3600), Scope = r.TryGetProperty("scope", out var sc) ? sc.GetString() : old?.Scope ?? "", Email = old?.Email ?? "",
         };
         return t;
     }
 
     // Un jeton d'accès valable (rafraîchi s'il expire dans la minute). Lève si le compte n'est pas relié.
-    public static void Expire() { lock (gate) { if (token != null) token.Expires = 0; } }   // force un rafraîchissement au prochain appel (après un 401)
+    public static void Expire() { lock (gate) { var t = token; if (t != null) token = t with { Expires = 0 }; } }   // force un rafraîchissement au prochain appel (après un 401)
     static readonly SemaphoreSlim refreshing = new(1, 1);   // deux appels concurrents ne rafraîchissent qu'une fois
     public static async Task<string> AccessTokenAsync(CancellationToken ct = default)
     {
-        if (!IsConnected) throw new InvalidOperationException("Compte Google non relié.");
-        if (token.Expires - DateTimeOffset.UtcNow.ToUnixTimeSeconds() > 60) return token.Access;
-        await refreshing.WaitAsync(ct);
+        var t = token;
+        if (t?.Refresh is not { Length: > 0 }) throw new InvalidOperationException("Compte Google non relié.");
+        if (t.Expires - DateTimeOffset.UtcNow.ToUnixTimeSeconds() > 60) return t.Access;
+        await refreshing.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (!IsConnected) throw new InvalidOperationException("Compte Google non relié.");
-            if (token.Expires - DateTimeOffset.UtcNow.ToUnixTimeSeconds() > 60) return token.Access;
+            t = token;
+            if (t?.Refresh is not { Length: > 0 }) throw new InvalidOperationException("Compte Google non relié.");
+            if (t.Expires - DateTimeOffset.UtcNow.ToUnixTimeSeconds() > 60) return t.Access;
             var c = LoadClient();
-            var t = await TokenRequestAsync(c, new Dictionary<string, string> { ["refresh_token"] = token.Refresh, ["client_id"] = c.Id, ["client_secret"] = c.Secret, ["grant_type"] = "refresh_token" }, ct);
-            lock (gate) { token = t; } SaveToken();
-            return token.Access;
+            var nt = await TokenRequestAsync(c, new Dictionary<string, string> { ["refresh_token"] = t.Refresh, ["client_id"] = c.Id, ["client_secret"] = c.Secret, ["grant_type"] = "refresh_token" }, ct).ConfigureAwait(false);
+            lock (gate) { if (token == null) throw new InvalidOperationException("Compte Google non relié."); token = nt; }   // oublié pendant le rafraîchissement : pas ressuscité
+            SaveToken();
+            return nt.Access;
         }
         finally { refreshing.Release(); }
     }
@@ -160,10 +182,20 @@ static class GoogleAuth
     // Oublie le compte (le jeton est révoqué chez Google quand on parle au vrai Google).
     public static async Task DisconnectAsync()
     {
-        var t = token; lock (gate) { token = null; } SaveToken();
+        Token t; lock (gate) { t = token; token = null; } SaveToken();
         if (t?.Refresh != null && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CDX_GOOGLE_API")))   // le vrai Google seulement (pas un faux serveur d'essai)
             try { await http.PostAsync("https://oauth2.googleapis.com/revoke", new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = t.Refresh })); } catch { }
         Host.Log("Google : compte oublié");
+    }
+
+    // Une adresse d'API : un chemin sous ApiBase, ou une adresse complète chez Google (ou chez le faux serveur des essais). Jamais ailleurs :
+    // le jeton d'accès part dans l'en-tête Authorization de la requête.
+    internal static string Url(string path)
+    {
+        if (!path.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return ApiBase + path;
+        if (Uri.TryCreate(path, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps && (u.Host == "googleapis.com" || u.Host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase))) return path;
+        if (Uri.TryCreate(path, UriKind.Absolute, out u) && Uri.TryCreate(ApiBase, UriKind.Absolute, out var b) && u.Scheme == b.Scheme && u.Authority.Equals(b.Authority, StringComparison.OrdinalIgnoreCase)) return path;
+        throw new ArgumentException("adresse refusée (le jeton Google ne part que vers Google) : " + path);
     }
 
     // Un appel d'API (chemin sous ApiBase, par exemple /calendar/v3/users/me/calendarList) avec le jeton ; 401 → rafraîchi une fois. Lève GoogleApiException avec le message de Google.
@@ -171,13 +203,13 @@ static class GoogleAuth
     {
         for (int attempt = 0; ; attempt++)
         {
-            string tok = await AccessTokenAsync(ct);
-            using var req = new HttpRequestMessage(method, path.StartsWith("http") ? path : ApiBase + path);
+            string tok = await AccessTokenAsync(ct).ConfigureAwait(false);
+            using var req = new HttpRequestMessage(method, Url(path));
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tok);
             if (body != null) req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-            using var res = await http.SendAsync(req, ct);
-            string text = await res.Content.ReadAsStringAsync(ct);
-            if (res.StatusCode == HttpStatusCode.Unauthorized && attempt == 0) { lock (gate) { if (token != null) token.Expires = 0; } continue; }
+            using var res = await http.SendAsync(req, ct).ConfigureAwait(false);
+            string text = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (res.StatusCode == HttpStatusCode.Unauthorized && attempt == 0) { Expire(); continue; }
             if (!res.IsSuccessStatusCode)
             {
                 string msg = "HTTP " + (int)res.StatusCode;
@@ -197,12 +229,12 @@ static class GoogleAuthRaw
     {
         for (int attempt = 0; ; attempt++)
         {
-            string tok = await GoogleAuth.AccessTokenAsync(ct);
-            using var req = new HttpRequestMessage(method, path.StartsWith("http") ? path : GoogleAuth.ApiBase + path);
+            string tok = await GoogleAuth.AccessTokenAsync(ct).ConfigureAwait(false);
+            using var req = new HttpRequestMessage(method, GoogleAuth.Url(path));
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tok);
             if (content != null) { req.Content = new ByteArrayContent(content); req.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType); }
-            using var res = await http.SendAsync(req, ct);
-            string text = await res.Content.ReadAsStringAsync(ct);
+            using var res = await http.SendAsync(req, ct).ConfigureAwait(false);
+            string text = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             if (res.StatusCode == HttpStatusCode.Unauthorized && attempt == 0) { GoogleAuth.Expire(); continue; }
             if (!res.IsSuccessStatusCode)
             {

@@ -537,6 +537,19 @@ static class SelfTest
                 Parallel.ForEach(names, n => Suite.RegisterApp(n, @"C:\Windows\System32\notepad.exe"));
                 Check("apps.json : huit inscriptions simultanées, aucune perdue", names.All(n => Suite.AppPath(n) != null) && !Directory.GetFiles(Suite.Dir, "apps.json*.tmp").Any());
 
+                // ---- Xfer : un transfert vu d'abord par l'annonce périodique (Active), jamais passé par Publish : le fil ne doit pas mourir
+                // (avant : KeyNotFoundException sur firstSeen, sur un fil d'arrière-plan, donc tout le processus arrêté). Annoncé une seule fois,
+                // et terminé avant 1,5 s : la fenêtre Transferts n'est jamais lancée par l'essai.
+                int xcalls = 0;
+                Xfer.Active = () => Interlocked.Increment(ref xcalls) == 1 ? new[] { new XferInfo { Id = 4242, Kind = "copy", Title = "essai", State = "running" } } : Array.Empty<XferInfo>();
+                Xfer.Publish(new XferInfo { Id = 4241, Kind = "copy", Title = "démarrage du fil", State = "done" });
+                Thread.Sleep(3500);   // l'annonce périodique part après 2 s sans changement
+                Xfer.Publish(new XferInfo { Id = 4242, Kind = "copy", Title = "essai", State = "done" });
+                Thread.Sleep(500);
+                var xthread = (Thread)typeof(Xfer).GetField("thread", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.GetValue(null);
+                Check("transferts : un transfert annoncé seulement par Active ne fait pas tomber le fil d'envoi", xcalls >= 1 && xthread != null && xthread.IsAlive);
+                Xfer.Active = null;
+
                 // ---- AtomicFile : écritures simultanées, et un lecteur qui tient le fichier
                 string af = Path.Combine(dir, "atomique.json");
                 Parallel.For(0, 40, i => { try { AtomicFile.WriteJson(af, new { i, pad = new string('x', 20000) }); } catch (IOException) { } catch (UnauthorizedAccessException) { } });
@@ -584,6 +597,11 @@ static class SelfTest
             Check("élisions : l'école, qu'il, d’après (apostrophe typographique), jusqu'au, n'importe", Spell.Check("l'école") && Spell.Check("qu'il") && Spell.Check("d’après") && Spell.Check("jusqu'au") && Spell.Check("n'importe"));
             Check("élision d'un mot inconnu : l'écolle reste une faute", !Spell.Check("l'écolle"));
             Check("trait d'union : dis-moi (chaque partie existe) ; dis-mouah non", Spell.Check("dis-moi") && !Spell.Check("dis-mouah"));
+            // des « mots » démesurés venus d'une page : ni débordement de pile (non rattrapable), ni attente sans fin
+            var swBig = System.Diagnostics.Stopwatch.StartNew();
+            bool bigOk = Spell.Check(string.Concat(Enumerable.Repeat("l'", 200000)) + "école") && Spell.Check(new string('a', 1 << 20)) && Spell.Check(string.Join("-", Enumerable.Repeat("dis", 50000)));
+            Check($"mots démesurés (« l'l'l'… » sur 400 000 caractères, 1 Mo, 50 000 traits d'union) : rendus sans plantage ({swBig.ElapsedMilliseconds} ms)", bigOk && swBig.ElapsedMilliseconds < 5000);
+            Check("qu'est-ce (élision puis trait d'union) reste reconnu malgré la borne de profondeur", Spell.Check("qu'est-ce"));
             var sug = Spell.Suggest("marchée"); lines.Add("        suggestions pour « marchée » : " + string.Join(", ", sug));
             Check("suggestions pour « marchée » : « marché » en tête, huit au plus", sug.Count > 0 && sug.Count <= 8 && sug.Take(3).Contains("marché"));
             var sug2 = Spell.Suggest("orthografe"); lines.Add("        suggestions pour « orthografe » : " + string.Join(", ", sug2));

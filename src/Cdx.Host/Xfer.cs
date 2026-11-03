@@ -65,17 +65,22 @@ static class Xfer
         DateTime beat = DateTime.UtcNow;
         while (true)
         {
-            wake.WaitOne(1000);
-            List<XferInfo> batch;
-            lock (lk) { batch = pending.Values.ToList(); pending.Clear(); }
-            // une annonce de temps en temps même sans changement : la fenêtre sait ainsi que le programme est encore là
-            if (batch.Count == 0 && (DateTime.UtcNow - beat).TotalSeconds >= 2)
+            // Une exception ici (sur un fil d'arrière-plan) arrêterait tout le processus : elle est journalisée, et la boucle repart.
+            try
             {
-                try { batch = (Active?.Invoke() ?? Array.Empty<XferInfo>()).Where(i => i.State is "running" or "paused" or "queued").ToList(); } catch { }
+                wake.WaitOne(1000);
+                List<XferInfo> batch;
+                lock (lk) { batch = pending.Values.ToList(); pending.Clear(); }
+                // une annonce de temps en temps même sans changement : la fenêtre sait ainsi que le programme est encore là
+                if (batch.Count == 0 && (DateTime.UtcNow - beat).TotalSeconds >= 2)
+                {
+                    try { batch = (Active?.Invoke() ?? Array.Empty<XferInfo>()).Where(i => i.State is "running" or "paused" or "queued").ToList(); } catch { }
+                }
+                if (batch.Count > 0) beat = DateTime.UtcNow;
+                foreach (var i in batch) Send(i);
+                if (batch.Count > 0) Thread.Sleep(250);
             }
-            if (batch.Count > 0) beat = DateTime.UtcNow;
-            foreach (var i in batch) Send(i);
-            if (batch.Count > 0) Thread.Sleep(250);
+            catch (Exception ex) { Host.Log("transferts : " + ex.Message); Thread.Sleep(1000); }
         }
     }
 
@@ -85,6 +90,8 @@ static class Xfer
         lock (lk)
         {
             bool live = i.State is "running" or "paused" or "queued";
+            // un transfert vu pour la première fois par l'annonce périodique (Active), sans être passé par Publish
+            if (live && !firstSeen.TryGetValue(i.Id, out _)) firstSeen[i.Id] = DateTime.UtcNow;
             // la fenêtre vient d'elle-même à un transfert qui dure, ou qui échoue (une seule fois par transfert : si on la ferme, on ne la rouvre pas)
             if (!opened.Contains(i.Id) && (i.State == "failed" || (live && DateTime.UtcNow - firstSeen[i.Id] >= OpenAfter))) { launch = true; opened.Add(i.Id); }
             if (!live) { firstSeen.Remove(i.Id); opened.Remove(i.Id); }

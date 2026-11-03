@@ -50,13 +50,17 @@ static class Spell
 
     // Le mot existe-t-il ? Hunspell traite lui-même les majuscules (« Bonjour » en début de phrase, « BONJOUR ») ; on ajoute les élisions (« l'école »,
     // « qu'il », apostrophe droite ou typographique) et les mots composés par trait d'union dont chaque partie existe (« dis-moi »).
-    public static bool Check(string w)
+    // Bornes : un « mot » venu de la page peut faire des mégaoctets (« l'l'l'… » collé) ; la récursion des élisions et des traits d'union
+    // aurait débordé la pile, et une StackOverflowException ne se rattrape pas (Notes ou Courrier s'arrêtait net). Au-delà, le mot est accepté.
+    const int MaxWord = 64, MaxDepth = 2, MaxWords = 2000;
+    public static bool Check(string w) => Check(w, 0);
+    static bool Check(string w, int depth)
     {
-        if (string.IsNullOrEmpty(w) || words == null || IsPersonal(w)) return true;
+        if (string.IsNullOrEmpty(w) || words == null || w.Length > MaxWord || depth > MaxDepth || IsPersonal(w)) return true;
         if (words.Check(w)) return true;
         int ap = w.IndexOfAny(new[] { '\'', '’' });
-        if (ap > 0 && ap + 1 < w.Length && Elisions.Contains(w[..ap])) return Check(w[(ap + 1)..]);
-        if (w.Contains('-')) { var parts = w.Split('-', StringSplitOptions.RemoveEmptyEntries); if (parts.Length > 1 && parts.All(Check)) return true; }
+        if (ap > 0 && ap + 1 < w.Length && Elisions.Contains(w[..ap])) return Check(w[(ap + 1)..], depth + 1);
+        if (w.Contains('-')) { var parts = w.Split('-', StringSplitOptions.RemoveEmptyEntries); if (parts.Length > 1 && parts.All(x => Check(x, depth + 1))) return true; }
         return false;
     }
     static bool IsPersonal(string w)
@@ -101,7 +105,7 @@ static class Spell
             {
                 case "sp.check":
                     var bad = new List<string>();
-                    if (r.TryGetProperty("words", out var ws) && ws.ValueKind == JsonValueKind.Array) foreach (var x in ws.EnumerateArray()) { string w = x.GetString(); if (w != null && !Check(w)) bad.Add(w); }
+                    if (r.TryGetProperty("words", out var ws) && ws.ValueKind == JsonValueKind.Array) foreach (var x in ws.EnumerateArray().Take(MaxWords)) { if (x.ValueKind != JsonValueKind.String) continue; string w = x.GetString(); if (w != null && !Check(w)) bad.Add(w); }
                     return new { type = "sp.result", id, bad };
                 case "sp.suggest":
                     string word = r.TryGetProperty("word", out var wd) ? wd.GetString() ?? "" : "";
