@@ -82,9 +82,16 @@ static class Copier
                 bool ok = it.IsDir ? CopyTree(it, o, job, baseDone, total, created, createdDirs) : CopyOne(it.Src, it.Dst, it.Overwrite, job, baseDone, total, name, created, o);
                 if (job != null && job.Token.IsCancellationRequested) throw new OperationCanceledException();
                 baseDone += itemSize;
-                if (ok && move) DeleteSource(it);
-                if (ok) o.Done.Add((it.Src, it.Dst));
-                else { o.Failed.Add(it.Src); }
+                if (!ok) { o.Failed.Add(it.Src); continue; }
+                // La copie est complète : elle ne sera plus jamais défaite. Si l'effacement de l'original échoue à moitié (un fichier verrouillé dans un dossier),
+                // une partie des originaux est déjà partie : retirer les copies ferait perdre ces fichiers pour de bon.
+                created.Clear(); createdDirs.Clear();
+                if (move)
+                {
+                    try { DeleteSource(it); }
+                    catch (Exception ex) { o.Errors.Add(name + " : copié, mais l'original n'a pas pu être effacé entièrement (" + ex.Message + ")"); o.Failed.Add(it.Src); continue; }
+                }
+                o.Done.Add((it.Src, it.Dst));
             }
             catch (OperationCanceledException)
             {

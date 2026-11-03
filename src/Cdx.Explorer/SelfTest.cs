@@ -371,6 +371,21 @@ static class SelfTest
                 Check("déplacer un dossier dont un fichier est tenu ouvert échoue avec un message et laisse tout l'original en place", rv.Errors.Count == 1 && rv.Done.Count == 0 && File.Exists(Path.Combine(lk, "libre.txt")) && File.Exists(Path.Combine(lk, "pris.txt")));
             }
             if (Directory.Exists(Path.Combine(dstDir, "verrou2"))) Directory.Delete(Path.Combine(dstDir, "verrou2"), true);
+            // la copie réussit mais l'effacement de l'original échoue à moitié (fichier lisible mais pas effaçable) : aucun fichier ne doit disparaître.
+            // Overwrite force le chemin « copie puis effacement » même sur le même disque.
+            string half = Path.Combine(srcDir, "moitie"); Directory.CreateDirectory(Path.Combine(half, "sous"));
+            string[] halfFiles = { "a.txt", "b.txt", Path.Combine("sous", "c.txt"), "lu.txt" };
+            foreach (var f in halfFiles) File.WriteAllText(Path.Combine(half, f), f);
+            string halfDst = Path.Combine(dstDir, "moitie");
+            using (var keep = new FileStream(Path.Combine(half, "lu.txt"), FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                var rh = Copier.Run(new[] { new PlanItem(half, true, halfDst, true) }, true, null);
+                Check("déplacer un dossier dont un fichier ne peut pas être effacé : chaque fichier existe encore à la source ou à la destination, et l'erreur le dit",
+                    halfFiles.All(f => File.Exists(Path.Combine(half, f)) || File.Exists(Path.Combine(halfDst, f)))
+                    && halfFiles.All(f => File.Exists(Path.Combine(halfDst, f))) && rh.Failed.SequenceEqual(new[] { half }) && rh.Errors.Count == 1 && rh.Errors[0].Contains("copié"));
+            }
+            try { Directory.Delete(half, true); } catch { }
+            try { Directory.Delete(halfDst, true); } catch { }
 
             // la même chose par les messages de la page, avec la file de tâches : fs.drop en arrière-plan, puis « réessayer »
             Fs.Queue = new JobQueue();
