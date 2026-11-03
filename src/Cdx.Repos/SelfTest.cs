@@ -18,7 +18,7 @@ static class SelfTest
 
         try
         {
-            string v = Git.Version();
+            string? v = Git.Version();
             Check("git est installé (" + v + ")", v != null);
             if (v == null) return;
 
@@ -85,7 +85,7 @@ static class SelfTest
             // témoin : un git ordinaire, lui, lance bien le programme (sinon l'essai ne prouverait rien)
             var raw = new System.Diagnostics.ProcessStartInfo("git") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (var x in new[] { "-C", trap, "status", "--porcelain" }) raw.ArgumentList.Add(x);
-            using (var rp = System.Diagnostics.Process.Start(raw)) { rp.StandardOutput.ReadToEnd(); rp.StandardError.ReadToEnd(); rp.WaitForExit(30000); }
+            using (var rp = System.Diagnostics.Process.Start(raw)!) { rp.StandardOutput.ReadToEnd(); rp.StandardError.ReadToEnd(); rp.WaitForExit(30000); }   // « ! » : sans UseShellExecute, Start lance ou lève, jamais null
             bool rawRan = File.Exists(witness); try { File.Delete(witness); } catch { }
             r = Git.Inspect(trap); Git.Changes(trap); Git.Log(trap);
             Check("dépôt piégé (core.fsmonitor) : Dépôts le lit sans lancer son programme" + (rawRan ? "" : " (témoin : git ordinaire ne l'a pas lancé non plus)"), r.Error == null && !File.Exists(witness) && rawRan);

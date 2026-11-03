@@ -7,21 +7,21 @@ namespace Cdx;
 // Le programme : une fenêtre qui liste les dépôts git des dossiers choisis. La page demande, le programme lit git (Git.cs) et répond ; rien n'est écrit dans un dépôt.
 sealed class ReposApp : ApplicationContext, ICdxApp, IPageApp
 {
-    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
+    public HostForm? ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     string theme; readonly string root;
-    readonly IDisposable watch;
-    ReposForm form;
-    CoreWebView2Environment env;
+    readonly IDisposable? watch;   // null : thème imposé par --theme, pas de suivi de suite.json
+    ReposForm? form;
+    CoreWebView2Environment? env;
     readonly List<string> roots = new();
     readonly List<string> hidden = new();   // projets que Valentin ne veut plus voir (copies de sauvegarde, essais) : un réglage de cette application, rien dans les dépôts
     readonly Dictionary<string, RepoInfo> infos = new(StringComparer.OrdinalIgnoreCase);
-    CancellationTokenSource scanCts;
+    CancellationTokenSource? scanCts;
     int scanId;
     public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
 
     static string RootsFile => Path.Combine(Host.DataDir, "repos.json");
 
-    public ReposApp(string theme)
+    public ReposApp(string? theme)
     {
         this.theme = theme ?? Suite.ReadAccent(); root = Host.FindWebRoot();
         _ = Anchor.Handle;
@@ -42,8 +42,8 @@ sealed class ReposApp : ApplicationContext, ICdxApp, IPageApp
             if (File.Exists(RootsFile))
             {
                 using var d = JsonDocument.Parse(File.ReadAllText(RootsFile));
-                foreach (var v in d.RootElement.GetProperty("roots").EnumerateArray()) if (v.ValueKind == JsonValueKind.String && Directory.Exists(v.GetString())) roots.Add(v.GetString());
-                if (d.RootElement.TryGetProperty("hidden", out var h)) foreach (var v in h.EnumerateArray()) if (v.ValueKind == JsonValueKind.String) hidden.Add(v.GetString());
+                foreach (var v in d.RootElement.GetProperty("roots").EnumerateArray()) if (v.ValueKind == JsonValueKind.String && v.GetString() is { } p && Directory.Exists(p)) roots.Add(p);
+                if (d.RootElement.TryGetProperty("hidden", out var h)) foreach (var v in h.EnumerateArray()) if (v.ValueKind == JsonValueKind.String && v.GetString() is { } hp) hidden.Add(hp);
                 return;
             }
         }
@@ -144,10 +144,10 @@ sealed class ReposApp : ApplicationContext, ICdxApp, IPageApp
         {
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
-            string cmd = r.GetProperty("cmd").GetString();
+            string cmd = r.GetProperty("cmd").GetString() ?? throw new FormatException("cmd null");   // rattrapé plus bas, comme l'était le déréférencement
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             if (Host.CommonMessage(from, cmd, r)) return;
-            string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            string? Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
             switch (cmd)
             {
                 case "ready":
@@ -160,7 +160,7 @@ sealed class ReposApp : ApplicationContext, ICdxApp, IPageApp
                 case "repos.addroot": AddRoot(from); break;
                 case "repos.hide":
                     {
-                        string p = Str("path");
+                        string? p = Str("path");
                         if (p == null || !infos.ContainsKey(p)) break;
                         bool on = !r.TryGetProperty("hide", out var hv) || hv.ValueKind != JsonValueKind.False;
                         hidden.RemoveAll(x => string.Equals(x, p, StringComparison.OrdinalIgnoreCase));
@@ -170,7 +170,7 @@ sealed class ReposApp : ApplicationContext, ICdxApp, IPageApp
                     }
                 case "repos.removeroot":
                     {
-                        string p = Str("path");
+                        string? p = Str("path");
                         if (p != null && roots.RemoveAll(x => string.Equals(x, p, StringComparison.OrdinalIgnoreCase)) > 0) { SaveRoots(); from.Send(new { type = "roots", roots }); StartScan(); }
                         break;
                     }
@@ -180,7 +180,7 @@ sealed class ReposApp : ApplicationContext, ICdxApp, IPageApp
     }
 
     // Les derniers enregistrements et les fichiers modifiés d'un dépôt de la liste (un chemin qui n'y est pas est refusé).
-    void Detail(HostForm to, string path)
+    void Detail(HostForm to, string? path)
     {
         if (path == null || !infos.ContainsKey(path)) return;
         _ = Task.Run(() =>
@@ -191,7 +191,7 @@ sealed class ReposApp : ApplicationContext, ICdxApp, IPageApp
         });
     }
 
-    void OpenFolder(string path)
+    void OpenFolder(string? path)
     {
         if (path == null || !infos.ContainsKey(path)) return;
         _ = Task.Run(() =>
@@ -201,7 +201,7 @@ sealed class ReposApp : ApplicationContext, ICdxApp, IPageApp
         });
     }
 
-    void OpenWeb(string path)
+    void OpenWeb(string? path)
     {
         if (path == null || !infos.TryGetValue(path, out var r) || r.WebUrl == null) return;
         string url = r.WebUrl;

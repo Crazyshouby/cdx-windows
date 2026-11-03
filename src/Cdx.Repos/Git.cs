@@ -9,7 +9,8 @@ namespace Cdx;
 // d'après la dernière synchronisation connue (git fetch, git push, git pull faits ailleurs).
 sealed class RepoInfo
 {
-    public string Path, Name, Branch, Upstream, Remote, WebUrl, LastHash, LastDate, LastAuthor, LastSubject, Error;
+    public required string Path, Name;
+    public string? Branch, Upstream, Remote, WebUrl, LastHash, LastDate, LastAuthor, LastSubject, Error;   // null : inconnu ou sans objet (la page reçoit null)
     public bool Detached, NoCommits;
     public int Changed, Untracked, Ahead, Behind;
 }
@@ -25,7 +26,7 @@ static class Git
 
     // ---------- lancement ----------
     // Rend (code de sortie, sortie standard, sortie d'erreur). Délai dépassé : le processus est arrêté et le code est -1.
-    public static (int code, string output, string error) Run(string dir, int timeoutMs, params string[] args)
+    public static (int code, string output, string error) Run(string? dir, int timeoutMs, params string[] args)   // dir null : le dossier courant
     {
         var psi = new ProcessStartInfo("git")
         {
@@ -44,7 +45,7 @@ static class Git
         psi.Environment["GIT_TERMINAL_PROMPT"] = "0";   // jamais de demande d'identifiants
         try
         {
-            using var p = Process.Start(psi);
+            using var p = Process.Start(psi)!;   // « ! » : sans UseShellExecute, Start lance le processus ou lève, il ne rend jamais null
             var o = p.StandardOutput.ReadToEndAsync(); var e = p.StandardError.ReadToEndAsync();
             if (!p.WaitForExit(timeoutMs)) { try { p.Kill(true); } catch { } return (-1, "", "délai dépassé"); }
             p.WaitForExit();
@@ -53,7 +54,7 @@ static class Git
         catch (Exception ex) { return (-2, "", ex.Message); }   // git introuvable, par exemple
     }
 
-    public static string Version()
+    public static string? Version()   // null : git introuvable
     {
         var r = Run(null, 5000, "--version");
         return r.code == 0 ? r.output.Trim() : null;
@@ -103,7 +104,7 @@ static class Git
         var cf = Run(path, 5000, "config", "--get-regexp", @"^remote\..*\.url$");
         if (cf.code == 0)
         {
-            string first = null, origin = null;
+            string? first = null, origin = null;
             foreach (var line in cf.output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
                 int sp = line.IndexOf(' '); if (sp < 0) continue;
@@ -170,7 +171,7 @@ static class Git
     // L'adresse web d'un dépôt à partir de son remote (https ou ssh), seulement pour les hébergeurs connus ; jamais d'identifiant (un jeton glissé
     // dans une adresse https n'atteint ni la page ni le navigateur). Sinon null.
     static readonly string[] KnownHosts = { "github.com", "gitlab.com", "bitbucket.org", "codeberg.org" };
-    public static string WebUrl(string remote)
+    public static string? WebUrl(string? remote)
     {
         if (string.IsNullOrWhiteSpace(remote)) return null;
         remote = remote.Trim();
