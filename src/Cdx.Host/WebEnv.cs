@@ -10,7 +10,7 @@ namespace Cdx;
 // cdx.mail.*, cdx.split.<page>, cdx.cols.<page>, cdx.pv pour l'Explorateur).
 static class WebEnv
 {
-    static Task<CoreWebView2Environment> ui;
+    static Task<CoreWebView2Environment>? ui;
     static readonly object gate = new();
 
     public static string UiDataDir => Path.Combine(Host.DataDir, "webview-ui");

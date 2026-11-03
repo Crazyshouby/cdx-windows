@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO.Pipes;
@@ -14,7 +15,7 @@ namespace Cdx;
 static class SingleInstance
 {
     // True : ce processus est le premier (le verrou est rendu dans `mutex`, à garder jusqu'à la fin).
-    public static bool Acquire(string name, out Mutex mutex)
+    public static bool Acquire(string name, [NotNullWhen(true)] out Mutex? mutex)
     {
         // CDX_PIPE_PREFIX (essais isolés) sépare aussi le verrou : un essai ne se heurte pas au vrai programme.
         mutex = new Mutex(true, "Local\\Cdx." + (Environment.GetEnvironmentVariable("CDX_PIPE_PREFIX") ?? "") + name, out bool created);

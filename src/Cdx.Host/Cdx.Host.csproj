@@ -6,7 +6,7 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
     <AssemblyName>Cdx.Host</AssemblyName>
     <RootNamespace>Cdx</RootNamespace>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

@@ -7,33 +7,33 @@ namespace Cdx;
 sealed class XferInfo
 {
     public int Id;
-    public string Kind;      // copy · move · delete · download · torrent
-    public string Title;     // « 3 éléments », « fichier.zip »
-    public string State;     // queued · running · paused · done · failed · canceled
-    public string From, To;  // d'où et vers où, en clair (un dossier, un site)
-    public string Current;   // l'élément en cours
-    public string Error;
-    public string Path;      // ce que « Ouvrir » et « Afficher dans le dossier » désignent (donné par le programme, jamais par la page)
+    public string? Kind;     // copy · move · delete · download · torrent
+    public string? Title;    // « 3 éléments », « fichier.zip »
+    public string? State;    // queued · running · paused · done · failed · canceled
+    public string? From, To; // d'où et vers où, en clair (un dossier, un site)
+    public string? Current;  // l'élément en cours
+    public string? Error;
+    public string? Path;     // ce que « Ouvrir » et « Afficher dans le dossier » désignent (donné par le programme, jamais par la page)
     public long Done, Total; // octets (ou éléments) ; Total 0 ou moins : inconnu
     public double Speed;     // octets par seconde, lissé
     public int Items;        // nombre d'éléments, quand le transfert en regroupe plusieurs
     public bool CanPause, CanRetry;
-    public object Extra;     // champs propres à un genre (torrent : pairs, partage...)
+    public object? Extra;    // champs propres à un genre (torrent : pairs, partage...)
 }
 
 static class Xfer
 {
     // Rend l'état de tout ce qui est en cours (pour renvoyer à une fenêtre qui vient de s'ouvrir) ; posé par le programme.
-    public static Func<IEnumerable<XferInfo>> Active;
+    public static Func<IEnumerable<XferInfo>>? Active;
     // Exécute un ordre de la fenêtre (id, action) ; rend false s'il est refusé. Posé par le programme ; appelé sur le fil de l'interface.
-    public static Func<int, string, bool> Control;
+    public static Func<int, string, bool>? Control;
 
     static readonly object lk = new();
     static readonly Dictionary<int, XferInfo> pending = new();
     static readonly Dictionary<int, DateTime> firstSeen = new();
     static readonly HashSet<int> opened = new();       // les transferts pour lesquels on a déjà fait venir la fenêtre
     static readonly AutoResetEvent wake = new(false);
-    static Thread thread;
+    static Thread? thread;
     public static readonly TimeSpan OpenAfter = TimeSpan.FromMilliseconds(1500);   // un transfert plus court que cela ne dérange personne
 
     // Annonce (ou met à jour) un transfert. Appelable de n'importe quel fil ; l'envoi se fait sur un fil à part, au plus quatre fois par seconde, le dernier état l'emporte.
@@ -111,7 +111,7 @@ static class Xfer
         if (type != "xfer-ctl") return false;
         if (!data.TryGetProperty("id", out var idv) || idv.ValueKind != JsonValueKind.Number || !idv.TryGetInt32(out int id)) return false;
         if (!data.TryGetProperty("action", out var av) || av.ValueKind != JsonValueKind.String) return false;
-        string action = av.GetString();
+        string? action = av.GetString();
         if (action is not ("pause" or "resume" or "cancel" or "retry")) return false;
         return Control?.Invoke(id, action) ?? false;
     }

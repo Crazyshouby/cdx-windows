@@ -11,13 +11,13 @@ namespace Cdx;
 // vont dans dictionnaire-perso.txt du dossier des données. Le dictionnaire (1,4 Mo, environ une seconde) se charge en arrière-plan au premier mot.
 static class Spell
 {
-    public static string DictDir { get; set; }        // essais : un autre dossier (sinon CDX_DICT_DIR, sinon web/dict/fr)
-    public static string PersonalFile { get; set; }   // essais : un fichier jetable (sinon dictionnaire-perso.txt du dossier des données)
-    static WordList words; static Task loading; static readonly object gate = new();
-    static HashSet<string> personal;
+    public static string? DictDir { get; set; }        // essais : un autre dossier (sinon CDX_DICT_DIR, sinon web/dict/fr)
+    public static string? PersonalFile { get; set; }   // essais : un fichier jetable (sinon dictionnaire-perso.txt du dossier des données)
+    static WordList? words; static Task? loading; static readonly object gate = new();
+    static HashSet<string>? personal;
     static readonly HashSet<string> Elisions = new(StringComparer.OrdinalIgnoreCase) { "l", "d", "qu", "n", "s", "j", "m", "t", "c", "jusqu", "lorsqu", "puisqu", "quoiqu" };
 
-    static string Dir { get { if (DictDir != null) return DictDir; string env = Environment.GetEnvironmentVariable("CDX_DICT_DIR"); return !string.IsNullOrEmpty(env) ? env : Path.Combine(Host.FindWebRoot(), "dict", "fr"); } }
+    static string Dir { get { if (DictDir != null) return DictDir; string? env = Environment.GetEnvironmentVariable("CDX_DICT_DIR"); return !string.IsNullOrEmpty(env) ? env : Path.Combine(Host.FindWebRoot(), "dict", "fr"); } }
     static string Perso => PersonalFile ?? Path.Combine(Host.DataDir, "dictionnaire-perso.txt");
     public static bool Available { get { try { return File.Exists(Path.Combine(Dir, "fr.dic")) && File.Exists(Path.Combine(Dir, "fr.aff")); } catch (Exception) { return false; } } }
     public static bool Ready => words != null;
@@ -91,21 +91,20 @@ static class Spell
 
     // Les messages des pages (cdx-spell.js). Rend la réponse à envoyer à la page, ou null si le message n'est pas pour le correcteur.
     // Synchrone : le dictionnaire doit être chargé (Load() attendu), sinon la page reçoit sp.off (rien n'est souligné).
-    public static object Reply(string json)
+    public static object? Reply(string json)
     {
         try
         {
             using var d = JsonDocument.Parse(json); var r = d.RootElement;
             if (r.ValueKind != JsonValueKind.Object || !r.TryGetProperty("cmd", out var c) || c.ValueKind != JsonValueKind.String) return null;
-            string cmd = c.GetString();
-            if (!cmd.StartsWith("sp.")) return null;
-            string id = r.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String ? i.GetString() : "";
+            if (c.GetString() is not { } cmd || !cmd.StartsWith("sp.")) return null;   // une chaîne JSON n'est jamais null : le premier test ne sert qu'au compilateur
+            string id = r.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String ? i.GetString() ?? "" : "";
             if (words == null) return new { type = "sp.off" };
             switch (cmd)
             {
                 case "sp.check":
                     var bad = new List<string>();
-                    if (r.TryGetProperty("words", out var ws) && ws.ValueKind == JsonValueKind.Array) foreach (var x in ws.EnumerateArray().Take(MaxWords)) { if (x.ValueKind != JsonValueKind.String) continue; string w = x.GetString(); if (w != null && !Check(w)) bad.Add(w); }
+                    if (r.TryGetProperty("words", out var ws) && ws.ValueKind == JsonValueKind.Array) foreach (var x in ws.EnumerateArray().Take(MaxWords)) { if (x.ValueKind != JsonValueKind.String) continue; string? w = x.GetString(); if (w != null && !Check(w)) bad.Add(w); }
                     return new { type = "sp.result", id, bad };
                 case "sp.suggest":
                     string word = r.TryGetProperty("word", out var wd) ? wd.GetString() ?? "" : "";

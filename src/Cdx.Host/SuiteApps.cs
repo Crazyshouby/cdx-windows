@@ -5,7 +5,7 @@ namespace Cdx;
 // le shell (inscription des voisins, Launch) la lisent ; --selftest-bus vérifie que chaque programme .NET est bien compilé à côté du shell.
 // Avant : six listes recopiées, déjà désynchronisées (quatre programmes manquaient aux voisins du shell ; « cdx:reposXYZ » lançait Dépôts).
 // Ajouter un programme : une ligne ici (et son projet dans Cdx.sln, son composant dans l'installeur).
-sealed record SuiteApp(string Name, string Exe, string Scheme, bool TakesArgument, bool DotNet = true);
+sealed record SuiteApp(string Name, string Exe, string? Scheme, bool TakesArgument, bool DotNet = true);
 
 static class SuiteApps
 {
@@ -27,14 +27,14 @@ static class SuiteApps
 
     public static readonly string[] Names = All.Select(a => a.Name).ToArray();
 
-    public static SuiteApp ByName(string name) => Array.Find(All, a => a.Name == name);
+    public static SuiteApp? ByName(string name) => Array.Find(All, a => a.Name == name);
 
     // « cdx:explorer » ou « cdx:explorer?argument » ; jamais « cdx:explorerXYZ ».
-    public static SuiteApp ByTarget(string target) =>
+    public static SuiteApp? ByTarget(string? target) =>
         target == null ? null : Array.Find(All, a => a.Scheme != null && (target.Equals(a.Scheme, StringComparison.OrdinalIgnoreCase) || target.StartsWith(a.Scheme + "?", StringComparison.OrdinalIgnoreCase)));
 
     // L'argument d'une cible (ce qui suit « ? », décodé), si le programme en accepte un.
-    public static string ArgumentOf(SuiteApp app, string target)
+    public static string? ArgumentOf(SuiteApp app, string target)
     {
         int q = target.IndexOf('?');
         return app.TakesArgument && q > 0 && q + 1 < target.Length ? Uri.UnescapeDataString(target[(q + 1)..]) : null;

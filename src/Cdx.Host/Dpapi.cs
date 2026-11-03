@@ -7,12 +7,12 @@ namespace Cdx;
 static class Dpapi
 {
     [StructLayout(LayoutKind.Sequential)] struct DATA_BLOB { public int cbData; public IntPtr pbData; }
-    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool CryptProtectData(ref DATA_BLOB i, string descr, IntPtr entropy, IntPtr reserved, IntPtr prompt, int flags, out DATA_BLOB o);
+    [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool CryptProtectData(ref DATA_BLOB i, string? descr, IntPtr entropy, IntPtr reserved, IntPtr prompt, int flags, out DATA_BLOB o);
     [DllImport("crypt32.dll", SetLastError = true)] static extern bool CryptUnprotectData(ref DATA_BLOB i, IntPtr descr, IntPtr entropy, IntPtr reserved, IntPtr prompt, int flags, out DATA_BLOB o);
     [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr h);
 
-    public static byte[] Protect(byte[] data, string what = "CDX", byte[] entropy = null) => Run(data, true, what, entropy);
-    public static byte[] Unprotect(byte[] data, byte[] entropy = null) => Run(data, false, null, entropy);
+    public static byte[] Protect(byte[] data, string what = "CDX", byte[]? entropy = null) => Run(data, true, what, entropy);
+    public static byte[] Unprotect(byte[] data, byte[]? entropy = null) => Run(data, false, null, entropy);
 
     static DATA_BLOB Blob(byte[] b)
     {
@@ -21,7 +21,7 @@ static class Dpapi
         return blob;
     }
 
-    static byte[] Run(byte[] data, bool protect, string what, byte[] entropy)
+    static byte[] Run(byte[] data, bool protect, string? what, byte[]? entropy)
     {
         var inb = Blob(data);
         var ent = entropy != null ? Blob(entropy) : default;

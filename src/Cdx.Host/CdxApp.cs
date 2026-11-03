@@ -15,7 +15,7 @@ interface ICdxApp : IHostApp
 // vise l'onglet actif et non sa fenêtre, ne l'implémente pas et garde les siens.
 interface IPageApp
 {
-    HostForm ControlTarget { get; }   // la fenêtre visée, ou null s'il n'y en a pas
+    HostForm? ControlTarget { get; }   // la fenêtre visée, ou null s'il n'y en a pas
 }
 
 // Le démarrage d'un programme, écrit une fois : avant, les onze Program.Main répétaient les mêmes quinze lignes, et une correction faite dans l'un
@@ -30,7 +30,8 @@ static class CdxApp
         ConfigureWinForms();
         var app = create();
         Bus.Listen(name, app.OnBus);
-        if (register) Suite.RegisterApp(name, Environment.ProcessPath);
+        // ProcessPath peut manquer (rare) : rien n'est alors inscrit, plutôt qu'un chemin null écrit par-dessus le bon dans apps.json.
+        if (register && Environment.ProcessPath is { } exe) Suite.RegisterApp(name, exe);
         app.Anchor.BeginInvoke(new Action(() => open(app)));
         Host.StartControlPipe(name, app.Anchor, Control(app), () => app.Closing);
         Application.Run(app);

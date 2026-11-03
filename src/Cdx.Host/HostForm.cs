@@ -14,7 +14,7 @@ class HostForm : Form
 {
     protected readonly IHostApp app;
     // Les chemins des fichiers glissés sur la page depuis une autre application, pour le message en cours (postMessageWithAdditionalObjects) ; null sinon.
-    public string[] DroppedPaths { get; private set; }
+    public string[]? DroppedPaths { get; private set; }
     public readonly WebView2 Web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.FromArgb(0x33, 0x33, 0x33) };
 
     public HostForm(IHostApp a, string name)
@@ -90,7 +90,7 @@ class HostForm : Form
     // Windows propose chaque rectangle à partir du DERNIER rendu (donc de la position aimantée), pas de la souris : une fenêtre collée serait ré-aimantée à chaque
     // petit mouvement et ne se décollerait plus (vu le 01/11/2026). On tient donc le rectangle « libre » (ce qu'il serait sans aimantation) en lui ajoutant l'écart
     // entre la proposition et le dernier rendu, et c'est lui qu'on aimante : au-delà de la distance d'attraction, la fenêtre se libère.
-    List<Rectangle> snapOthers; Rectangle snapFree, snapLast;
+    List<Rectangle>? snapOthers; Rectangle snapFree, snapLast;
     protected override void WndProc(ref Message m)
     {
         base.WndProc(ref m);

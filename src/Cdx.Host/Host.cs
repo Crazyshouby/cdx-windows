@@ -49,9 +49,9 @@ static class Host
     }
 
     // « --theme <nom> » puis, facultatif, une cible (chemin d'un dossier, adresse web...).
-    public static (string theme, string target) ParseArgs(string[] args)
+    public static (string? theme, string? target) ParseArgs(string[] args)
     {
-        string theme = null, target = null;   // theme null : celui de la suite (suite.json)
+        string? theme = null, target = null;   // theme null : celui de la suite (suite.json)
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--theme" && i + 1 < args.Length) theme = args[++i];
@@ -73,7 +73,7 @@ static class Host
 
     // La fenêtre unique d'un programme existe déjà : la ramener au premier plan (restaurée si réduite) et rendre true ; false s'il faut la créer.
     // Avant, sept variantes recopiées dans les Open() des programmes (HostWindow.OpenOrFocus du plan de l'audit, point 4.1).
-    public static bool Reveal(Form f, bool focus = true)
+    public static bool Reveal(Form? f, bool focus = true)
     {
         if (f == null || f.IsDisposed) return false;
         if (focus) ForceForeground(f.Handle);
@@ -109,7 +109,7 @@ static class Host
     }
 
     // L'icône d'un fichier ou d'un programme, en PNG (base64) à la taille demandée, gardée en mémoire.
-    static readonly Dictionary<string, string> icons = new();
+    static readonly Dictionary<string, string?> icons = new();   // null : pas d'icône (gardé aussi, pour ne pas la rechercher à chaque fois)
 
     // Vrai dans le shell : l'icône d'un raccourci (.lnk) est celle de son programme, sans la flèche de raccourci que Windows superpose à celle du fichier .lnk.
     // L'Explorateur garde la flèche (c'est bien un raccourci dans une liste de fichiers).
@@ -120,15 +120,16 @@ static class Host
 
     // L'image de l'icône d'un raccourci : le fichier et l'index d'icône qu'il désigne (IconLocation), sinon son programme ; null si on ne sait pas la résoudre
     // (raccourci vers une appli du Store, sans cible) : l'appelant garde alors l'icône du .lnk.
-    static Bitmap ShortcutIcon(string lnk)
+    static Bitmap? ShortcutIcon(string lnk)
     {
-        object sh = null, sc = null;
+        object? sh = null, sc = null;
         try
         {
             var t = Type.GetTypeFromProgID("WScript.Shell"); if (t == null) return null;
             sh = Activator.CreateInstance(t);
             sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, sh, new object[] { lnk });
-            string Get(string n) => sc.GetType().InvokeMember(n, System.Reflection.BindingFlags.GetProperty, null, sc, null) as string ?? "";
+            if (sc is not { } link) return null;   // pas de raccourci : même résultat qu'avant (l'exception rattrapée plus bas rendait null)
+            string Get(string n) => link.GetType().InvokeMember(n, System.Reflection.BindingFlags.GetProperty, null, link, null) as string ?? "";
             string target = Get("TargetPath"), loc = Get("IconLocation"), file; int idx = 0;
             int comma = loc.LastIndexOf(',');
             if (comma >= 0) { file = loc[..comma]; int.TryParse(loc[(comma + 1)..], out idx); } else file = loc;
@@ -148,12 +149,12 @@ static class Host
         finally { if (sc != null) Marshal.FinalReleaseComObject(sc); if (sh != null) Marshal.FinalReleaseComObject(sh); }
     }
 
-    public static string IconPng(string path, int size = 16)
+    public static string? IconPng(string? path, int size = 16)
     {
         if (string.IsNullOrEmpty(path)) return null;
         string ck = size + "|" + path;
         if (icons.TryGetValue(ck, out var cached)) return cached;
-        string png = null;
+        string? png = null;
         try
         {
             using var clean = ResolveShortcuts && path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ? ShortcutIcon(path) : null;
@@ -165,7 +166,7 @@ static class Host
                 {
                     g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
                     g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
-                    if (clean != null) g.DrawImage(clean, new Rectangle(0, 0, size, size)); else g.DrawIcon(big, new Rectangle(0, 0, size, size));
+                    if (clean != null) g.DrawImage(clean, new Rectangle(0, 0, size, size)); else if (big != null) g.DrawIcon(big, new Rectangle(0, 0, size, size));
                 }
                 using var ms = new MemoryStream(); bmp.Save(ms, ImageFormat.Png); png = Convert.ToBase64String(ms.ToArray());
             }
@@ -184,14 +185,14 @@ static class Host
             // Le menu « Réglages » (bouton hachuré de la barre de titre) change la couleur d'accent de toute la suite : suite.json, que chaque programme surveille.
             case "suite.accent":
             {
-                string a = r.TryGetProperty("value", out var av) && av.ValueKind == JsonValueKind.String ? av.GetString() : null;
+                string? a = r.TryGetProperty("value", out var av) && av.ValueKind == JsonValueKind.String ? av.GetString() : null;
                 if (Suite.IsAccent(a)) { try { Suite.WriteAccent(a); Log("accent choisi depuis " + from.Name + " : " + a); } catch (Exception ex) { Log("accent refusé : " + ex.Message); } }
                 else Log("accent inconnu refusé : " + a);
                 return true;
             }
             case "icon":
             {
-                string p = r.TryGetProperty("path", out var pv) ? pv.GetString() : null;
+                string? p = r.TryGetProperty("path", out var pv) ? pv.GetString() : null;
                 int sz = r.TryGetProperty("size", out var szv) && szv.TryGetInt32(out var szi) ? szi : 16;
                 from.Send(new { type = "icon", path = p, size = sz, png = IconPng(p, sz) });
                 return true;
@@ -222,7 +223,7 @@ static class Host
                     using var srv = new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly);
                     srv.WaitForConnection();
                     using var rd = new StreamReader(srv); using var wr = new StreamWriter(srv) { AutoFlush = true };
-                    string line = rd.ReadLine() ?? "", result = null; var fin = new ManualResetEventSlim();
+                    string line = rd.ReadLine() ?? ""; string? result = null; var fin = new ManualResetEventSlim();
                     ui.BeginInvoke(new Action(async () => { try { result = await handle(line); } catch (Exception ex) { result = "ERREUR " + ex.Message; } fin.Set(); }));
                     fin.Wait(timeoutMs);
                     wr.WriteLine((result ?? "délai dépassé").Replace("\r", " ").Replace("\n", " "));

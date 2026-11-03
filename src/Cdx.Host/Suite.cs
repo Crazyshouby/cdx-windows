@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
 namespace Cdx;
@@ -8,13 +9,13 @@ static class Suite
     // Les seize thèmes de cdx-ui/tokens.json (les apparences de KDX 1.6) ; les anciens noms (cdx-ui 1.x) restent lus, et ramenés au nom actuel.
     public static readonly string[] Accents = { "rouge", "marine", "ambre", "jean", "tramway", "sarcelle", "chocolat", "lavande", "oxygene", "couchant", "techno", "reve-bleu", "reve-vert", "reve-violet", "lagon", "turquoise" };
     static readonly Dictionary<string, string> Aliases = new() { ["bleu"] = "jean", ["vert"] = "reve-vert", ["violet"] = "reve-violet", ["charbon"] = "techno", ["cdx"] = "rouge" };
-    public static string Canonical(string s) => s == null ? null : Accents.Contains(s) ? s : Aliases.TryGetValue(s, out var c) ? c : null;
+    public static string? Canonical(string? s) => s == null ? null : Accents.Contains(s) ? s : Aliases.TryGetValue(s, out var c) ? c : null;
     // CDX_SUITE_DIR remplace le dossier (réservé aux essais : ne jamais toucher aux vrais réglages).
     public static string Dir => Environment.GetEnvironmentVariable("CDX_SUITE_DIR") is { Length: > 0 } d ? d : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CDX");
     public static string FilePath => Path.Combine(Dir, "suite.json");
     static string AppsFile => Path.Combine(Dir, "apps.json");
 
-    public static bool IsAccent(string s) => Canonical(s) != null;
+    public static bool IsAccent([NotNullWhen(true)] string? s) => Canonical(s) != null;
 
     // %APPDATA%\KDX (ancien nom de la suite) devient %APPDATA%\CDX, une fois.
     public static void MigrateOldDir() => Host.MigrateOldDir(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KDX"), Dir, "CDX_SUITE_DIR");
@@ -72,7 +73,7 @@ static class Suite
             }
             catch (Exception ex) { Host.Log("suite.json : " + ex.Message); }
         }
-        FileSystemWatcher fsw = null;
+        FileSystemWatcher? fsw = null;
         try
         {
             Directory.CreateDirectory(Dir);
@@ -86,7 +87,7 @@ static class Suite
         return new Both(fsw, timer);
     }
 
-    sealed class Both(IDisposable a, IDisposable b) : IDisposable { public void Dispose() { a?.Dispose(); b?.Dispose(); } }
+    sealed class Both(IDisposable? a, IDisposable? b) : IDisposable { public void Dispose() { a?.Dispose(); b?.Dispose(); } }
 
     static (DateTime, long) Stamp()
     {
@@ -106,7 +107,7 @@ static class Suite
             try
             {
                 var map = new SortedDictionary<string, string>();
-                try { using var d = JsonDocument.Parse(System.IO.File.ReadAllText(AppsFile)); foreach (var p in d.RootElement.EnumerateObject()) if (p.Value.ValueKind == JsonValueKind.String) map[p.Name] = p.Value.GetString(); } catch (Exception) { }
+                try { using var d = JsonDocument.Parse(System.IO.File.ReadAllText(AppsFile)); foreach (var p in d.RootElement.EnumerateObject()) if (p.Value.ValueKind == JsonValueKind.String && p.Value.GetString() is { } path) map[p.Name] = path; } catch (Exception) { }
                 if (map.TryGetValue(name, out var old) && old == exePath) return;
                 map[name] = exePath;
                 AtomicFile.WriteJson(AppsFile, map);
@@ -117,7 +118,7 @@ static class Suite
     }
 
     // Le chemin enregistré d'une application de la suite (liste blanche : seuls ces noms sont acceptés), ou null.
-    public static string AppPath(string name)
+    public static string? AppPath(string name)
     {
         if (SuiteApps.ByName(name) == null) return null;   // liste blanche : les programmes de la suite (SuiteApps.cs)
         try

@@ -36,7 +36,7 @@ static class Bus
             bool first = true;
             while (true)
             {
-                NamedPipeServerStream srv = null;
+                NamedPipeServerStream? srv = null;
                 try
                 {
                     // CurrentUserOnly : réservé à l'utilisateur courant ; le tube refuse aussi les connexions distantes. La première instance du nom est
@@ -87,9 +87,8 @@ static class Bus
         {
             using var doc = JsonDocument.Parse(line);
             var r = doc.RootElement;
-            if (r.ValueKind != JsonValueKind.Object || !r.TryGetProperty("type", out var t) || t.ValueKind != JsonValueKind.String || t.GetString().Length > 64) { Host.Log("bus : message sans type valide, ignoré"); return; }
-            string type = t.GetString();
-            string from = r.TryGetProperty("from", out var f) && f.ValueKind == JsonValueKind.String && f.GetString().Length <= 32 ? f.GetString() : "?";
+            if (r.ValueKind != JsonValueKind.Object || !r.TryGetProperty("type", out var t) || t.ValueKind != JsonValueKind.String || t.GetString() is not { Length: <= 64 } type) { Host.Log("bus : message sans type valide, ignoré"); return; }
+            string from = r.TryGetProperty("from", out var f) && f.ValueKind == JsonValueKind.String && f.GetString() is { Length: <= 32 } fs ? fs : "?";
             JsonElement data = r.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object ? d.Clone() : JsonDocument.Parse("{}").RootElement.Clone();
             ctx.Post(_ =>
             {
@@ -103,7 +102,7 @@ static class Bus
     // ---------- émission ----------
     // Un message « tire et oublie » vers l'application `to`. True : écrit. `launch` : si le tube n'existe pas, lance l'application d'après apps.json et réessaie
     // pendant 6 s.
-    public static bool Send(string to, string type, object data = null, string from = null, bool launch = false)
+    public static bool Send(string to, string type, object? data = null, string? from = null, bool launch = false)
     {
         if (!Apps.Contains(to)) return false;
         byte[] line = Encoding.UTF8.GetBytes(Compose(type, from ?? Host.AppName, data) + "\n");
@@ -123,7 +122,7 @@ static class Bus
             if (!launched)
             {
                 launched = true;
-                string exe = Suite.AppPath(to);
+                string? exe = Suite.AppPath(to);
                 if (exe == null) return false;
                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) }); } catch (Exception ex) { Host.Log("bus : lancement de " + to + " : " + ex.Message); return false; }
             }
@@ -133,10 +132,10 @@ static class Bus
     }
 
     // La même chose hors du fil appelant : avec `launch`, Send peut attendre jusqu'à ~6 s (40 essais). Depuis le fil de l'interface, toujours celle-ci.
-    public static Task<bool> SendAsync(string to, string type, object data = null, string from = null, bool launch = false)
+    public static Task<bool> SendAsync(string to, string type, object? data = null, string? from = null, bool launch = false)
         => Task.Run(() => Send(to, type, data, from, launch));
 
-    public static string Compose(string type, string from, object data)
+    public static string Compose(string type, string from, object? data)
         => JsonSerializer.Serialize(new { type, from, data = data ?? new { } });
 }
 

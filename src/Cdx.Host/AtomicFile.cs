@@ -1,3 +1,5 @@
+// Annotations de nullabilité actives même dans Cdx.Vault, qui compile ce fichier sans les activer.
+#nullable enable
 using System.Text;
 using System.Text.Json;
 
@@ -15,12 +17,12 @@ static class AtomicFile
 
     public static void WriteAllText(string path, string text, string tmpSuffix = ".tmp") => WriteAllBytes(path, Utf8.GetBytes(text), tmpSuffix);
 
-    public static void WriteJson<T>(string path, T value, JsonSerializerOptions options = null) => WriteAllText(path, JsonSerializer.Serialize(value, options));
+    public static void WriteJson<T>(string path, T value, JsonSerializerOptions? options = null) => WriteAllText(path, JsonSerializer.Serialize(value, options));
 
     // `tmpSuffix` : le coffre de notes garde « .cdx-tmp », que sa lecture ignore.
     public static void WriteAllBytes(string path, byte[] bytes, string tmpSuffix = ".tmp")
     {
-        string dir = Path.GetDirectoryName(Path.GetFullPath(path));
+        string? dir = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         string tmp = path + "." + Environment.ProcessId + "-" + Interlocked.Increment(ref seq) + tmpSuffix;   // unique : processus et appel
         try

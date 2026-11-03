@@ -15,7 +15,7 @@ namespace Cdx;
 sealed class SideButtons : IDisposable
 {
     readonly Func<IEnumerable<HostForm>> windows;
-    readonly SynchronizationContext ui;   // le fil de l'interface : seul à toucher aux fenêtres
+    readonly SynchronizationContext? ui;   // le fil de l'interface : seul à toucher aux fenêtres (null si construit hors de lui : boutons laissés à Windows)
     readonly uint pid = (uint)Environment.ProcessId;
     readonly LowLevelHook hook;
 
@@ -44,7 +44,7 @@ sealed class SideButtons : IDisposable
                 if (msg == 0x020C) Host.Log($"bouton latéral {which} : {(ours ? "sur une fenêtre " + Host.AppName : "ailleurs (" + N.TitleOf(root) + ")")}");
                 if (ours)
                 {
-                    if (msg == 0x020C) ui.Post(_ =>
+                    if (msg == 0x020C) ui!.Post(_ =>   // ui non null : « ours » l'exige
                     {
                         try { windows().FirstOrDefault(x => !x.IsDisposed && x.IsHandleCreated && x.Handle == root)?.Send(new { type = "nav", dir = which == 1 ? "back" : "fwd" }); }
                         catch (Exception ex) { Host.Log("bouton latéral : " + ex.Message); }
