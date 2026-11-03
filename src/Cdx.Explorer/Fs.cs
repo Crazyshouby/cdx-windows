@@ -475,6 +475,15 @@ static class Fs
         Task.Run(() => { string e; try { e = work(); } catch (Exception ex) { e = ex.Message; } ctx.Post(_ => { if (WindowAlive == null || WindowAlive(owner)) send(reply(e)); }, null); });
     }
 
+    // Comme OffUi, avec plusieurs réponses, envoyées dans l'ordre sur le fil de l'interface. Sans contexte (essais), tout se fait sur place.
+    static void OffUiMany(IntPtr owner, Action<object> send, Func<List<object>> work)
+    {
+        var ctx = SynchronizationContext.Current;
+        List<object> Run() { try { return work(); } catch (Exception ex) { return new List<object> { new { type = "fs.done", tab = (string)null, error = ex.Message } }; } }
+        if (ctx == null) { foreach (var o in Run()) send(o); return; }
+        Task.Run(() => { var res = Run(); ctx.Post(_ => { if (WindowAlive == null || WindowAlive(owner)) foreach (var o in res) send(o); }, null); });
+    }
+
     static readonly Dictionary<(IntPtr, string), CancellationTokenSource> previews = new();   // l'aperçu en cours de chaque onglet
     public static void Handle(IntPtr owner, Action<object> send, string cmd, JsonElement r)
     {
@@ -487,7 +496,12 @@ static class Fs
             switch (cmd)
             {
                 case "fs.places": send(Places()); break;
-                case "fs.eject": { string err = Eject(Str("drive")); send(new { type = "fs.done", tab, error = err, ejected = err == null ? Str("drive") : null }); if (err == null) send(Places()); break; }
+                case "fs.eject":   // hors du fil de l'interface : l'éjection peut attendre jusqu'à une seconde que Windows lâche le volume
+                    {
+                        string drive = Str("drive");
+                        OffUiMany(owner, send, () => { string err = Eject(drive); var res = new List<object> { new { type = "fs.done", tab, error = err, ejected = err == null ? drive : null } }; if (err == null) res.Add(Places()); return res; });
+                        break;
+                    }
                 case "fs.list": send(List(Str("path"), tab)); break;
                 case "fs.open": Process.Start(new ProcessStartInfo(Str("path")) { UseShellExecute = true }); Host.Log("explorateur : ouvert " + Str("path")); break;
                 case "fs.copypath":   // « Copier le chemin » : chaque chemin entre guillemets, un par ligne (comme Windows)
@@ -601,10 +615,15 @@ static class Fs
                     }
                 case "fs.restore":   // depuis la corbeille : chaque élément retrouve sa place (jamais d'écrasement)
                     {
-                        var back = new List<string>(); var errs = new List<string>();
-                        foreach (var id in Ids()) { var (err, dest) = Recycle.Restore(id); if (err == null) back.Add(dest); else errs.Add(err); }
-                        if (back.Count > 0) { Undo.For(owner).Push(Undo.Created(back.Count == 1 ? "Restaurer" : "Restaurer " + back.Count + " éléments", back)); send(Undo.State(owner)); }
-                        send(new { type = "fs.done", tab, error = errs.Count == 0 ? null : errs[0] + (errs.Count > 1 ? " (et " + (errs.Count - 1) + " autre" + (errs.Count > 2 ? "s" : "") + ")" : "") });
+                        var ids = Ids();
+                        OffUiMany(owner, send, () =>
+                        {
+                            var back = new List<string>(); var errs = new List<string>(); var res = new List<object>();
+                            foreach (var id in ids) { var (err, dest) = Recycle.Restore(id); if (err == null) back.Add(dest); else errs.Add(err); }
+                            if (back.Count > 0) { Undo.For(owner).Push(Undo.Created(back.Count == 1 ? "Restaurer" : "Restaurer " + back.Count + " éléments", back)); res.Add(Undo.State(owner)); }
+                            res.Add(new { type = "fs.done", tab, error = errs.Count == 0 ? null : errs[0] + (errs.Count > 1 ? " (et " + (errs.Count - 1) + " autre" + (errs.Count > 2 ? "s" : "") + ")" : "") });
+                            return res;
+                        });
                         break;
                     }
                 case "fs.purge":   // effacer pour de bon des éléments de la corbeille (après confirmation) ; hors du fil de l'interface, comme la mise à la corbeille
@@ -617,9 +636,13 @@ static class Fs
                 case "fs.undo":
                 case "fs.redo":
                     {
-                        var log = Undo.For(owner); var (label, uerr) = cmd == "fs.undo" ? log.DoUndo() : log.DoRedo();
-                        send(new { type = "fs.undone", redo = cmd == "fs.redo", label, error = uerr });
-                        send(Undo.State(owner)); send(new { type = "fs.done", tab });
+                        // hors du fil de l'interface : défaire un déplacement entre disques, une mise à la corbeille, peut durer (UndoLog est sous verrou)
+                        bool isRedo = cmd == "fs.redo";
+                        OffUiMany(owner, send, () =>
+                        {
+                            var log = Undo.For(owner); var (label, uerr) = isRedo ? log.DoRedo() : log.DoUndo();
+                            return new List<object> { new { type = "fs.undone", redo = isRedo, label, error = uerr }, Undo.State(owner), new { type = "fs.done", tab } };
+                        });
                         break;
                     }
                 case "fs.preview":   // hors du fil de l'interface (un document lourd figeait toutes les fenêtres), annulé par l'aperçu suivant du même onglet

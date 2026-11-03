@@ -86,12 +86,24 @@ sealed class JobQueue
         while (true)
         {
             Job j;
-            lock (lk) { if (waiting.Count == 0) { running = false; return; } j = waiting.Dequeue(); }
-            if (j.State == JobState.Canceled) continue;   // annulée avant d'avoir commencé
-            j.State = JobState.Running; j.Started = DateTime.UtcNow; j.ResetClock(); Fire(j);
-            try { j.Body(j); j.State = j.Token.IsCancellationRequested ? JobState.Canceled : JobState.Done; }
-            catch (OperationCanceledException) { j.State = JobState.Canceled; }
-            catch (Exception ex) { j.State = JobState.Failed; j.Error = ex.Message; Host.Log("tâche " + j.Id + " (" + j.Kind + ") : " + ex.Message); }
+            bool skipped;
+            lock (lk)
+            {
+                if (waiting.Count == 0) { running = false; return; }
+                j = waiting.Dequeue();
+                skipped = j.State == JobState.Canceled;
+                if (!skipped) { j.State = JobState.Running; j.Started = DateTime.UtcNow; j.ResetClock(); }
+            }
+            // annulée avant d'avoir commencé : son appelant est quand même prévenu (Finished), sans quoi la page attendait un fs.done qui ne venait jamais
+            if (skipped) { try { j.Finished?.Invoke(j); } catch (Exception ex) { Host.Log("tâche " + j.Id + " : fin : " + ex.Message); } continue; }
+            Fire(j);
+            JobState end; string err = null;
+            try { j.Body(j); end = j.Token.IsCancellationRequested ? JobState.Canceled : JobState.Done; }
+            catch (OperationCanceledException) { end = JobState.Canceled; }
+            catch (Exception ex) { end = JobState.Failed; err = ex.Message; Host.Log("tâche " + j.Id + " (" + j.Kind + ") : " + ex.Message); }
+            // l'état final est écrit sous le verrou : une pause demandée au même instant ne peut plus laisser la tâche « en pause » pour toujours
+            // (Busy resterait vrai et l'Explorateur ne s'arrêterait plus après sa dernière fenêtre)
+            lock (lk) { j.State = end; if (err != null) j.Error = err; }
             Fire(j);
             try { j.Finished?.Invoke(j); } catch (Exception ex) { Host.Log("tâche " + j.Id + " : fin : " + ex.Message); }
         }
@@ -103,14 +115,29 @@ sealed class JobQueue
 
     Job Find(int id) { lock (lk) return jobs.FirstOrDefault(j => j.Id == id); }
 
-    public bool Pause(int id) { var j = Find(id); if (j == null || j.State != JobState.Running) return false; j.SetPaused(true); j.State = JobState.Paused; Fire(j); return true; }
-    public bool Resume(int id) { var j = Find(id); if (j == null || j.State != JobState.Paused) return false; j.State = JobState.Running; j.ResetClock(); j.SetPaused(false); Fire(j); return true; }
+    public bool Pause(int id)
+    {
+        Job j;
+        lock (lk) { j = jobs.FirstOrDefault(x => x.Id == id); if (j == null || j.State != JobState.Running) return false; j.SetPaused(true); j.State = JobState.Paused; }
+        Fire(j); return true;
+    }
+    public bool Resume(int id)
+    {
+        Job j;
+        lock (lk) { j = jobs.FirstOrDefault(x => x.Id == id); if (j == null || j.State != JobState.Paused) return false; j.State = JobState.Running; j.ResetClock(); j.SetPaused(false); }
+        Fire(j); return true;
+    }
 
     // Annule : une tâche en attente est retirée sans démarrer ; une tâche en cours reçoit le signal (et sort d'une éventuelle pause).
     public bool Cancel(int id)
     {
-        var j = Find(id); if (j == null || j.State is JobState.Done or JobState.Failed or JobState.Canceled) return false;
-        if (j.State == JobState.Queued) { j.State = JobState.Canceled; Fire(j); }
+        Job j; bool wasQueued;
+        lock (lk)
+        {
+            j = jobs.FirstOrDefault(x => x.Id == id); if (j == null || j.State is JobState.Done or JobState.Failed or JobState.Canceled) return false;
+            wasQueued = j.State == JobState.Queued; if (wasQueued) j.State = JobState.Canceled;
+        }
+        if (wasQueued) Fire(j);
         j.cts.Cancel(); j.SetPaused(false);
         return true;
     }

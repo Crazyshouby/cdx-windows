@@ -1,4 +1,3 @@
-using Microsoft.VisualBasic.FileIO;
 
 namespace Cdx;
 
@@ -15,28 +14,35 @@ sealed class UndoLog
 {
     const int Max = 50;
     readonly List<Op> undo = new(), redo = new();
+    // Annuler et Rétablir tournent hors du fil de l'interface (un déplacement entre disques peut durer) pendant que ce fil peut empiler un
+    // nouveau geste : les piles sont sous verrou, et un seul geste s'exécute à la fois (`running`).
+    readonly object gate = new(), running = new();
 
-    public void Push(Op op) { undo.Add(op); if (undo.Count > Max) undo.RemoveAt(0); redo.Clear(); }
-    public string UndoLabel => undo.Count > 0 ? undo[^1].Label : null;
-    public string RedoLabel => redo.Count > 0 ? redo[^1].Label : null;
-    public int UndoCount => undo.Count;
-    public int RedoCount => redo.Count;
+    public void Push(Op op) { lock (gate) { undo.Add(op); if (undo.Count > Max) undo.RemoveAt(0); redo.Clear(); } }
+    public string UndoLabel { get { lock (gate) return undo.Count > 0 ? undo[^1].Label : null; } }
+    public string RedoLabel { get { lock (gate) return redo.Count > 0 ? redo[^1].Label : null; } }
+    public int UndoCount { get { lock (gate) return undo.Count; } }
+    public int RedoCount { get { lock (gate) return redo.Count; } }
 
     // Défait le dernier geste : (étiquette, erreur). Un geste qui échoue est retiré de la pile (on ne reste pas bloqué dessus).
     public (string label, string error) DoUndo()
     {
-        if (undo.Count == 0) return (null, null);
-        var op = undo[^1]; undo.RemoveAt(undo.Count - 1);
-        string err = Safe(op.Undo); if (err == null) redo.Add(op);
-        return (op.Label, err);
+        lock (running)
+        {
+            Op op; lock (gate) { if (undo.Count == 0) return (null, null); op = undo[^1]; undo.RemoveAt(undo.Count - 1); }
+            string err = Safe(op.Undo); if (err == null) lock (gate) redo.Add(op);
+            return (op.Label, err);
+        }
     }
 
     public (string label, string error) DoRedo()
     {
-        if (redo.Count == 0) return (null, null);
-        var op = redo[^1]; redo.RemoveAt(redo.Count - 1);
-        string err = Safe(op.Redo); if (err == null) undo.Add(op);
-        return (op.Label, err);
+        lock (running)
+        {
+            Op op; lock (gate) { if (redo.Count == 0) return (null, null); op = redo[^1]; redo.RemoveAt(redo.Count - 1); }
+            string err = Safe(op.Redo); if (err == null) lock (gate) undo.Add(op);
+            return (op.Label, err);
+        }
     }
 
     static string Safe(Func<string> f) { try { return f(); } catch (OperationCanceledException) { return "Annulé."; } catch (Exception ex) { return ex.Message; } }
@@ -61,7 +67,13 @@ static class Undo
         Directory.CreateDirectory(Path.GetDirectoryName(to));
         bool dir = Directory.Exists(from);
         if (string.Equals(Path.GetPathRoot(from), Path.GetPathRoot(to), StringComparison.OrdinalIgnoreCase)) { if (dir) Directory.Move(from, to); else File.Move(from, to); }
-        else if (dir) FileSystem.MoveDirectory(from, to, UIOption.OnlyErrorDialogs); else FileSystem.MoveFile(from, to, UIOption.OnlyErrorDialogs);
+        else
+        {
+            // Entre deux disques : le moteur de copie de l'Explorateur (aucune boîte de Windows sans fenêtre parente, jamais une copie défaite à moitié).
+            var o = Copier.Run(new[] { new PlanItem(from, dir, to, false) }, true, null);
+            if (o.Errors.Count > 0) return o.Errors[0];
+            if (o.Canceled) return "Annulé.";
+        }
         return null;
     }
 

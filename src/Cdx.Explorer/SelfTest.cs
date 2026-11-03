@@ -142,6 +142,16 @@ static class SelfTest
             Check("tâches : une exception met la tâche en échec avec son message, la file continue", WaitState(j5, JobState.Failed) && j5.Error == "disque plein");
             var j6 = q.Enqueue("copy", "après", jb => { order.Add(6); });
             Check("tâches : la file continue après un échec", WaitState(j6, JobState.Done) && order.Contains(6));
+            // une tâche annulée pendant qu'elle attend son tour prévient quand même son appelant (la page attend un fs.done)
+            using (var hold = new ManualResetEventSlim())
+            {
+                var jHold = q.Enqueue("copy", "occupe la file", jb => hold.Wait(10000));
+                bool finishedCalled = false;
+                var jQueued = q.Enqueue("copy", "attend son tour", jb => order.Add(99), j => finishedCalled = true);
+                bool canceled = q.Cancel(jQueued.Id);
+                hold.Set();
+                Check("tâches : une tâche annulée avant de démarrer ne s'exécute pas, et son appelant est prévenu (Finished)", canceled && WaitState(jHold, JobState.Done) && WaitFor(() => finishedCalled, 5000) && !order.Contains(99) && jQueued.State == JobState.Canceled);
+            }
             q.Prune(2);
             Check("tâches : Prune ne garde que les dernières tâches terminées", q.Snapshot().Count == 2);
 
