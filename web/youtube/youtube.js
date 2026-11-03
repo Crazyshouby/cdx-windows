@@ -30,6 +30,7 @@
   let recu = 0, derniereErreur = null;   // pour l'essai automatique
   let rectEnvoye = '';                   // le dernier rectangle du lecteur envoyé au programme
   let vueRecherche = lire('yt.recherche.vue') === 'vignettes' ? 'vignettes' : 'liste';
+  let sansCote = lire('yt.cote') === 'masquee';   // la colonne de droite de la fiche (À suivre, Description, Liste) masquée : la vidéo prend la place
   let mini = null;                       // le mini-lecteur : { fiche } de la vidéo qui continue pendant qu'on parcourt YouTube
 
   // ---------- l'afficheur (à gauche de la platine) ----------
@@ -242,7 +243,8 @@
     const qui = [f.avatar ? `<img class="av" alt="" referrerpolicy="no-referrer" src="${esc(f.avatar)}">` : '',
       f.chaine ? `<span class="nom${f.chaineId ? ' lien' : ''}"${f.chaineId ? ` data-chaine="${esc(f.chaineId)}" title="Ouvrir la chaîne"` : ''}>${esc(f.chaine)}</span>` : '',
       f.abonnes ? `<span>${esc(f.abonnes)}</span>` : '', `<span class="m">${[f.vues, f.date].filter(Boolean).map(esc).join(' · ')}</span>`,
-      f.chaineId ? `<button class="btn" data-chaine="${esc(f.chaineId)}">Chaîne</button>` : ''].filter(Boolean).join('');
+      f.chaineId ? `<button class="btn" data-chaine="${esc(f.chaineId)}">Chaîne</button>` : '',
+      `<button class="btn" data-a="cote" id="bCote"></button>`].filter(Boolean).join('');
     z.innerHTML = `<div class="cinema">
       <div class="scene">
         <div class="lecteur" id="lecteur"><span>Chargement du lecteur…</span></div>
@@ -256,6 +258,7 @@
     const suivante = l ? l.videos[l.index + 1] : sug[0];
     $('cEnsuite').textContent = suivante ? 'ensuite : ' + suivante.titre : '';
     $('cEnsuite').title = suivante ? 'Ensuite : ' + suivante.titre : '';
+    majCote();
     rendreVolet();
     CdxFrame.title('YouTube — ' + (f.titre || ''));
     if (!occupe) titreAfficheur();
@@ -281,6 +284,12 @@
     $('volet').innerHTML = h;
     const on = document.querySelector('#encours .pas.on'); if (on) on.scrollIntoView({ block: 'nearest' });
     if (lecture) majChapitre(lecture.t);
+  }
+  function majCote() {
+    document.body.classList.toggle('sans-cote', sansCote);
+    const b = $('bCote'); if (!b) return;
+    b.textContent = sansCote ? 'Afficher la colonne' : 'Masquer la colonne';
+    b.title = sansCote ? 'Afficher À suivre, la description et la liste à droite de la vidéo' : 'Masquer la colonne de droite : la vidéo prend la place';
   }
   function majChapitre(t) {
     const ch = [...document.querySelectorAll('.chap')]; if (!ch.length) return;
@@ -512,6 +521,7 @@
       else if (k === 'confirmer') { a.disabled = true; statut('Confirmation envoyée à YouTube…', 'amber'); cmd('confirmer', +a.dataset.i); }
       else if (k === 'toutlire' && cur.entete) demander('yt.video', { id: cur.entete.premierId, liste: cur.entete.id, index: 0 });
       else if (k === 'vuerech') { vueRecherche = a.dataset.v; ecrire('yt.recherche.vue', vueRecherche); rendre(); $('zone').scrollTop = 0; }
+      else if (k === 'cote') { sansCote = !sansCote; ecrire('yt.cote', sansCote ? 'masquee' : ''); majCote(); requestAnimationFrame(placerLecteur); }
       else if (k === 'ruban') { const c = a.closest('.ruban').querySelector('.ruban-corps'); c.scrollLeft += +a.dataset.d * (c.clientWidth + 18); setTimeout(majFleches, 450); }
       return;
     }

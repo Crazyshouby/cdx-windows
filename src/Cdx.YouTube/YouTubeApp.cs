@@ -581,6 +581,17 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                     Verifier(ea0.GetProperty("commandes").GetBoolean() && ea0.GetProperty("affichage").GetProperty("max").GetInt32() > 0 && ea0.GetProperty("affichage").GetProperty("boutons").GetInt32() == 6,
                         "nos commandes affichées (6 boutons, plus de listes déroulantes) : " + ea0.GetProperty("affichage").GetRawText());
 
+                    // le bouton « Masquer la colonne » : la colonne de droite disparaît, la vidéo s'agrandit ; un second clic la remet
+                    int largeurAvant = page.BoundsDuLecteur.Width;
+                    await form.Web.CoreWebView2.ExecuteScriptAsync("document.getElementById('bCote').click()");
+                    for (int i = 0; i < 12 && page.BoundsDuLecteur.Width <= largeurAvant; i++) await Task.Delay(250);
+                    int largeurSans = page.BoundsDuLecteur.Width;
+                    bool coteCachee = await form.Web.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.querySelector('.cote')).display") == "\"none\"";
+                    await form.Web.CoreWebView2.ExecuteScriptAsync("document.getElementById('bCote').click()");
+                    for (int i = 0; i < 12 && page.BoundsDuLecteur.Width != largeurAvant; i++) await Task.Delay(250);
+                    Verifier(coteCachee && largeurSans > largeurAvant && page.BoundsDuLecteur.Width == largeurAvant,
+                        $"colonne de droite masquée puis remise : vidéo {largeurAvant} → {largeurSans} → {page.BoundsDuLecteur.Width} px de large");
+
                     // le menu de l'engrenage : vitesse, qualité, sous-titres ; ouvert sous la barre, il ne masque pas la vidéo ; une vitesse choisie dans son sous-menu
                     string Clic(string texte) => "(() => { const i = [...document.querySelectorAll('.menu[data-cdx] .menu-item')].reverse().find(x => x.innerText.trim().startsWith(" + JsonSerializer.Serialize(texte) + ")); if (!i) return false; i.click(); return true; })()";
                     await form.Web.CoreWebView2.ExecuteScriptAsync("document.getElementById('cReglages').click()");

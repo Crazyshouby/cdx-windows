@@ -273,7 +273,7 @@ Accueil en **rubans** par moment (en direct, aujourd'hui, hier, cette semaine…
 recherche en **liste à colonnes** (`CdxColumns`) ou en vignettes ; vidéo en **mode cinéma** (À suivre numérotée, Description avec les **chapitres** cliquables, Liste) ;
 la barre « déjà vu » sous les miniatures (`Video.Vu`). **Mini-lecteur** : quitter la fiche d'une vidéo à l'écran ouvre le mini-lecteur de YouTube (touche « i » en vraie
 frappe CDP) avant toute navigation de la page cachée, qui sinon décharge la vidéo (`cdx-youtube --sonde-mini` le mesure) ; la vue native se pose sur le coin de la fenêtre,
-la platine garde le transport ; revenir (titre, bouton, afficheur, Retour) rouvre la fiche sans recharger la vidéo ; la croix l'arrête. Essai isolé : 48 vérifications.
+la platine garde le transport ; revenir (titre, bouton, afficheur, Retour) rouvre la fiche sans recharger la vidéo ; la croix l'arrête. Bouton « Masquer la colonne » sous la vidéo (réglage `yt.cote`). Essai isolé : 49 vérifications.
 
 ## Notes (`cdx-notes`, lots 1 à 6)
 Le coffre (`Cdx.Vault`, dossier `Documents\Notes CDX` par défaut) est partagé avec le serveur MCP `cdx-notes-mcp` de Claude ; l'application voit tout changement du dossier. Page `web/notes/` :

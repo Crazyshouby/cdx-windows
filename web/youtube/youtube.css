@@ -117,7 +117,9 @@
 .cartouche .qui .av { flex: none; width: 16px; height: 16px; border: 1px solid var(--outline); }
 .cartouche .qui .m { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .cartouche .qui .btn { margin-left: auto; padding: 0 10px; flex: none; }
+.cartouche .qui .btn + .btn { margin-left: 0; }
 .cote { flex: none; width: 360px; display: flex; flex-direction: column; min-height: 0; }
+body.sans-cote .cote { display: none; }   /* le bouton « Masquer la colonne » sous la vidéo (réglage gardé : yt.cote) */
 .cote .tabs { background: none; padding: 0; }
 .cote .volet { flex: 1; min-height: 0; overflow-y: auto; border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); background: var(--ink); padding: 6px; }
 @media (max-width: 1100px) { .cote { width: 300px; } }
