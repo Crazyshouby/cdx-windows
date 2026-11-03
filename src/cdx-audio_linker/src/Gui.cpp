@@ -402,6 +402,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             KillTimer(hwnd, IDT_SAVE);
             if (!g_skipSaveOnExit) SaveWindowPlacement(hwnd);
             CdxLinkStop();
+            CdxSuiteStop();
             g_calibrator.cancel(); // its destructor joins the worker
             StopHotkeyCapture();
             CloseSwitcherHook();

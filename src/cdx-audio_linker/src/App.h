@@ -363,6 +363,7 @@ void CdxLinkHandle(HWND hwnd, WPARAM what, LPARAM param);
 void CdxNotifyShell(const char* level, const std::wstring& text);
 void CdxSuiteStart(HWND hwnd);
 void CdxSuiteTick();
+void CdxSuiteStop();
 const std::string& CdxSuiteAccent();
 
 // --- Switcher.cpp ---

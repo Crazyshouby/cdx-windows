@@ -225,15 +225,45 @@ void CdxNotifyShell(const char* level, const std::wstring& text) {
 }
 
 // ---- The accent of the suite (%APPDATA%\CDX\suite.json) ----
-// Read at startup, then polled every kSuiteIntervalMs on the UI thread; a change is pushed to every page as { type: "theme", value }.
-// New pages learn it from the state message (suiteAccent).
+// Read at startup, then re-read when Windows signals a change in its folder (a small thread waits on a change notification and
+// posts WM_TIMER/IDT_SUITE to the UI thread), with a 5 s safety poll; a change is pushed to every page as { type: "theme", value }.
+// Before: polled every 250 ms forever, for a file that changes a few times a month. Without a notification (folder missing), the
+// old 250 ms poll is kept. New pages learn the accent from the state message (suiteAccent).
 static std::unique_ptr<cdx::suite::Watcher> g_suiteWatcher;
 static std::string g_suiteAccent = "rouge";
+static HANDLE g_suiteStop = nullptr;
+static std::thread g_suiteThread;
 
 void CdxSuiteStart(HWND hwnd) {
     g_suiteAccent = cdx::suite::ReadAccent("rouge");
     g_suiteWatcher = std::make_unique<cdx::suite::Watcher>(g_suiteAccent);
-    SetTimer(hwnd, IDT_SUITE, kSuiteIntervalMs, nullptr);
+    std::wstring dir = cdx::suite::Dir();
+    HANDLE change = dir.empty() ? INVALID_HANDLE_VALUE
+        : FindFirstChangeNotificationW(dir.c_str(), FALSE, FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE);
+    if (change == INVALID_HANDLE_VALUE) {
+        SetTimer(hwnd, IDT_SUITE, kSuiteIntervalMs, nullptr);
+        return;
+    }
+    SetTimer(hwnd, IDT_SUITE, 5000, nullptr);
+    g_suiteStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_suiteThread = std::thread([hwnd, change] {
+        HANDLE waits[2] = { g_suiteStop, change };
+        for (;;) {
+            DWORD r = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+            if (r != WAIT_OBJECT_0 + 1) break;   // stop requested, or the wait failed
+            PostMessageW(hwnd, WM_TIMER, IDT_SUITE, 0);
+            if (!FindNextChangeNotification(change)) break;
+        }
+        FindCloseChangeNotification(change);
+    });
+}
+
+void CdxSuiteStop() {
+    if (!g_suiteThread.joinable()) return;
+    SetEvent(g_suiteStop);
+    g_suiteThread.join();
+    CloseHandle(g_suiteStop);
+    g_suiteStop = nullptr;
 }
 
 void CdxSuiteTick() {
