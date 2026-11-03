@@ -11,7 +11,7 @@ sealed class DirWatcher : IDisposable
     // `fire` est appelé (sur un fil du pool) au plus toutes les 250 ms tant que des événements arrivent ; il doit rejoindre le fil d'interface lui-même.
     public DirWatcher(string path, Action fire)
     {
-        timer = new System.Threading.Timer(_ => { Interlocked.Exchange(ref scheduled, 0); try { fire(); } catch (Exception ex) { Host.Log("surveillance : " + ex.Message); } }, null, Timeout.Infinite, Timeout.Infinite);
+        timer = new System.Threading.Timer(_ => { Interlocked.Exchange(ref scheduled, 0); if (disposed) return; try { fire(); } catch (Exception ex) { Host.Log("surveillance : " + ex.Message); } }, null, Timeout.Infinite, Timeout.Infinite);
         fsw = new FileSystemWatcher(path)
         {
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size | NotifyFilters.LastWrite | NotifyFilters.Attributes,
@@ -23,7 +23,15 @@ sealed class DirWatcher : IDisposable
         fsw.EnableRaisingEvents = true;
     }
 
-    void Poke() { if (Interlocked.Exchange(ref scheduled, 1) == 0) timer.Change(250, Timeout.Infinite); }
+    volatile bool disposed;
 
-    public void Dispose() { try { fsw.EnableRaisingEvents = false; fsw.Dispose(); timer.Dispose(); } catch { } }
+    // Un événement déjà en route peut arriver après Dispose : Timer.Change lèverait ObjectDisposedException sur un fil du pool, sans try, et
+    // l'exception arrêterait tout l'Explorateur (fermeture d'un onglet pendant une copie dans son dossier).
+    void Poke()
+    {
+        if (disposed || Interlocked.Exchange(ref scheduled, 1) != 0) return;
+        try { timer.Change(250, Timeout.Infinite); } catch (ObjectDisposedException) { }
+    }
+
+    public void Dispose() { disposed = true; try { fsw.EnableRaisingEvents = false; fsw.Dispose(); timer.Dispose(); } catch { } }
 }

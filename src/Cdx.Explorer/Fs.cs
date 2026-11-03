@@ -174,65 +174,106 @@ static class Fs
     public static string KindOf(string ext) => ext is ".md" or ".markdown" ? "md" : CodeExt.Contains(ext) ? "code" : "text";
 
     // Le texte d'un document Office (docx, xlsx, pptx) : des zip de XML, dont on sort les paragraphes, les cellules de la première feuille, les textes des diapositives.
-    public static object OfficePreview(string path, string ext)
+    // Lu EN FLUX (XmlReader, jamais XDocument.Load d'une partie entière) et arrêté dès 64 Ko de texte, 300 lignes ou 200 diapositives : un document énorme
+    // ou piégé ne charge pas des centaines de Mo en mémoire. DTD interdites, aucune résolution externe, nombre de caractères lus borné par partie.
+    const long MaxPartChars = 64L << 20;
+    static System.Xml.XmlReader Part(System.IO.Compression.ZipArchiveEntry e) => System.Xml.XmlReader.Create(e.Open(), new System.Xml.XmlReaderSettings
+    { DtdProcessing = System.Xml.DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = MaxPartChars, CloseInput = true });
+
+    public static object OfficePreview(string path, string ext, CancellationToken ct = default)
     {
         try
         {
             using var zip = System.IO.Compression.ZipFile.OpenRead(path);
             var sb = new System.Text.StringBuilder(); bool truncated = false;
-            void Add(string s) { if (sb.Length < 65536) sb.Append(s); else truncated = true; }
-            System.Xml.Linq.XDocument Xml(string name) { var e = zip.GetEntry(name); if (e == null) return null; using var st = e.Open(); return System.Xml.Linq.XDocument.Load(st); }
+            bool Full() { if (sb.Length >= 65536) truncated = true; return truncated; }
+            void Add(string s) { if (!Full()) sb.Append(s); }
+            const string W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main", S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main", A = "http://schemas.openxmlformats.org/drawingml/2006/main";
             if (ext == ".docx")
             {
-                var doc = Xml("word/document.xml"); if (doc == null) return new { type = "fs.preview", path, kind = "error", error = "Document Word sans texte lisible" };
-                System.Xml.Linq.XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-                foreach (var p in doc.Descendants(w + "p"))
+                var e = zip.GetEntry("word/document.xml"); if (e == null) return new { type = "fs.preview", path, kind = "error", error = "Document Word sans texte lisible" };
+                using var r = Part(e);
+                for (bool more = r.Read(); more && !Full();)
                 {
-                    Add(string.Concat(p.Descendants().Where(x => x.Name == w + "t" || x.Name == w + "tab" || x.Name == w + "br").Select(x => x.Name == w + "t" ? x.Value : x.Name == w + "tab" ? "\t" : "\n")));
-                    Add("\n");
+                    ct.ThrowIfCancellationRequested();
+                    bool w = r.NamespaceURI == W, el = r.NodeType == System.Xml.XmlNodeType.Element;
+                    if (w && el && r.LocalName == "t") { Add(r.ReadElementContentAsString()); more = !r.EOF; continue; }   // le lecteur est déjà sur le nœud suivant
+                    if (w && el && r.LocalName == "tab") Add("\t");
+                    else if (w && el && r.LocalName == "br") Add("\n");
+                    else if (w && r.NodeType == System.Xml.XmlNodeType.EndElement && r.LocalName == "p") Add("\n");
+                    more = r.Read();
                 }
             }
             else if (ext == ".xlsx")
             {
-                System.Xml.Linq.XNamespace s = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-                var shared = Xml("xl/sharedStrings.xml")?.Descendants(s + "si").Select(si => string.Concat(si.Descendants(s + "t").Select(t => t.Value))).ToList() ?? new List<string>();
-                var sheet = Xml("xl/worksheets/sheet1.xml"); if (sheet == null) return new { type = "fs.preview", path, kind = "error", error = "Classeur sans première feuille lisible" };
-                int rows = 0;
-                foreach (var row in sheet.Descendants(s + "row"))
+                // les chaînes partagées : au plus 50 000 (celles des 300 premières lignes sont en tête dans les classeurs ordinaires)
+                var shared = new List<string>();
+                var se = zip.GetEntry("xl/sharedStrings.xml");
+                if (se != null)
                 {
-                    if (++rows > 300) { truncated = true; break; }
-                    Add(string.Join("\t", row.Elements(s + "c").Select(c => { var v = c.Element(s + "v")?.Value ?? c.Element(s + "is")?.Value ?? ""; return (string)c.Attribute("t") == "s" && int.TryParse(v, out int k) && k >= 0 && k < shared.Count ? shared[k] : v; })));
-                    Add("\n");
+                    using var r = Part(se); var cur = new System.Text.StringBuilder(); bool inSi = false;
+                    for (bool more = r.Read(); more && shared.Count < 50000;)
+                    {
+                        bool s = r.NamespaceURI == S, el = r.NodeType == System.Xml.XmlNodeType.Element;
+                        if (s && inSi && el && r.LocalName == "t") { string v = r.ReadElementContentAsString(); if (cur.Length < 4096) cur.Append(v); more = !r.EOF; continue; }
+                        if (s && el && r.LocalName == "si") { inSi = true; cur.Clear(); if (r.IsEmptyElement) { shared.Add(""); inSi = false; } }
+                        else if (s && r.NodeType == System.Xml.XmlNodeType.EndElement && r.LocalName == "si") { shared.Add(cur.ToString()); inSi = false; }
+                        more = r.Read();
+                    }
+                }
+                var sh = zip.GetEntry("xl/worksheets/sheet1.xml"); if (sh == null) return new { type = "fs.preview", path, kind = "error", error = "Classeur sans première feuille lisible" };
+                using (var r = Part(sh))
+                {
+                    int rows = 0; var cells = new List<string>(); string cellType = null; string val = null;
+                    for (bool more = r.Read(); more && !Full();)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        bool s = r.NamespaceURI == S, el = r.NodeType == System.Xml.XmlNodeType.Element, end = r.NodeType == System.Xml.XmlNodeType.EndElement;
+                        if (s && el && (r.LocalName == "v" || r.LocalName == "t")) { val += r.ReadElementContentAsString(); more = !r.EOF; continue; }
+                        if (s && el && r.LocalName == "row") { if (++rows > 300) { truncated = true; break; } cells.Clear(); if (r.IsEmptyElement) Add("\n"); }
+                        else if (s && el && r.LocalName == "c") { cellType = r.GetAttribute("t"); val = ""; if (r.IsEmptyElement) cells.Add(""); }
+                        else if (s && end && r.LocalName == "c") cells.Add(cellType == "s" && int.TryParse(val, out int k) && k >= 0 && k < shared.Count ? shared[k] : val ?? "");
+                        else if (s && end && r.LocalName == "row") { Add(string.Join("\t", cells)); Add("\n"); }
+                        more = r.Read();
+                    }
                 }
             }
             else
             {
-                System.Xml.Linq.XNamespace a = "http://schemas.openxmlformats.org/drawingml/2006/main";
                 var slides = zip.Entries.Where(e => System.Text.RegularExpressions.Regex.IsMatch(e.FullName, @"^ppt/slides/slide\d+\.xml$")).OrderBy(e => int.Parse(System.Text.RegularExpressions.Regex.Match(e.FullName, @"\d+").Value)).ToList();
                 if (slides.Count == 0) return new { type = "fs.preview", path, kind = "error", error = "Présentation sans diapositive lisible" };
                 int n = 0;
                 foreach (var e in slides)
                 {
-                    n++; Add($"— Diapositive {n} —\n");
-                    using var st = e.Open(); var x = System.Xml.Linq.XDocument.Load(st);
-                    foreach (var p in x.Descendants(a + "p")) { var t = string.Concat(p.Descendants(a + "t").Select(z => z.Value)); if (t.Length > 0) { Add(t); Add("\n"); } }
+                    if (Full()) break;
+                    if (++n > 200) { truncated = true; break; }
+                    Add($"— Diapositive {n} —\n");
+                    using var r = Part(e); var para = new System.Text.StringBuilder();
+                    for (bool more = r.Read(); more && !Full();)
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        bool a = r.NamespaceURI == A;
+                        if (a && r.NodeType == System.Xml.XmlNodeType.Element && r.LocalName == "t") { para.Append(r.ReadElementContentAsString()); more = !r.EOF; continue; }
+                        if (a && r.NodeType == System.Xml.XmlNodeType.EndElement && r.LocalName == "p") { if (para.Length > 0) { Add(para.ToString()); Add("\n"); } para.Clear(); }
+                        more = r.Read();
+                    }
                     Add("\n");
                 }
             }
             return new { type = "fs.preview", path, kind = "office", lang = ext.TrimStart('.'), text = sb.ToString(), truncated };
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex) { return new { type = "fs.preview", path, kind = "error", error = "Document illisible : " + ex.Message }; }
     }
-
     // Aperçu d'un fichier texte : les 64 premiers Ko, décodés en UTF-16 / UTF-8 (avec ou sans BOM), à défaut en Latin-1. Un octet nul = binaire.
-    static object Preview(string path, string tab)
+    static object Preview(string path, string tab, CancellationToken ct = default)
     {
         try
         {
             var fi = new FileInfo(path);
             if (!fi.Exists) return new { type = "fs.preview", path, kind = "error", error = "Fichier introuvable" };
             string ext = fi.Extension.ToLowerInvariant();
-            if (ext is ".docx" or ".xlsx" or ".pptx") return OfficePreview(path, ext);
+            if (ext is ".docx" or ".xlsx" or ".pptx") return OfficePreview(path, ext, ct);
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var buf = new byte[(int)Math.Min(65536, fi.Length)];
             int n = fs.Read(buf, 0, buf.Length);
@@ -434,6 +475,7 @@ static class Fs
         Task.Run(() => { string e; try { e = work(); } catch (Exception ex) { e = ex.Message; } ctx.Post(_ => { if (WindowAlive == null || WindowAlive(owner)) send(reply(e)); }, null); });
     }
 
+    static readonly Dictionary<(IntPtr, string), CancellationTokenSource> previews = new();   // l'aperçu en cours de chaque onglet
     public static void Handle(IntPtr owner, Action<object> send, string cmd, JsonElement r)
     {
         string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
@@ -580,7 +622,21 @@ static class Fs
                         send(Undo.State(owner)); send(new { type = "fs.done", tab });
                         break;
                     }
-                case "fs.preview": send(Preview(Str("path"), tab)); break;
+                case "fs.preview":   // hors du fil de l'interface (un document lourd figeait toutes les fenêtres), annulé par l'aperçu suivant du même onglet
+                    {
+                        string pp = Str("path"); var key = (owner, tab ?? ""); var cts = new CancellationTokenSource();
+                        lock (previews) { if (previews.TryGetValue(key, out var old)) old.Cancel(); previews[key] = cts; }
+                        var ctx = SynchronizationContext.Current;
+                        _ = Task.Run(() =>
+                        {
+                            object res; try { res = Preview(pp, tab, cts.Token); } catch (OperationCanceledException) { return; } catch (Exception ex) { res = new { type = "fs.preview", path = pp, kind = "error", error = ex.Message }; }
+                            lock (previews) { if (previews.TryGetValue(key, out var cur) && cur == cts) previews.Remove(key); }
+                            if (cts.IsCancellationRequested) return;
+                            void Back() { if (WindowAlive(owner)) send(res); }
+                            if (ctx != null) ctx.Post(_ => Back(), null); else Back();
+                        });
+                        break;
+                    }
                 case "fs.copy": SetClipboard(Paths(), r.TryGetProperty("cut", out var c) && c.GetBoolean()); break;
                 case "fs.paste":
                     {

@@ -445,6 +445,50 @@ static class SelfTest
             Check("suppression : dossier et fichier partis (corbeille)", !Directory.Exists(Path.Combine(dir, "sous")) && !File.Exists(Path.Combine(dir, "b (2).txt")));
 
             // un disque sans corbeille (ici un lecteur subst jetable, comme une clé USB ou un partage) : rien n'est supprimé sans confirmation
+            // --- aperçu Office lu en flux : morceaux de texte consécutifs, gros classeur arrêté à 300 lignes, rapide ---
+            void Zip(string file, params (string name, string xml)[] parts)
+            {
+                using var z = System.IO.Compression.ZipFile.Open(file, System.IO.Compression.ZipArchiveMode.Create);
+                foreach (var (name, xml) in parts) { using var w = new StreamWriter(z.CreateEntry(name).Open()); w.Write(xml); }
+            }
+            string wns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main", sns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            string docx = Path.Combine(dir, "apercu.docx");
+            Zip(docx, ("word/document.xml", $"<w:document xmlns:w=\"{wns}\"><w:body><w:p><w:r><w:t>Bon</w:t></w:r><w:r><w:t>jour</w:t></w:r><w:r><w:tab/><w:t>tout</w:t></w:r></w:p><w:p><w:r><w:t>Deux</w:t></w:r></w:p></w:body></w:document>"));
+            var pd = JsonDocument.Parse(JsonSerializer.Serialize(Fs.OfficePreview(docx, ".docx"))).RootElement;
+            Check("aperçu Word en flux : morceaux consécutifs recollés, tabulation, paragraphes", pd.GetProperty("text").GetString() == "Bonjour\ttout\nDeux\n");
+            string xlsx = Path.Combine(dir, "gros.xlsx");
+            var sheet = new System.Text.StringBuilder($"<worksheet xmlns=\"{sns}\"><sheetData>");
+            for (int i = 1; i <= 100000; i++) sheet.Append($"<row r=\"{i}\"><c t=\"s\"><v>0</v></c><c><v>{i}</v></c></row>");
+            sheet.Append("</sheetData></worksheet>");
+            Zip(xlsx, ("xl/sharedStrings.xml", $"<sst xmlns=\"{sns}\"><si><t>ligne</t></si></sst>"), ("xl/worksheets/sheet1.xml", sheet.ToString()));
+            var swx = System.Diagnostics.Stopwatch.StartNew();
+            var px = JsonDocument.Parse(JsonSerializer.Serialize(Fs.OfficePreview(xlsx, ".xlsx"))).RootElement;
+            string xt = px.GetProperty("text").GetString();
+            Check($"aperçu Excel en flux : 100 000 lignes, arrêt à 300, chaînes partagées résolues, tronqué ({swx.ElapsedMilliseconds} ms)", xt.StartsWith("ligne\t1\nligne\t2\n") && xt.Split('\n').Length <= 302 && px.GetProperty("truncated").GetBoolean() && swx.ElapsedMilliseconds < 3000);
+            string evil = Path.Combine(dir, "dtd.docx");
+            Zip(evil, ("word/document.xml", "<!DOCTYPE x [<!ENTITY a \"aaaaaaaaaa\"><!ENTITY b \"&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;\">]><w:document xmlns:w=\"" + wns + "\"><w:body><w:p><w:r><w:t>&b;</w:t></w:r></w:p></w:body></w:document>"));
+            Check("aperçu Office : un document avec DTD (bombe d'entités) est refusé, sans exception", JsonDocument.Parse(JsonSerializer.Serialize(Fs.OfficePreview(evil, ".docx"))).RootElement.GetProperty("kind").GetString() == "error");
+
+            // --- DirWatcher : des fermetures pendant une rafale d'événements ne lèvent rien (avant : ObjectDisposedException sur un fil du pool) ---
+            string wd = Path.Combine(dir, "surveille"); Directory.CreateDirectory(wd);
+            int fired = 0; bool watchOk = true;
+            for (int round = 0; round < 20 && watchOk; round++)
+            {
+                var dw = new DirWatcher(wd, () => Interlocked.Increment(ref fired));
+                var writer = Task.Run(() => { for (int i = 0; i < 50; i++) { try { File.WriteAllText(Path.Combine(wd, $"f{round}-{i}.txt"), "x"); } catch { } } });
+                Thread.Sleep(5);
+                try { dw.Dispose(); } catch { watchOk = false; }
+                writer.Wait();
+            }
+            Thread.Sleep(400);   // un minuteur déjà armé aurait eu le temps de tomber
+            Check($"surveillance : 20 fermetures pendant une rafale d'écritures, aucune exception ({fired} notifications avant fermeture)", watchOk);
+            int live = 0;
+            using (var dwl = new DirWatcher(wd, () => Interlocked.Increment(ref live)))
+            {
+                File.WriteAllText(Path.Combine(wd, "vivant.txt"), "x");
+                Check("surveillance : un DirWatcher ouvert prévient bien d'une création (moins de 2 s)", WaitFor(() => Volatile.Read(ref live) > 0, 2000));
+            }
+
             Check("corbeille : un disque fixe en a une ; un partage réseau non", Recycle.HasBin(dir) && !Recycle.HasBin(@"\\localhost\C$\Windows"));
             string letter = "QRSTUVWXYZ".Select(c => c + ":").FirstOrDefault(l => !Directory.Exists(l + "\\"));
             if (letter == null) Check("corbeille : un lecteur libre pour subst", false);
