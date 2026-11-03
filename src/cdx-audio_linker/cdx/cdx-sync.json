@@ -1,5 +1,5 @@
 {
-  "cdxUi": "2.3.1",
+  "cdxUi": "2.4.0",
   "files": {
     "cdx/cdx-ui.css": {
       "from": "cdx-ui.css",
@@ -27,7 +27,7 @@
     },
     "cdx/cdx-bridge.js": {
       "from": "cdx-bridge.js",
-      "sha256": "3e1500c773012f4e37b4948919dace309acfb5712bc93703f35e70d33f26ae72"
+      "sha256": "9a584fc4cb2f36e22a06694150996a7d289388d549d6e64287c4434319ee5e17"
     },
     "cdx/cdx-frame.js": {
       "from": "cdx-frame.js",

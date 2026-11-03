@@ -8,7 +8,7 @@ namespace Cdx;
 // fenêtres de la suite qui lui font face, et à ceux de la zone de travail de son écran. Pixels d'écran (l'hôte met Dist et Gap à l'échelle de l'écran).
 static class Snap
 {
-    public const int Dist = 10, Gap = 0;
+    public const int Dist = CdxTokens.SnapDistance, Gap = CdxTokens.SnapGap;   // tokens.json de la charte (CdxTokens.g.cs, recopié par charte-sync)
 
     // Déplacement : `r` est le rectangle proposé pour la fenêtre glissée ; renvoie sa position une fois aimantée.
     public static Point Move(Rectangle r, IEnumerable<Rectangle> others, Rectangle? area, int dist, int gap)

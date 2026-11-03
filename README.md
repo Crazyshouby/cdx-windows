@@ -57,7 +57,7 @@ Windows PowerShell 5.1 lise aussi leurs accents (sans elle, « écris » partait
 ## Aimantation des fenêtres (01/11/2026)
 Toutes les fenêtres de l'hôte C# (`Cdx.Host/Snap.cs`, `HostForm.WndProc`) : pendant un déplacement ou un redimensionnement, la fenêtre colle aux bords des autres
 fenêtres de la suite (`cdx-*.exe`, Messages, Audio Linker) qui lui font face, et aux bords de la zone de travail de son écran. Règles de la charte (`tokens.json`) : 10 px
-d'attraction, 2 px d'écart entre deux fenêtres, aucun au bord de l'écran, à l'échelle de l'écran ; mêmes règles que Messages (`app.rs`). Windows fait le geste
+d'attraction, fenêtres collées bord à bord (aucun écart, ni entre elles ni au bord de l'écran : charte 2.0.1 ; `CdxTokens.SnapDistance` et `SnapGap`, générés depuis tokens.json), à l'échelle de l'écran ; mêmes règles que Messages (`app.rs`). Windows fait le geste
 (`WM_NCLBUTTONDOWN`), l'hôte corrige le rectangle proposé par `WM_MOVING` / `WM_SIZING` ; les voisines sont relevées à l'entrée du geste. Essai : `cdx-shell --selftest-snap`.
 
 ## Réglages communs et bus (phase 2)

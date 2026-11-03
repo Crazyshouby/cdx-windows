@@ -1,5 +1,5 @@
 {
-  "cdxUi": "2.3.1",
+  "cdxUi": "2.4.0",
   "files": {
     "web/cdx/cdx-ui.css": {
       "from": "cdx-ui.css",
@@ -23,7 +23,7 @@
     },
     "web/cdx/cdx-bridge.js": {
       "from": "cdx-bridge.js",
-      "sha256": "3e1500c773012f4e37b4948919dace309acfb5712bc93703f35e70d33f26ae72"
+      "sha256": "9a584fc4cb2f36e22a06694150996a7d289388d549d6e64287c4434319ee5e17"
     },
     "web/cdx/cdx-frame.js": {
       "from": "cdx-frame.js",
@@ -56,6 +56,10 @@
     "web/cdx/cdx-spell.js": {
       "from": "cdx-spell.js",
       "sha256": "1446a64ff40311dfa02b9d5f7c6dc547f506d854847b70d86588bc7b345bef9c"
+    },
+    "src/Cdx.Host/CdxTokens.g.cs": {
+      "from": "CdxTokens.g.cs",
+      "sha256": "1252412902d796b8e02383db5893275443445a3951a68ca3b17b7e8710a1bda3"
     }
   }
 }
