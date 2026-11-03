@@ -61,7 +61,7 @@ sealed class MailApp : ApplicationContext, IHostApp
                 if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal;
                 form.Activate(); Host.ForceForeground(form.Handle); return;
             }
-            env ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview-mail"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
+            env ??= await WebEnv.Ui();   // l'environnement partagé des programmes « outils » (WebEnv.cs)
             var f = new MailForm(this); form = f;
             f.FormClosed += (s, e) => { if (form == f) form = null; ExitThread(); };
             double scale = f.DeviceDpi / 96.0;

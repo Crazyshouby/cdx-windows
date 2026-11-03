@@ -114,7 +114,7 @@ sealed class ExplorerApp : ApplicationContext, IHostApp
         {
             bool restore = path == null && windows.Count == 0;   // ouverte sans dossier et seule : la page retrouve les onglets de la dernière session
             path ??= Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            env ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview-explorer"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
+            env ??= await WebEnv.Ui();   // l'environnement partagé des programmes « outils » (WebEnv.cs)
             var f = new ExplorerForm(this);
             windows.Add(f);
             var hnd = f.Handle; f.FormClosed += (s, e) => { Undo.Forget(hnd); CancelLists(f); windows.Remove(f); if (windows.Count == 0) { if (Jobs.Busy) Host.Log("explorateur : dernière fenêtre fermée, un transfert continue"); else ExitThread(); } };

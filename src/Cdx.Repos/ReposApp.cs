@@ -63,7 +63,7 @@ sealed class ReposApp : ApplicationContext, IHostApp
         try
         {
             if (form != null && !form.IsDisposed) { Host.ForceForeground(form.Handle); return; }
-            env ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview-repos"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
+            env ??= await WebEnv.Ui();   // l'environnement partagé des programmes « outils » (WebEnv.cs)
             var f = new ReposForm(this); form = f;
             f.FormClosed += (s, e) => ExitThread();
             double scale = f.DeviceDpi / 96.0;

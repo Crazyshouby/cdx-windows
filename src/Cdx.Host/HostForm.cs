@@ -45,6 +45,7 @@ class HostForm : Form
         c.Settings.AreBrowserAcceleratorKeysEnabled = false;
         Web.ZoomFactor = 1.0 / scale;   // 1 pixel CSS = 1 pixel d'écran, quelle que soit l'échelle de Windows
         MapExtraHosts(c);
+        if (string.Equals(Path.GetFullPath(env.UserDataFolder).TrimEnd('\\'), Path.GetFullPath(WebEnv.UiDataDir).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) WebEnv.Watch(this, c);
         // Une navigation hors des pages de la charte est refusée : sans cela, le bouton « précédent » de la souris (ou un lien) remplacerait la page.
         c.NavigationStarting += (s, e) => { if (!e.Uri.StartsWith("https://cdx.shell/")) { e.Cancel = true; Host.Log("navigation refusée : " + e.Uri); } };
         // Une fenêtre qu'une page voudrait ouvrir (lien d'un courrier, d'un terminal, window.open) : jamais une fenêtre WebView2 sans contrôle.
