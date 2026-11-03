@@ -1,6 +1,6 @@
 # Politique de signature de code / Code signing policy
 
-> **État : en préparation.** Les versions publiées jusqu'ici ne sont pas signées. Une demande de signature gratuite auprès de la [SignPath Foundation](https://signpath.org) est prévue ; cette politique décrit comment la signature fonctionnera dès qu'elle est active, et les notes de chaque release indiquent si cette version-là est signée.
+> **État : en préparation.** Les versions publiées jusqu'ici ne sont pas signées. Une demande de signature gratuite auprès de la [SignPath Foundation](https://signpath.org) était prévue ; elle suppose un dépôt public, et cdx-windows est privé depuis le 03/11/2026 (voir RELEASING.md) ; cette politique décrit comment la signature fonctionnera dès qu'elle est active, et les notes de chaque release indiquent si cette version-là est signée.
 
 Quand la signature est active :
 

@@ -8,6 +8,8 @@ Application Windows pour diffuser l'audio du PC sur **plusieurs sorties simultan
 
 ## Téléchargement
 
+> **Dépôt privé.** cdx-windows n'est pas public (décision du 03/11/2026) : ses Releases et ses Issues ne sont visibles que de son propriétaire. Les liens ci-dessous ne fonctionnent donc que pour lui ; une diffusion publique demanderait un dépôt (ou une page de téléchargement) public.
+
 Dans les [Releases](https://github.com/Crazyshouby/cdx-windows/releases) de cdx-windows, versions « Audio Linker » (chaque étiquette `audio_linker-v*` déclenche une compilation automatique ; les versions 1.0 à 1.3, publiées sous le nom AudioLinker, restent dans l'ancien dépôt, renommé cdx-audio_linker) :
 
 - **`cdx-audio_linker-Setup-<version>.exe`** : l'installateur (recommandé). Il s'installe pour l'utilisateur courant, sans droits administrateur, crée les raccourcis, propose le démarrage avec Windows, installe le runtime WebView2 s'il manque, et se désinstalle proprement depuis « Applications installées ».
