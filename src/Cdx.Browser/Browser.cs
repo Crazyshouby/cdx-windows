@@ -457,14 +457,15 @@ class BrowserForm : HostForm
     }
 
     // Les pages internes lisent des noms en minuscules (title, url, time...) : on projette les données plutôt que de sérialiser les classes telles quelles.
-    static object DataPayload() => new
+    // withSources : seule la page Réglages montre les sources d'import ; les lire (favoris de Chrome et d'Edge sur le disque) à chaque nouvel onglet coûtait.
+    static object DataPayload(bool withSources = false) => new
     {
         type = "data",
         bookmarks = BrowserData.Bookmarks.OrderByDescending(b => b.Added).Select(b => new { title = b.Title, url = b.Url, added = b.Added }),
         history = BrowserData.History.AsEnumerable().Reverse().Take(1000).Select(h => new { title = h.Title, url = h.Url, time = h.Time }),
         downloads = BrowserData.Downloads.Select(x => x.Info()),
         passwords = Passwords.All.Select(c => new { url = c.Url, user = c.User, name = c.Name }),   // jamais le mot de passe lui-même
-        settings = S.Payload(), sources = BrowserData.ImportSources(),
+        settings = S.Payload(), sources = withSources ? (object)BrowserData.ImportSources() : Array.Empty<object>(),
     };
 
     // ---------- pages internes (cdx://) : seules les pages de la charte sont écoutées ----------
@@ -480,22 +481,22 @@ class BrowserForm : HostForm
             async Task ReplyExt() => Reply(new { type = "extensions", items = await Extensions.ListAsync() });
             switch (cmd)
             {
-                case "in.data": Reply(DataPayload()); break;
+                case "in.data": Reply(DataPayload(InternalName(t.Url) == "reglages")); break;
                 case "in.navigate": Go(t, Resolve(Str("url"))); break;
-                case "in.bookmark.remove": { var b = BrowserData.Bookmarks.FirstOrDefault(x => x.Url == Str("url")); if (b != null) { BrowserData.Bookmarks.Remove(b); BrowserData.SaveBookmarks(); } Reply(DataPayload()); sh.PushAll(); break; }
-                case "in.history.clear": BrowserData.History.Clear(); BrowserData.SaveHistory(); Reply(DataPayload()); break;
+                case "in.bookmark.remove": { var b = BrowserData.Bookmarks.FirstOrDefault(x => x.Url == Str("url")); if (b != null) { BrowserData.Bookmarks.Remove(b); BrowserData.SaveBookmarks(); } Reply(DataPayload(InternalName(t.Url) == "reglages")); sh.PushAll(); break; }
+                case "in.history.clear": BrowserData.History.Clear(); BrowserData.SaveHistory(); Reply(DataPayload(InternalName(t.Url) == "reglages")); break;
                 case "in.dl.open": { var d = BrowserData.Downloads.FirstOrDefault(x => x.Id == r.GetProperty("id").GetInt32()); if (d != null && File.Exists(d.Path)) Process.Start(new ProcessStartInfo(d.Path) { UseShellExecute = true }); break; }
                 case "in.dl.reveal": { var d = BrowserData.Downloads.FirstOrDefault(x => x.Id == r.GetProperty("id").GetInt32()); if (d != null) { string rp = d.Path; _ = Task.Run(() => { if (!Bus.Send("explorer", "select", new { path = rp }, "browser", launch: true)) Process.Start("explorer.exe", "/select,\"" + rp + "\""); }); } break; }
                 case "in.dl.cancel": { var d = BrowserData.Downloads.FirstOrDefault(x => x.Id == r.GetProperty("id").GetInt32()); d?.Op?.Cancel(); break; }
                 case "in.dl.clear": BrowserData.Downloads.RemoveAll(x => x.State != "progress"); sh.PushDownloads(); break;
                 case "in.xfers": Xfer.Show(); break;
                 // réglages
-                case "in.settings.set": if (r.TryGetProperty("value", out var sv) && S.Set(Str("key"), sv)) { sh.ApplySettingsAll(); Reply(DataPayload()); } break;
+                case "in.settings.set": if (r.TryGetProperty("value", out var sv) && S.Set(Str("key"), sv)) { sh.ApplySettingsAll(); Reply(DataPayload(InternalName(t.Url) == "reglages")); } break;
                 case "in.settings.choosedir":
                 {
                     using var dlg = new FolderBrowserDialog { Description = "Dossier des téléchargements", UseDescriptionForTitle = true, ShowNewFolderButton = true, SelectedPath = S.DownloadsFolder };
                     if (dlg.ShowDialog(this) == DialogResult.OK) { S.DownloadDir = dlg.SelectedPath; S.Save(); }
-                    Reply(DataPayload()); break;
+                    Reply(DataPayload(InternalName(t.Url) == "reglages")); break;
                 }
                 case "in.settings.clear":
                 {
@@ -505,7 +506,7 @@ class BrowserForm : HostForm
                     if (hist) { kinds |= CoreWebView2BrowsingDataKinds.BrowsingHistory; BrowserData.History.Clear(); BrowserData.SaveHistory(); }
                     await t.Web.CoreWebView2.Profile.ClearBrowsingDataAsync(kinds);
                     Host.Log("données de navigation effacées" + (hist ? " (avec l'historique)" : ""));
-                    Reply(new { type = "done", what = "clear" }); Reply(DataPayload()); break;
+                    Reply(new { type = "done", what = "clear" }); Reply(DataPayload(InternalName(t.Url) == "reglages")); break;
                 }
                 // import
                 case "in.import.bookmarks":
@@ -514,7 +515,7 @@ class BrowserForm : HostForm
                     if (p == null) { using var dlg = new OpenFileDialog { Title = "Favoris à importer", Filter = "Favoris de Chrome ou Edge (Bookmarks)|Bookmarks|Export HTML de favoris|*.html;*.htm|Tous|*.*" }; if (dlg.ShowDialog(this) != DialogResult.OK) break; p = dlg.FileName; }
                     try { var (a, sk) = BrowserData.ImportBookmarks(p); Reply(new { type = "done", what = "bookmarks", added = a, skipped = sk }); Host.Log($"favoris importés de {p} : {a} ajoutés, {sk} déjà là"); }
                     catch (Exception ex) { Reply(new { type = "done", what = "bookmarks", error = ex.Message }); }
-                    Reply(DataPayload()); sh.PushAll(); break;
+                    Reply(DataPayload(InternalName(t.Url) == "reglages")); sh.PushAll(); break;
                 }
                 case "in.import.passwords":
                 {
@@ -532,10 +533,10 @@ class BrowserForm : HostForm
                         }
                     }
                     catch (Exception ex) { Reply(new { type = "done", what = "passwords", error = ex.Message }); }
-                    Reply(DataPayload()); break;
+                    Reply(DataPayload(InternalName(t.Url) == "reglages")); break;
                 }
-                case "in.pw.remove": Passwords.Remove(Str("url"), Str("user")); Reply(DataPayload()); break;
-                case "in.pw.clear": Passwords.All.Clear(); Passwords.Save(); Reply(DataPayload()); break;
+                case "in.pw.remove": Passwords.Remove(Str("url"), Str("user")); Reply(DataPayload(InternalName(t.Url) == "reglages")); break;
+                case "in.pw.clear": Passwords.All.Clear(); Passwords.Save(); Reply(DataPayload(InternalName(t.Url) == "reglages")); break;
                 // extensions
                 case "in.ext.list": await ReplyExt(); break;
                 case "in.ext.enable": await Extensions.EnableAsync(Str("id"), r.TryGetProperty("on", out var ov) && ov.ValueKind == JsonValueKind.True); await ReplyExt(); break;

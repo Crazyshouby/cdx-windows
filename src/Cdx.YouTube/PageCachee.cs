@@ -439,6 +439,7 @@ sealed class PageCachee
         // La vue reste invisible le temps que le style « lecteur seul » soit posé et que YouTube ait redimensionné son lecteur : sans cela, des morceaux du
         // site YouTube passaient à l'écran une fraction de seconde (remarqué le 02/11/2026).
         LecteurAffiche = true;
+        try { core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal; } catch { }
         web.Visible = false;
         if (web.Parent != hote)
         {
@@ -491,6 +492,8 @@ sealed class PageCachee
         if (Mini) await SortirMiniAsync();
         LecteurAffiche = false; Bloque = false;
         await PauseAsync();
+        // lecteur caché : Chromium ne ralentit pas d'elle-même une page hors écran ; on lui demande de libérer ce qu'il peut
+        try { core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; } catch { }
         await ModeLecteurAsync(false);
         web.Parent?.Controls.Remove(web);
         web.Dock = DockStyle.Fill; web.Visible = true;

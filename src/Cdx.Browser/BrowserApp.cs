@@ -40,7 +40,7 @@ sealed class BrowserApp : ApplicationContext, IHostApp
 
     async Task EnvAsync()
     {
-        uiEnv ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "webview-browser"), new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
+        uiEnv ??= await WebEnv.Ui();   // le cadre (onglets, barre d'adresse) est une page de la charte : l'environnement partagé des outils (WebEnv.cs)
         BrowserEnv ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(Host.DataDir, "navigateur"), new CoreWebView2EnvironmentOptions { AreBrowserExtensionsEnabled = true, Language = "fr" });
     }
 
