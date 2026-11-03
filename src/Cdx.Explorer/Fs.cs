@@ -503,13 +503,25 @@ static class Fs
                         // sur le fil de l'interface, la fenêtre se figeait et la suppression semblait ne jamais se faire.
                         var ps = Paths().Where(p => !string.IsNullOrEmpty(p) && Path.IsPathRooted(p) && Path.GetFileName(p.TrimEnd('\\')).Length > 0 && Path.Exists(p)).ToArray();
                         if (ps.Length == 0) { send(new { type = "fs.done", tab }); break; }
-                        var gone = new List<BinEntry>(); int noBin = 0;
+                        // Un disque sans corbeille (clé USB, partage, subst) : rien n'est supprimé avant que la page ait fait confirmer la suppression définitive.
+                        var perm = ps.Where(p => !Recycle.HasBin(p)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                        bool permOk = r.TryGetProperty("permOk", out var po) && po.ValueKind == JsonValueKind.True;
+                        if (perm.Count > 0 && !permOk) { send(new { type = "fs.confirmperm", tab, paths = ps, perm = perm.ToArray() }); break; }
+                        var gone = new List<BinEntry>(); int noBin = 0, kept = 0; string firstErr = null;
                         void Finish(string error)
                         {
                             if (gone.Count > 0) { Undo.For(owner).Push(Undo.Deleted(gone.Count == 1 ? "Supprimer" : "Supprimer " + gone.Count + " éléments", gone)); send(Undo.State(owner)); }
-                            send(new { type = "fs.done", tab, error = error ?? (noBin > 0 ? noBin + " élément" + (noBin > 1 ? "s ont" : " a") + " été supprimé" + (noBin > 1 ? "s" : "") + " définitivement (ce disque n'a pas de corbeille)." : null) });
+                            string msg = error ?? firstErr;
+                            if (msg == null && kept > 0) msg = kept + " élément" + (kept > 1 ? "s n'ont" : " n'a") + " pas été supprimé" + (kept > 1 ? "s" : "") + " : la corbeille ne pouvait pas " + (kept > 1 ? "les" : "le") + " recevoir.";
+                            if (msg == null && noBin > 0) msg = noBin + " élément" + (noBin > 1 ? "s ont" : " a") + " été supprimé" + (noBin > 1 ? "s" : "") + " définitivement (pas de corbeille sur ce disque).";
+                            send(new { type = "fs.done", tab, error = msg });
                         }
-                        void Recycle1(string p) { var e = Recycle.DeleteToBin(p); lock (gone) { if (e != null) gone.Add(e); else noBin++; } }
+                        void Recycle1(string p)
+                        {
+                            if (perm.Contains(p)) { string e1 = Recycle.DeletePermanently(new[] { p }); lock (gone) { if (e1 == null) noBin++; else firstErr ??= e1; } return; }
+                            try { var e = Recycle.DeleteToBin(p, owner); lock (gone) { if (e != null) gone.Add(e); else noBin++; } }
+                            catch (OperationCanceledException) { lock (gone) kept++; }   // Windows a prévenu (trop gros pour la corbeille) et l'utilisateur a refusé
+                        }
                         if (Queue == null) { string err = null; foreach (var p in ps) try { Recycle1(p); } catch (Exception ex) { err ??= ex.Message; } Finish(err); break; }
                         var ctx = SynchronizationContext.Current; string first = ps[0], from = Path.GetDirectoryName(first.TrimEnd('\\'));
                         Queue.Enqueue("delete", (ps.Length == 1 ? Path.GetFileName(first.TrimEnd('\\')) : ps.Length + " éléments") + " → corbeille", job =>

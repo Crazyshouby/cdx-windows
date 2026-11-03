@@ -443,6 +443,28 @@ static class SelfTest
 
             Do($"{{\"cmd\":\"fs.delete\",\"paths\":[{J(Path.Combine(dir, "sous"))},{J(Path.Combine(dir, "b (2).txt"))}],\"tab\":\"t\"}}");
             Check("suppression : dossier et fichier partis (corbeille)", !Directory.Exists(Path.Combine(dir, "sous")) && !File.Exists(Path.Combine(dir, "b (2).txt")));
+
+            // un disque sans corbeille (ici un lecteur subst jetable, comme une clé USB ou un partage) : rien n'est supprimé sans confirmation
+            Check("corbeille : un disque fixe en a une ; un partage réseau non", Recycle.HasBin(dir) && !Recycle.HasBin(@"\\localhost\C$\Windows"));
+            string letter = "QRSTUVWXYZ".Select(c => c + ":").FirstOrDefault(l => !Directory.Exists(l + "\\"));
+            if (letter == null) Check("corbeille : un lecteur libre pour subst", false);
+            else
+            {
+                string sb = Path.Combine(dir, "sans-corbeille"); Directory.CreateDirectory(sb); File.WriteAllText(Path.Combine(sb, "perdu.txt"), "à garder");
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("subst", $"{letter} \"{sb}\"") { CreateNoWindow = true, UseShellExecute = false })!.WaitForExit();
+                try
+                {
+                    string onSubst = letter + @"\perdu.txt";
+                    Check("corbeille : un lecteur subst n'en a pas", File.Exists(onSubst) && !Recycle.HasBin(onSubst));
+                    Do($"{{\"cmd\":\"fs.delete\",\"paths\":[{J(onSubst)}],\"tab\":\"t\"}}");
+                    Check("suppression vers un disque sans corbeille : rien n'est supprimé, la page doit faire confirmer (fs.confirmperm)",
+                        File.Exists(onSubst) && replies.Count == 1 && replies[0].GetProperty("type").GetString() == "fs.confirmperm" && replies[0].GetProperty("perm").GetArrayLength() == 1);
+                    Do($"{{\"cmd\":\"fs.delete\",\"paths\":[{J(onSubst)}],\"permOk\":true,\"tab\":\"t\"}}");
+                    Check("après confirmation (permOk) : supprimé, et le message dit « définitivement »",
+                        !File.Exists(onSubst) && replies.Any(x => x.GetProperty("type").GetString() == "fs.done" && x.TryGetProperty("error", out var em) && em.ValueKind == JsonValueKind.String && em.GetString().Contains("définitivement")));
+                }
+                finally { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("subst", $"{letter} /D") { CreateNoWindow = true, UseShellExecute = false })!.WaitForExit(); }
+            }
         }
         catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
         finally { try { Directory.Delete(dir, true); } catch { } }

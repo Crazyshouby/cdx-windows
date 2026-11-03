@@ -400,6 +400,11 @@ try {
   Js "emptyTrash()" | Out-Null
   Check "« Vider la corbeille » demande confirmation et n'envoie rien tant qu'on ne confirme pas" (((Js "!!document.getElementById('dy')") -eq 'true') -and ((Js "window.__spy.filter(m => m.cmd === 'fs.emptybin').length") -eq '0'))
   Js "document.getElementById('dn').click()" | Out-Null
+  # un disque sans corbeille : l'hôte a répondu fs.confirmperm ; la page demande, puis renvoie fs.delete avec permOk (chemin inexistant : l'hôte n'y fait rien)
+  Js "handlers['fs.confirmperm']({ tab: T().id, paths: ['Z:\\cle-absente\\a.txt'], perm: ['Z:\\cle-absente\\a.txt'] })" | Out-Null
+  Check "disque sans corbeille : la page demande avant de supprimer définitivement, sans rien envoyer" (((Js "!!document.getElementById('dy') && document.querySelector('#layer .tb-title').textContent") -eq 'Pas de corbeille') -and ((Js "window.__spy.filter(m => m.cmd === 'fs.delete').length") -eq '0'))
+  Js "document.getElementById('dy').click()" | Out-Null
+  Check "disque sans corbeille : confirmé, fs.delete repart avec permOk" ((Js "window.__spy.filter(m => m.cmd === 'fs.delete' && m.permOk === true && m.paths.length === 1 && m.paths[0].endsWith('a.txt')).length > 0") -eq 'true')
   Check "dans la corbeille, copier, coller, nouveau dossier, renommer et la recherche sont sans effet" ((Js "copy(false); paste(); newFolder(); rename(); startSearch(); window.__spy.filter(m => ['fs.copy','fs.paste','fs.newfolder'].includes(m.cmd)).length + ':' + !!T().search") -eq '0:false')
   Js "window.chrome.webview.postMessage = window.__real" | Out-Null
   Key 'Enter'

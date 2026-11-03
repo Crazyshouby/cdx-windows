@@ -88,7 +88,13 @@ static class Undo
             foreach (var p in paths)
             {
                 if (!Path.Exists(p)) { errs.Add("« " + Path.GetFileName(p) + " » est introuvable."); got.Add(null); continue; }
-                var e = Recycle.DeleteToBin(p); got.Add(e?.Id); if (e == null) errs.Add("« " + Path.GetFileName(p) + " » n'a pas pu aller à la corbeille.");
+                // Annuler ou Rétablir ne supprime jamais pour de bon : sans corbeille sur ce disque, l'élément reste où il est.
+                if (!Recycle.HasBin(p)) { errs.Add("« " + Path.GetFileName(p) + " » est resté en place : ce disque n'a pas de corbeille."); got.Add(null); continue; }
+                BinEntry e = null;
+                try { e = Recycle.DeleteToBin(p); } catch (OperationCanceledException) { }
+                got.Add(e?.Id);
+                if (e == null && Path.Exists(p)) errs.Add("« " + Path.GetFileName(p) + " » est resté en place : la corbeille ne pouvait pas le recevoir.");
+                else if (e == null) errs.Add("« " + Path.GetFileName(p) + " » a été supprimé définitivement : la corbeille ne pouvait pas le recevoir.");
             }
             ids = got; return First(errs);
         }

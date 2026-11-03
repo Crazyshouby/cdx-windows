@@ -45,6 +45,13 @@
   }
 
   const itemWord = n => n === 1 ? 'cet élément' : `ces ${n} éléments`;
+  // Une mise à la corbeille sur un disque qui n'en a pas (clé USB, partage réseau, lecteur subst) : le programme n'a rien supprimé et fait confirmer
+  // la suppression définitive. La réponse repart en fs.delete avec permOk.
+  handlers['fs.confirmperm'] = m => {
+    const n = m.perm.length, name = n === 1 ? m.perm[0].split('\\').pop() : '';
+    dialog({ title: 'Pas de corbeille', icon: 'avertissement', text: n === 1 ? `« ${name} » est sur un disque sans corbeille : il sera supprimé définitivement, impossible de l'annuler. Continuer ?` : `${n} éléments sont sur un disque sans corbeille : ils seront supprimés définitivement, impossible de l'annuler. Continuer ?`, yes: 'Supprimer', no: 'Annuler' },
+      () => post({ cmd: 'fs.delete', paths: m.paths, permOk: true, tab: m.tab }));
+  };
   // Supprimer pour de bon (Maj+Suppr) : pas de corbeille, pas d'annulation.
   function delPerm() {
     const s = selected(); if (!s.length || inTrash()) { if (inTrash()) purgeSel(); return; }
