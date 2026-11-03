@@ -25,38 +25,15 @@ class BarForm : HostForm
     protected override void OnFormClosing(FormClosingEventArgs e) { base.OnFormClosing(e); shell.Cleanup(); }
 }
 
-class StartForm : HostForm
+// Les fenêtres surgissantes du shell : toujours au-dessus, elles se ferment quand elles perdent le focus. Le menu Démarrer, le centre rapide
+// (ancré en bas à droite), la liste des setups d'Audio Linker (au-dessus du bouton de la barre : un menu déroulant natif sortirait de l'écran vers
+// le bas) et le menu contextuel d'un bouton de la barre (épingles, fenêtres). Avant, quatre classes identiques à la page et au rappel près.
+sealed class PopupForm : HostForm
 {
-    Shell shell => (Shell)app;
-    public StartForm(Shell s) : base(s, "start") { TopMost = true; }
-
-    protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); shell.OnStartDeactivated(); }
+    readonly Action onDeactivate;
+    public PopupForm(Shell s, string page, Action onDeactivate) : base(s, page) { TopMost = true; this.onDeactivate = onDeactivate; }
+    protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); onDeactivate(); }
 }
-
-// Le centre rapide : ancré en bas à droite, se ferme quand il perd le focus (comme le menu Démarrer).
-// La liste des setups d'Audio Linker, ouverte au-dessus du bouton de la barre (un menu déroulant natif sortirait de l'écran vers le bas) ; se ferme comme le centre rapide.
-class AudioMenuForm : HostForm
-{
-    Shell shell => (Shell)app;
-    public AudioMenuForm(Shell s) : base(s, "audiomenu") { TopMost = true; }
-    protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); shell.OnAudioMenuDeactivated(); }
-}
-
-// Le menu contextuel d'un bouton de la barre (épingles, fenêtres) : même principe que la liste des setups, au-dessus de la barre.
-class BarMenuForm : HostForm
-{
-    Shell shell => (Shell)app;
-    public BarMenuForm(Shell s) : base(s, "barmenu") { TopMost = true; }
-    protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); shell.OnBarMenuDeactivated(); }
-}
-
-class CenterForm : HostForm
-{
-    Shell shell => (Shell)app;
-    public CenterForm(Shell s) : base(s, "center") { TopMost = true; }
-    protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); shell.OnCenterDeactivated(); }
-}
-
 // Le sélecteur Alt+Tab : une petite fenêtre centrée, qui ne prend jamais le focus (le crochet clavier lit les touches).
 class SwitcherForm : HostForm
 {

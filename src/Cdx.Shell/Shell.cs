@@ -14,11 +14,11 @@ namespace Cdx;
 class Shell : IHostApp
 {
     public readonly BarForm Bar;
-    public readonly StartForm Start;
+    public readonly PopupForm Start;
     public readonly SwitcherForm Switch;
-    public readonly CenterForm Center;
-    public readonly AudioMenuForm AudioMenu;
-    public readonly BarMenuForm BarMenu;   // le menu contextuel d'un bouton de la barre (épingles, fenêtres), ouvert au-dessus de la barre
+    public readonly PopupForm Center;
+    public readonly PopupForm AudioMenu;
+    public readonly PopupForm BarMenu;   // le menu contextuel d'un bouton de la barre (épingles, fenêtres), ouvert au-dessus de la barre
     public uint CallbackMsg;
     readonly PinStore pinStore;
     bool barMenuOpen; Action<string> barMenuAct;
@@ -40,7 +40,7 @@ class Shell : IHostApp
     public Shell(string theme)
     {
         pinnedTheme = theme != null; this.theme = theme ?? Suite.ReadAccent(); root = Host.FindWebRoot();
-        Bar = new BarForm(this); Start = new StartForm(this); Switch = new SwitcherForm(this); Center = new CenterForm(this); AudioMenu = new AudioMenuForm(this); BarMenu = new BarMenuForm(this);
+        Bar = new BarForm(this); Start = new PopupForm(this, "start", OnStartDeactivated); Switch = new SwitcherForm(this); Center = new PopupForm(this, "center", OnCenterDeactivated); AudioMenu = new PopupForm(this, "audiomenu", OnAudioMenuDeactivated); BarMenu = new PopupForm(this, "barmenu", OnBarMenuDeactivated);
         pinStore = new PinStore(Path.Combine(Host.DataDir, "epingles.json"));
         Bar.Load += async (s, e) => { try { await InitAsync(); } catch (Exception ex) { Host.Log("initialisation échouée : " + ex); } };
     }
