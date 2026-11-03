@@ -20,6 +20,10 @@ jobs:
       - name: Pages follow the charter
         run: node tools/charte-lint.mjs web --manifest web/cdx/cdx-sync.json
 
+      # Chaque page porte une CSP qui n'autorise que ses propres scripts (aucun script en ligne, aucun attribut on…=) : voir tools/csp-check.mjs.
+      - name: Pages have a strict CSP
+        run: node tools/csp-check.mjs web
+
       - name: Build
         run: dotnet build Cdx.sln -c Release -o bin
 

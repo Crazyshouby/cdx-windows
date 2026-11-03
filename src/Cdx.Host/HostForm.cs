@@ -47,8 +47,19 @@ class HostForm : Form
         MapExtraHosts(c);
         // Une navigation hors des pages de la charte est refusée : sans cela, le bouton « précédent » de la souris (ou un lien) remplacerait la page.
         c.NavigationStarting += (s, e) => { if (!e.Uri.StartsWith("https://cdx.shell/")) { e.Cancel = true; Host.Log("navigation refusée : " + e.Uri); } };
+        // Une fenêtre qu'une page voudrait ouvrir (lien d'un courrier, d'un terminal, window.open) : jamais une fenêtre WebView2 sans contrôle.
+        // Une adresse web part dans le navigateur CDX ; tout le reste (cdx.shell, file:, javascript:…) est refusé.
+        c.NewWindowRequested += (s, e) =>
+        {
+            e.Handled = true;
+            if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var u) && (u.Scheme == Uri.UriSchemeHttp || u.Scheme == Uri.UriSchemeHttps) && !u.Host.Equals("cdx.shell", StringComparison.OrdinalIgnoreCase))
+            { string url = u.AbsoluteUri, from = Host.AppName; _ = Task.Run(() => Bus.Send("browser", "open-url", new { url }, from, launch: true)); }
+            else Host.Log("fenêtre refusée : " + e.Uri);
+        };
         c.WebMessageReceived += (s, e) =>
         {
+            // seules les pages de la charte parlent au programme (pas un cadre ni une page qui aurait échappé au filtre de navigation)
+            if (!e.Source.StartsWith("https://cdx.shell/", StringComparison.OrdinalIgnoreCase)) { Host.Log("message refusé : " + e.Source); return; }
             DroppedPaths = e.AdditionalObjects?.OfType<CoreWebView2File>().Select(f => f.Path).ToArray();
             // les messages du correcteur orthographique (cdx-spell.js : sp.check, sp.suggest, sp.add) sont servis par l'hôte commun (Spell.cs)
             try { if (!Spell.Handle(this, e.WebMessageAsJson)) app.OnMessage(this, e.WebMessageAsJson); } finally { DroppedPaths = null; }

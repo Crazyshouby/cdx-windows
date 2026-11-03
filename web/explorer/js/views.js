@@ -1,3 +1,5 @@
+// Une vignette qui ne se charge pas disparaît (écouteur en capture : la CSP de la page interdit les attributs onerror=).
+document.addEventListener('error', e => { if (e.target instanceof HTMLImageElement && e.target.hasAttribute('data-thumb')) e.target.remove(); }, true);
 // Les vues (lot 6) : détails, liste, icônes (petites, moyennes, grandes, avec vignettes d'images), regroupement (type, date, taille) et choix des colonnes.
 // La mise en page est calculée ici (position de chaque élément et des en-têtes de groupe) ; list.js ne dessine que ce qui est visible. Vue et groupe sont gardés par
 // dossier (réglage « views »), la dernière vue choisie devient celle des dossiers jamais réglés (« view.default ») ; les colonnes masquées sont « cols.hidden ».
@@ -110,7 +112,7 @@
     const name = `<span>${esc(dispName(it))}${it.r !== undefined ? `<i class="rd">${esc(it.r || '.')}</i>` : ''}</span>`;
     if (lay.ic) {
       const url = !it.d && !it.drive && IMG_EXT.has(extOf(it.b ?? it.n)) && typeof fileUrl === 'function' ? fileUrl(pathOf(it)) : null;
-      return `<div class="${cls} fc" data-i="${i}" style="left:${lay.xs[i]}px;top:${lay.ys[i]}px;width:${lay.cw}px;height:${lay.rh}px" title="${esc(it.n)}"><div class="ic" style="width:${lay.icon}px;height:${lay.icon}px">${pix(iconOf(it), lay.icon)}${url ? `<img src="${url}" loading="lazy" alt="" onerror="this.remove()">` : ''}</div><span class="nm">${name}</span></div>`;
+      return `<div class="${cls} fc" data-i="${i}" style="left:${lay.xs[i]}px;top:${lay.ys[i]}px;width:${lay.cw}px;height:${lay.rh}px" title="${esc(it.n)}"><div class="ic" style="width:${lay.icon}px;height:${lay.icon}px">${pix(iconOf(it), lay.icon)}${url ? `<img src="${url}" loading="lazy" alt="" data-thumb>` : ''}</div><span class="nm">${name}</span></div>`;
     }
     if (viewOf(t) === 'list') return `<div class="${cls} li" data-i="${i}" style="top:${lay.ys[i]}px;height:${lay.rh}px"><span class="nm">${pix(iconOf(it), 16)}${name}</span></div>`;
     const hid = hiddenCols();

@@ -94,8 +94,16 @@ static class Gmail
     public static byte[] BuildRaw(string from, string to, string cc, string bcc, string subject, string text, string inReplyTo, string references, IList<(string name, byte[] data, string mime)> files)
     {
         var sb = new StringBuilder();
-        void H(string k, string v) { if (!string.IsNullOrWhiteSpace(v)) sb.Append(k).Append(": ").Append(EncodeHeader(v)).Append("\r\n"); }
+        // Un saut de ligne dans une valeur ajouterait un en-tête (« Objet\r\nBcc: … ») : refusé, jamais nettoyé en silence.
+        static void NoBreak(string k, string v) { if (v != null && v.IndexOfAny(new[] { '\r', '\n' }) >= 0) throw new ArgumentException("saut de ligne refusé dans l'en-tête " + k); }
+        void H(string k, string v)
+        {
+            if (string.IsNullOrWhiteSpace(v)) return;
+            NoBreak(k, v);
+            sb.Append(k).Append(": ").Append(k == "Subject" ? EncodeHeader(v) : EncodeAddresses(v)).Append("\r\n");
+        }
         H("From", from); H("To", to); H("Cc", cc); H("Bcc", bcc); H("Subject", subject);
+        NoBreak("In-Reply-To", inReplyTo); NoBreak("References", references);
         if (!string.IsNullOrEmpty(inReplyTo)) { sb.Append("In-Reply-To: ").Append(inReplyTo).Append("\r\n"); sb.Append("References: ").Append((references + " " + inReplyTo).Trim()).Append("\r\n"); }
         sb.Append("Date: ").Append(DateTimeOffset.Now.ToString("ddd, dd MMM yyyy HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture)).Append("\r\n");   // zzz donne +01:00 : ramené à +0100 (RFC 2822) plus bas
         sb.Append("MIME-Version: 1.0\r\n");
@@ -111,7 +119,7 @@ static class Gmail
             sb.Append("--").Append(bnd).Append("\r\nContent-Type: text/plain; charset=\"UTF-8\"\r\nContent-Transfer-Encoding: base64\r\n\r\n").Append(body).Append("\r\n");
             foreach (var (name, data, mime) in files)
             {
-                string fn = EncodeHeader(name).Replace("\"", "");
+                string fn = EncodeHeader((name ?? "").Replace("\r", "").Replace("\n", "")).Replace("\"", "");
                 sb.Append("--").Append(bnd).Append("\r\nContent-Type: ").Append(string.IsNullOrEmpty(mime) ? "application/octet-stream" : mime).Append("; name=\"").Append(fn).Append("\"\r\nContent-Disposition: attachment; filename=\"").Append(fn).Append("\"\r\nContent-Transfer-Encoding: base64\r\n\r\n")
                   .Append(Convert.ToBase64String(data, Base64FormattingOptions.InsertLineBreaks)).Append("\r\n");
             }
@@ -123,6 +131,15 @@ static class Gmail
         return Encoding.UTF8.GetBytes(s);
     }
     public static string EncodeHeader(string v) => v.All(c => c < 128) ? v : "=?UTF-8?B?" + Convert.ToBase64String(Encoding.UTF8.GetBytes(v)) + "?=";
+    // Un en-tête d'adresses : seul le nom affiché est encodé (« =?UTF-8?B?…?= <adresse> ») ; encoder toute la valeur rendait l'adresse illisible
+    // pour le serveur dès qu'un nom portait un accent.
+    public static string EncodeAddresses(string h) => string.Join(", ", Addresses(h).Select(a =>
+    {
+        var m = Regex.Match(a, "^\"?(.*?)\"?\\s*<([^<>]+)>$");
+        if (!m.Success) return a;
+        string name = m.Groups[1].Value.Trim();
+        return name.Length == 0 ? "<" + m.Groups[2].Value + ">" : (name.All(c => c < 128) ? "\"" + name.Replace("\"", "") + "\"" : EncodeHeader(name)) + " <" + m.Groups[2].Value + ">";
+    }));
     public static string Mime(string file) => Path.GetExtension(file).ToLowerInvariant() switch
     {
         ".pdf" => "application/pdf", ".png" => "image/png", ".jpg" or ".jpeg" => "image/jpeg", ".gif" => "image/gif", ".webp" => "image/webp", ".txt" or ".md" => "text/plain", ".zip" => "application/zip",

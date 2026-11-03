@@ -50,7 +50,7 @@ try {
 
   "3. lecture d'un fil"
   Ctl 'cmd {"cmd":"ml.open","id":"t1"}' | Out-Null
-  Check "le fil s'ouvre : deux messages, l'objet en tête, le HTML dans un cadre isolé sans script, le texte brut en <pre>" ((Until { (Js "document.querySelectorAll('.msg').length") -eq 2 } 10000) -and ((Js "document.querySelector('.vh .subj').textContent") -match 'Facture octobre') -and ((Js "document.querySelector('.msg iframe').getAttribute('sandbox')") -notmatch 'allow-scripts') -and ((Js "document.querySelector('.msg iframe').getAttribute('srcdoc')") -match 'facture'))
+  Check "le fil s'ouvre : deux messages, l'objet en tête, le HTML dans un cadre isolé sans script, le texte brut en <pre>" ((Until { (Js "document.querySelectorAll('.msg').length") -eq 2 } 10000) -and ((Js "document.querySelector('.vh .subj').textContent") -match 'Facture octobre') -and ((Js "document.querySelector('.msg iframe').getAttribute('sandbox')") -notmatch 'allow-scripts|allow-same-origin') -and ((Js "document.querySelector('.msg iframe').getAttribute('srcdoc')") -match 'facture'))
   Check "ouvrir le fil le marque lu chez Google et dans la liste" ((Until { -not ((Labels 'm1') -contains 'UNREAD') -and -not ((Labels 'm2') -contains 'UNREAD') } 8000) -and (Until { (Js 'document.querySelector(".th[data-t=t1]").classList.contains("unread")') -eq 'false' } 5000))
   Check "les images distantes sont bloquées (CSP sans http), avec un bouton pour les afficher" (((Js "document.querySelector('.msg iframe').getAttribute('srcdoc')") -match "img-src data: cid:") -and ((Js "!!document.querySelector('[data-img]')") -eq 'true'))
   Js "document.querySelector('[data-img]').click()" | Out-Null
@@ -73,6 +73,9 @@ try {
   Js "compose('new')" | Out-Null
   Js ("document.getElementById('cto').value = 'dest@example.org'; document.getElementById('csub').value = 'Objet accentué : été'; document.getElementById('ctext').value = 'Bonjour'; attachFiles([{ path: " + ("$dl\piece.txt" | ConvertTo-Json) + ", name: 'piece.txt', size: 28 }]); sendCompose()") | Out-Null
   Check "envoyé : multipart avec la pièce jointe (Content-Disposition), objet encodé RFC 2047 et relu « été »" ((Until { @((Fake).sent).Count -ge 2 } 8000) -and ((Fake).sent[1].hasAttachment) -and ((Fake).sent[1].contentType -match 'multipart/mixed') -and ((Fake).sent[1].subject -match '^=\?UTF-8\?B\?') -and ((Fake).sent[1].subjectDecoded -eq 'Objet accentué : été') -and ((Fake).sent[1].raw -match 'filename="piece.txt"'))
+  $nSent = @((Fake).sent).Count
+  Ctl 'cmd {"cmd":"ml.send","to":"dest@example.org","subject":"x\r\nBcc: espion@example.org","text":"t"}' | Out-Null; Start-Sleep 2
+  Check "un saut de ligne dans l'objet (injection d'en-tête Bcc) : rien n'est envoyé" ((@((Fake).sent).Count -eq $nSent) -and -not ((Fake).sent | Where-Object { $_.raw -match 'espion@example.org' }))
   Check "la liste Envoyés montre le nouveau message" ((Ctl 'cmd {"cmd":"ml.list","label":"SENT"}') -eq 'ok' -and (Until { (Js "document.body.innerText") -match 'Objet accentué' } 8000))
 
   "6. actions sur les fils"

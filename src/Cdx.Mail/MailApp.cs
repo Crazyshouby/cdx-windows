@@ -68,8 +68,7 @@ sealed class MailApp : ApplicationContext, IHostApp
             f.Bounds = new Rectangle(160, 60, (int)(1320 * scale), (int)(800 * scale));
             f.Show(); Host.ForceForeground(f.Handle);
             await f.InitWebAsync(env, root, "mail/courrier.html?theme=" + theme, scale);
-            // un lien d'un courrier (cadre isolé, cible _blank) part dans le navigateur de la suite, jamais dans une fenêtre du moteur
-            f.Web.CoreWebView2.NewWindowRequested += (s, e) => { e.Handled = true; string u = e.Uri; if (u != null && (u.StartsWith("https://") || u.StartsWith("http://"))) _ = Task.Run(() => Bus.Send("browser", "open-url", new { url = u }, "mail", launch: true)); };
+            // un lien d'un courrier (cadre isolé, cible _blank) part dans le navigateur de la suite : HostForm s'en charge pour toutes les pages
             poll.Start();
             Host.Log("courrier ouvert");
         }

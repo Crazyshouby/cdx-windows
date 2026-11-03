@@ -1,0 +1,125 @@
+// Le script de interne.html, sorti de la page pour que sa politique de sécurité (CSP) n'autorise aucun script en ligne.
+  const $ = id => document.getElementById(id);
+  const page = new URLSearchParams(location.search).get('p') || 'newtab';
+  let data = { bookmarks: [], history: [], downloads: [], passwords: [], settings: null, sources: [] }, exts = null, msg = null;
+  const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+  const two = n => String(n).padStart(2, '0');
+  const when = ms => { const d = new Date(ms); return `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`; };
+  const size = b => { if (b == null || b < 0) return ''; const u = ['o', 'Ko', 'Mo', 'Go']; let i = 0, v = b; while (v >= 1024 && i < 3) { v /= 1024; i++; } return (i === 0 || v >= 10 ? Math.round(v) : v.toFixed(1).replace('.', ',')) + ' ' + u[i]; };
+  const go = url => post({ cmd: 'in.navigate', url });
+  const note = (text, err) => { msg = { text, err }; const m = $('msg'); if (m) { m.hidden = false; m.textContent = text; m.classList.toggle('err', !!err); } };
+  const msgBox = () => `<div class="msg ${msg && msg.err ? 'err' : ''}" id="msg" ${msg ? '' : 'hidden'}>${msg ? esc(msg.text) : ''}</div>`;
+
+  function confirmBox(title, text, onYes) {
+    const v = document.createElement('div'); v.className = 'veil';
+    v.innerHTML = `<div class="win active"><div class="tb"><span class="tb-title">${esc(title)}</span></div><div class="cb"><div class="row" style="padding:10px 4px">${pix('supprimer', 32)}<div>${esc(text)}</div></div><div class="btns"><button class="primary" id="y">Oui</button><button class="btn" id="n">Non</button></div></div></div>`;
+    document.body.appendChild(v); v.querySelector('#y').focus();
+    v.querySelector('#y').onclick = () => { v.remove(); onYes(); }; v.querySelector('#n').onclick = () => v.remove();
+    v.onkeydown = e => { if (e.key === 'Escape') v.remove(); };
+  }
+
+  const views = {
+    newtab() {
+      const favs = data.bookmarks.slice(0, 12), rec = data.history.slice(0, 8);
+      $('app').innerHTML = `<h1>Navigateur CDX</h1>
+        <input id="q" class="text-input search" type="text" placeholder="Rechercher sur le Web ou saisir une adresse" spellcheck="false" autocomplete="off" autofocus>
+        <fieldset class="grp blk"><legend>Favoris</legend>${favs.length ? `<div class="tiles">${favs.map((b, i) => `<button class="btn tile" data-u="${esc(b.url)}" title="${esc(b.url)}">${pix('serveur', 32)}<span>${esc(b.title)}</span></button>`).join('')}</div>` : '<div class="empty">Aucun favori : Ctrl+D ajoute la page ouverte.</div>'}</fieldset>
+        <fieldset class="grp blk"><legend>Récents</legend>${rec.length ? `<div class="list">${rec.map(h => `<div class="ri" data-u="${esc(h.url)}"><div class="t">${esc(h.title)}</div><div class="d">${esc(host(h.url))}</div></div>`).join('')}</div>` : '<div class="empty">Rien pour l’instant.</div>'}</fieldset>`;
+      $('q').focus(); $('q').onkeydown = e => { if (e.key === 'Enter' && $('q').value.trim()) go($('q').value); };
+    },
+    favoris() {
+      $('app').innerHTML = `<h1>Favoris</h1>` + (data.bookmarks.length ? `<div class="list">${data.bookmarks.map(b => `<div class="ri" data-u="${esc(b.url)}"><div><div class="t">${esc(b.title)}</div><div class="u">${esc(b.url)}</div></div><div class="acts"><button class="btn" data-rm="${esc(b.url)}">Retirer</button></div></div>`).join('')}</div>` : '<div class="empty">Aucun favori : Ctrl+D ajoute la page ouverte, et cdx://reglages importe ceux de Chrome ou d’Edge.</div>');
+    },
+    historique() {
+      const f = ($('hq') ? $('hq').value : '').toLowerCase();
+      const rows = data.history.filter(h => !f || h.title.toLowerCase().includes(f) || h.url.toLowerCase().includes(f)).slice(0, 400);
+      if (!$('hq')) $('app').innerHTML = `<h1>Historique</h1><div class="row"><input id="hq" class="text-input" placeholder="Rechercher dans l’historique…" spellcheck="false" style="flex:1"><button class="btn" id="hc">Effacer l’historique</button></div><div id="hl"></div>`;
+      $('hl').innerHTML = rows.length ? `<div class="list">${rows.map(h => `<div class="ri" data-u="${esc(h.url)}"><div><div class="t">${esc(h.title)}</div><div class="u">${esc(h.url)}</div></div><div class="d">${when(h.time)}</div></div>`).join('')}</div>` : '<div class="empty">Aucun résultat.</div>';
+      $('hq').oninput = () => views.historique();
+      $('hc').onclick = () => confirmBox('Effacer l’historique', 'Effacer tout l’historique de navigation ?', () => post({ cmd: 'in.history.clear' }));
+    },
+    telechargements() {
+      const d = data.downloads;
+      $('app').innerHTML = `<h1>Téléchargements</h1>` + (d.length ? `<div class="row"><span style="flex:1"></span><button class="btn" id="dx" title="Copies, déplacements et téléchargements, au même endroit">Fenêtre des transferts</button><button class="btn" id="dc">Effacer la liste</button></div><div class="list">${d.map(x => {
+        const pct = x.total > 0 ? Math.min(100, Math.round(100 * x.received / x.total)) : 0;
+        return `<div class="ri" data-noopen><div><div class="t">${esc(x.name)}</div>${x.state === 'progress' ? `<div class="gauge"><i style="width:${pct}%"></i></div><div class="u">${size(x.received)}${x.total > 0 ? ' sur ' + size(x.total) + ' (' + pct + ' %)' : ''}</div>` : `<div class="u">${x.state === 'done' ? 'Terminé · ' + size(x.total > 0 ? x.total : x.received) : 'Interrompu'} · ${esc(x.path)}</div>`}</div>
+          <div class="acts">${x.state === 'done' ? `<button class="btn" data-open="${x.id}">Ouvrir</button><button class="btn" data-rev="${x.id}">Dossier</button>` : x.state === 'progress' ? `<button class="btn" data-cancel="${x.id}">Annuler</button>` : ''}</div></div>`; }).join('')}</div>` : '<div class="empty">Aucun téléchargement.</div>');
+      if ($('dc')) $('dc').onclick = () => post({ cmd: 'in.dl.clear' });
+      if ($('dx')) $('dx').onclick = () => post({ cmd: 'in.xfers' });
+    },
+    // ---- extensions : celles du profil (dossiers non empaquetés sous extensions\), l'antipub uBlock Origin Lite en un bouton ----
+    extensions() {
+      const hasUbo = exts && exts.some(x => /ublock/i.test(x.name));
+      $('app').innerHTML = `<h1>Extensions</h1>${msgBox()}
+        <fieldset class="grp blk"><legend>Antipub</legend><p class="hint">uBlock Origin Lite bloque publicités et pisteurs (listes EasyList, EasyPrivacy…). Dernière version publiée sur GitHub, installée dans le profil du navigateur.</p>
+        <div class="row"><button class="btn" id="ubo" ${hasUbo ? 'title="Télécharge et remplace par la dernière version"' : ''}>${hasUbo ? 'Mettre à jour uBlock Origin Lite' : 'Installer uBlock Origin Lite'}</button><span class="faint" id="prog"></span></div></fieldset>
+        <fieldset class="grp blk"><legend>Installées</legend>${exts === null ? '<div class="empty">Lecture…</div>' : exts.length ? `<div class="list">${exts.map(x => `<div class="ri ${x.enabled ? '' : 'off'}"><div><div class="t">${esc(x.name)} <span class="faint">${esc(x.version || '')}</span></div><div class="u">${x.builtin ? 'Intégrée au moteur' : x.enabled ? 'Active' : 'Désactivée'}${x.folder ? ' · extensions\\' + esc(x.folder) : ''}</div></div>
+          <div class="acts">${x.builtin ? '' : `${x.options ? `<button class="btn" data-opt="${esc(x.id)}">Réglages</button>` : ''}<button class="btn" data-en="${esc(x.id)}" data-on="${x.enabled ? 0 : 1}">${x.enabled ? 'Désactiver' : 'Activer'}</button><button class="btn" data-rmx="${esc(x.id)}">Retirer</button>`}</div></div>`).join('')}</div>` : '<div class="empty">Aucune extension.</div>'}
+        <div class="row" style="margin-top:8px"><button class="btn" id="addx">Ajouter un dossier d’extension…</button><span class="faint">Une extension non empaquetée (dossier avec manifest.json), copiée dans le profil.</span></div></fieldset>`;
+      $('ubo').onclick = () => { $('ubo').disabled = true; $('prog').textContent = 'Préparation…'; post({ cmd: 'in.ext.install', name: 'uBOLite' }); };
+      $('addx').onclick = () => post({ cmd: 'in.ext.add' });
+    },
+    // ---- mots de passe importés (jamais affichés) ----
+    motsdepasse() {
+      const p = data.passwords;
+      $('app').innerHTML = `<h1>Mots de passe</h1>${msgBox()}
+        <p class="hint">Les identifiants importés d’un export CSV (Chrome : chrome://password-manager/settings → Exporter). Chiffrés pour ton compte Windows, remplis dans les pages de connexion du même site. Les mots de passe enregistrés par le navigateur lui-même ne sont pas listés ici.</p>
+        <div class="row"><button class="btn" id="imp">Importer un fichier CSV…</button><span style="flex:1"></span>${p.length ? '<button class="btn" id="clr">Tout retirer</button>' : ''}</div>
+        ${p.length ? `<div class="list">${p.map(c => `<div class="ri"><div><div class="t">${esc(c.user || '(sans nom)')}</div><div class="u">${esc(c.name ? c.name + ' · ' : '')}${esc(c.url)}</div></div><div class="acts"><button class="btn" data-pw="${esc(c.url)}" data-pu="${esc(c.user)}">Retirer</button></div></div>`).join('')}</div>` : '<div class="empty">Aucun identifiant importé.</div>'}`;
+      $('imp').onclick = () => post({ cmd: 'in.import.passwords' });
+      if ($('clr')) $('clr').onclick = () => confirmBox('Retirer les mots de passe', 'Retirer tous les identifiants importés ?', () => post({ cmd: 'in.pw.clear' }));
+    },
+    // ---- réglages maison : ce que le moteur ne montre pas ----
+    reglages() {
+      const s = data.settings; if (!s) { $('app').innerHTML = '<h1>Réglages</h1><div class="empty">Lecture…</div>'; return; }
+      const chk = (k, label, hint) => `<label class="row"><input type="checkbox" data-set="${k}" ${s[k] ? 'checked' : ''}><span>${label}</span>${hint ? `<span class="faint">${hint}</span>` : ''}</label>`;
+      $('app').innerHTML = `<h1>Réglages</h1>${msgBox()}
+        <fieldset class="grp blk"><legend>Recherche</legend><div class="row"><span>Moteur de la barre d’adresse</span><select class="btn lsel" id="eng">${s.engines.map(e => `<option value="${e.id}" ${e.id === s.search ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></div></fieldset>
+        <fieldset class="grp blk"><legend>Téléchargements</legend><div class="row"><span>Dossier</span><input class="text-input" id="ddir" value="${esc(s.downloadsFolder)}" readonly><button class="btn" id="dchoose">Choisir…</button>${s.downloadDir ? '<button class="btn" id="dreset" title="Revenir au dossier Téléchargements de Windows">Par défaut</button>' : ''}</div>${chk('askWhere', 'Demander où enregistrer chaque fichier')}</fieldset>
+        <fieldset class="grp blk"><legend>Au lancement</legend>${chk('restoreSession', 'Rouvrir les fenêtres et onglets de la dernière session', '(la session est enregistrée en continu)')}</fieldset>
+        <fieldset class="grp blk"><legend>Formulaires</legend>${chk('savePasswords', 'Proposer d’enregistrer les mots de passe', '(gestionnaire du moteur)')}${chk('autofill', 'Remplir automatiquement les formulaires et les identifiants importés')}</fieldset>
+        <fieldset class="grp blk"><legend>Importer depuis un autre navigateur</legend>
+          <p class="hint">Les favoris de Chrome et d’Edge sont lus directement dans leurs profils ; les mots de passe passent par leur export CSV (cdx://motsdepasse).</p>
+          ${data.sources.length ? `<div class="list">${data.sources.map(x => `<div class="ri"><div><div class="t">${esc(x.browser)} · ${esc(x.profile)}</div><div class="u">${x.count} favori${x.count > 1 ? 's' : ''} · ${esc(x.path)}</div></div><div class="acts"><button class="btn" data-imp="${esc(x.path)}">Importer les favoris</button></div></div>`).join('')}</div>` : '<div class="empty">Aucun profil Chrome ou Edge avec des favoris sur ce PC.</div>'}
+          <div class="row" style="margin-top:8px"><button class="btn" id="impf">Choisir un fichier de favoris…</button><span class="faint">Fichier « Bookmarks » ou export HTML (tous navigateurs)</span></div>
+          <div class="row"><button class="btn" id="impp">Importer des mots de passe (CSV)…</button></div></fieldset>
+        <fieldset class="grp blk"><legend>Données de navigation</legend><p class="hint">Cookies et sessions ouvertes, cache et stockage des sites. Les favoris et les mots de passe importés restent.</p>
+          <div class="row"><button class="btn" id="clear">Effacer les données des sites</button><button class="btn" id="clearh">… et l’historique</button></div></fieldset>`;
+      $('eng').onchange = () => post({ cmd: 'in.settings.set', key: 'search', value: $('eng').value });
+      document.querySelectorAll('[data-set]').forEach(el => el.onchange = () => post({ cmd: 'in.settings.set', key: el.dataset.set, value: el.checked }));
+      $('dchoose').onclick = () => post({ cmd: 'in.settings.choosedir' });
+      if ($('dreset')) $('dreset').onclick = () => post({ cmd: 'in.settings.set', key: 'downloadDir', value: '' });
+      $('impf').onclick = () => post({ cmd: 'in.import.bookmarks' }); $('impp').onclick = () => post({ cmd: 'in.import.passwords' });
+      $('clear').onclick = () => confirmBox('Effacer les données des sites', 'Cookies, sessions ouvertes, cache et stockage des sites : effacer ? Il faudra se reconnecter aux sites.', () => post({ cmd: 'in.settings.clear', history: false }));
+      $('clearh').onclick = () => confirmBox('Effacer les données et l’historique', 'Cookies, cache, stockage des sites et tout l’historique : effacer ?', () => post({ cmd: 'in.settings.clear', history: true }));
+    },
+  };
+  const render = () => (views[page] || views.newtab)();
+
+  document.addEventListener('click', e => {
+    const rm = e.target.closest('[data-rm]'); if (rm) { post({ cmd: 'in.bookmark.remove', url: rm.dataset.rm }); return; }
+    const o = e.target.closest('[data-open]'); if (o) { post({ cmd: 'in.dl.open', id: +o.dataset.open }); return; }
+    const r = e.target.closest('[data-rev]'); if (r) { post({ cmd: 'in.dl.reveal', id: +r.dataset.rev }); return; }
+    const c = e.target.closest('[data-cancel]'); if (c) { post({ cmd: 'in.dl.cancel', id: +c.dataset.cancel }); return; }
+    const en = e.target.closest('[data-en]'); if (en) { post({ cmd: 'in.ext.enable', id: en.dataset.en, on: en.dataset.on === '1' }); return; }
+    const rx = e.target.closest('[data-rmx]'); if (rx) { const x = (exts || []).find(k => k.id === rx.dataset.rmx); confirmBox('Retirer l’extension', `Retirer « ${x ? x.name : rx.dataset.rmx} » du navigateur (son dossier est supprimé) ?`, () => post({ cmd: 'in.ext.remove', id: rx.dataset.rmx })); return; }
+    const op = e.target.closest('[data-opt]'); if (op) { post({ cmd: 'in.ext.options', id: op.dataset.opt }); return; }
+    const im = e.target.closest('[data-imp]'); if (im) { post({ cmd: 'in.import.bookmarks', path: im.dataset.imp }); return; }
+    const pw = e.target.closest('[data-pw]'); if (pw) { post({ cmd: 'in.pw.remove', url: pw.dataset.pw, user: pw.dataset.pu }); return; }
+    const u = e.target.closest('[data-u]'); if (u && !e.target.closest('button[data-rm]')) go(u.dataset.u);
+  });
+  handlers.data = m => { data = m; render(); };
+  handlers.downloads = m => { if (m.items) { data.downloads = m.items; if (page === 'telechargements') render(); } };
+  handlers.extensions = m => { exts = m.items; if (page === 'extensions') render(); };
+  handlers.progress = m => { const p = $('prog'); if (p) p.textContent = m.text; };
+  handlers.done = m => {
+    if (m.error) note(m.error, true);
+    else if (m.what === 'bookmarks') note(`Favoris importés : ${m.added} ajouté${m.added > 1 ? 's' : ''}, ${m.skipped} déjà là.`);
+    else if (m.what === 'passwords') note(`Identifiants importés : ${m.added} ajouté${m.added > 1 ? 's' : ''}, ${m.skipped} ignoré${m.skipped > 1 ? 's' : ''}.`);
+    else if (m.what === 'ext') note('Extension installée.');
+    else if (m.what === 'clear') note('Données de navigation effacées.');
+    const p = $('prog'); if (p) p.textContent = ''; const b = $('ubo'); if (b) b.disabled = false;
+  };
+
+  if (!hasHost) { data = { bookmarks: [{ title: 'Documentation WebView2', url: 'https://learn.microsoft.com/fr-fr/microsoft-edge/webview2/', added: 1 }, { title: 'Messages', url: 'https://example.org', added: 2 }], history: [{ title: 'Exemple', url: 'https://example.org/a', time: Date.now() }], downloads: [{ id: 1, name: 'archive.zip', path: 'C:\\Users\\x\\Downloads\\archive.zip', state: 'progress', received: 4e6, total: 1e7 }, { id: 2, name: 'doc.pdf', path: 'C:\\Users\\x\\Downloads\\doc.pdf', state: 'done', received: 2e5, total: 2e5 }], passwords: [{ url: 'https://example.org', user: 'moi', name: 'Exemple' }], sources: [{ browser: 'Chrome', profile: 'Votre Chrome', path: 'C:\\...\\Bookmarks', count: 12 }], settings: { search: 'google', downloadDir: '', downloadsFolder: 'C:\\Users\\x\\Downloads', askWhere: false, restoreSession: true, savePasswords: true, autofill: true, engines: [{ id: 'google', name: 'Google' }, { id: 'duckduckgo', name: 'DuckDuckGo' }] } }; exts = [{ id: 'abc', name: 'uBlock Origin Lite', enabled: true, options: true, folder: 'uBOLite', version: '2026.10' }]; render(); }
+  else { post({ cmd: 'in.data' }); if (page === 'extensions') post({ cmd: 'in.ext.list' }); }
