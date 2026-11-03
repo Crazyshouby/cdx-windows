@@ -14,20 +14,20 @@ static partial class Fs
     public static (string kind, string name) DriveKind(DriveInfo d)
     {
         string k; try { k = d.DriveType switch { DriveType.Removable => "amovible", DriveType.Network => "reseau", DriveType.CDRom => "cdrom", _ => "fixe" }; } catch { k = "fixe"; }
-        string label = null; try { label = d.VolumeLabel; } catch { }
+        string? label = null; try { label = d.VolumeLabel; } catch { }
         if (string.IsNullOrEmpty(label)) label = k switch { "amovible" => "Disque amovible", "reseau" => "Lecteur réseau", "cdrom" => "Lecteur de DVD", _ => "Disque local" };
         return (k, label + " (" + d.Name.TrimEnd('\\') + ")");
     }
 
     // « \\serveur » (ou « \\serveur\ ») : la racine d'un serveur du réseau, dont on liste les partages.
-    public static bool IsServerRoot(string p) => p != null && System.Text.RegularExpressions.Regex.IsMatch(p, @"^\\\\[^\\?.][^\\]*\\?$");
+    public static bool IsServerRoot([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? p) => p != null && System.Text.RegularExpressions.Regex.IsMatch(p, @"^\\\\[^\\?.][^\\]*\\?$");
 
     [DllImport("netapi32.dll", CharSet = CharSet.Unicode)] static extern int NetShareEnum(string servername, int level, out IntPtr bufptr, int prefmaxlen, out int entriesread, out int totalentries, ref int resume_handle);
     [DllImport("netapi32.dll")] static extern int NetApiBufferFree(IntPtr buf);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct SHARE_INFO_1 { public string netname; public uint type; public string remark; }
 
     // Les partages « disque » visibles d'un serveur (les partages cachés en $ et les imprimantes n'y sont pas), comme un dossier.
-    public static object ListShares(string server, string tab)
+    public static object ListShares(string server, string? tab)
     {
         string host = server.Trim('\\');
         int resume = 0; var items = new List<object>();
@@ -53,10 +53,10 @@ static partial class Fs
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr sa, uint disp, uint flags, IntPtr tmpl);
-    [DllImport("kernel32.dll", SetLastError = true)] static extern bool DeviceIoControl(Microsoft.Win32.SafeHandles.SafeFileHandle h, uint code, byte[] inBuf, int inSize, IntPtr outBuf, int outSize, out int ret, IntPtr ov);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool DeviceIoControl(Microsoft.Win32.SafeHandles.SafeFileHandle h, uint code, byte[]? inBuf, int inSize, IntPtr outBuf, int outSize, out int ret, IntPtr ov);
 
     // Éjecte une clé USB ou un DVD (« E:\ ») : le volume est verrouillé (refusé si un programme y a un fichier ouvert), démonté, puis le support libéré. Null si c'est fait, sinon pourquoi pas.
-    public static string Eject(string drive)
+    public static string? Eject(string? drive)
     {
         if (string.IsNullOrEmpty(drive) || !System.Text.RegularExpressions.Regex.IsMatch(drive, @"^[A-Za-z]:\\?$")) return "Ce n'est pas un disque.";
         try { var di = new DriveInfo(drive[..1]); if (di.DriveType != DriveType.Removable && di.DriveType != DriveType.CDRom) return "Ce disque n'est pas amovible."; }
@@ -73,7 +73,7 @@ static partial class Fs
         return null;
     }
 
-    static object ListDrives(string tab)
+    static object ListDrives(string? tab)
     {
         var items = DriveInfo.GetDrives().Where(d => { try { return d.IsReady; } catch { return false; } }).Select(d => (object)new
         {
@@ -89,7 +89,7 @@ static partial class Fs
     // Lit un dossier et l'envoie par paquets de `chunk` éléments : « fs.list » (le premier, avec le chemin et l'espace libre ; `more` dit s'il en vient d'autres) puis « fs.list.more ».
     // Un très grand dossier s'affiche donc dès le premier paquet. `ct` : la lecture s'arrête dès que la page a demandé un autre dossier pour cet onglet (OperationCanceledException,
     // que l'appelant ignore). Un élément caché est marqué h:true (la page l'estompe).
-    public static void ListStream(string path, string tab, CancellationToken ct, Action<object> emit, int chunk = 4000)
+    public static void ListStream(string? path, string? tab, CancellationToken ct, Action<object> emit, int chunk = 4000)
     {
         try
         {
@@ -131,7 +131,7 @@ static partial class Fs
     }
 
     // La corbeille comme un dossier : chaque élément porte son nom d'origine (b), son dossier d'origine (r), sa date de suppression (m), sa taille, son chemin dans la corbeille (p) et son identifiant (id).
-    static object ListTrash(string tab, CancellationToken ct)
+    static object ListTrash(string? tab, CancellationToken ct)
     {
         var items = Recycle.List().Select(e => (object)new { n = Path.GetFileName(e.DataPath), b = Path.GetFileName(e.Original.TrimEnd('\\')), r = Path.GetDirectoryName(e.Original) ?? "", d = e.IsDir, s = e.IsDir ? -1L : e.Size, m = new DateTimeOffset(e.Deleted).ToUnixTimeMilliseconds(), p = e.DataPath, o = e.Original, id = e.Id }).ToList();
         ct.ThrowIfCancellationRequested();
@@ -139,10 +139,10 @@ static partial class Fs
     }
 
     // La lecture d'un coup (essais, commandes synchrones) : un seul message, tous les éléments.
-    public static object List(string path, string tab, CancellationToken ct = default)
+    public static object List(string? path, string? tab, CancellationToken ct = default)
     {
-        object result = null;
+        object? result = null;
         ListStream(path, tab, ct, o => result = o, int.MaxValue);
-        return result;
+        return result!;   // « ! » : ListStream envoie toujours un message (ou lève)
     }
 }

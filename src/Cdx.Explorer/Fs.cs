@@ -11,7 +11,7 @@ namespace Cdx;
 // pour les conflits et la progression ; la suppression envoie à la corbeille.
 static partial class Fs
 {
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern bool SHObjectProperties(IntPtr hwnd, uint type, string obj, string page);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern bool SHObjectProperties(IntPtr hwnd, uint type, string? obj, string? page);
 
     public static object Places()
     {
@@ -34,18 +34,18 @@ static partial class Fs
 
     // owner : fenêtre parente des boîtes de Windows ; send : où renvoyer les réponses (la page, ou l'auto-test).
     // Un travail long (effacer, vider la corbeille) fait sur un fil à part ; la réponse revient sur le fil de l'interface, si la fenêtre existe encore.
-    static void OffUi(IntPtr owner, Action<object> send, Func<string> work, Func<string, object> reply)
+    static void OffUi(IntPtr owner, Action<object> send, Func<string?> work, Func<string?, object> reply)
     {
         var ctx = SynchronizationContext.Current;
-        if (ctx == null) { string e; try { e = work(); } catch (Exception ex) { e = ex.Message; } send(reply(e)); return; }
-        Task.Run(() => { string e; try { e = work(); } catch (Exception ex) { e = ex.Message; } ctx.Post(_ => { if (WindowAlive == null || WindowAlive(owner)) send(reply(e)); }, null); });
+        if (ctx == null) { string? e; try { e = work(); } catch (Exception ex) { e = ex.Message; } send(reply(e)); return; }
+        Task.Run(() => { string? e; try { e = work(); } catch (Exception ex) { e = ex.Message; } ctx.Post(_ => { if (WindowAlive == null || WindowAlive(owner)) send(reply(e)); }, null); });
     }
 
     // Comme OffUi, avec plusieurs réponses, envoyées dans l'ordre sur le fil de l'interface. Sans contexte (essais), tout se fait sur place.
     static void OffUiMany(IntPtr owner, Action<object> send, Func<List<object>> work)
     {
         var ctx = SynchronizationContext.Current;
-        List<object> Run() { try { return work(); } catch (Exception ex) { return new List<object> { new { type = "fs.done", tab = (string)null, error = ex.Message } }; } }
+        List<object> Run() { try { return work(); } catch (Exception ex) { return new List<object> { new { type = "fs.done", tab = (string?)null, error = ex.Message } }; } }
         if (ctx == null) { foreach (var o in Run()) send(o); return; }
         Task.Run(() => { var res = Run(); ctx.Post(_ => { if (WindowAlive == null || WindowAlive(owner)) foreach (var o in res) send(o); }, null); });
     }
@@ -53,10 +53,11 @@ static partial class Fs
     static readonly Dictionary<(IntPtr, string), CancellationTokenSource> previews = new();   // l'aperçu en cours de chaque onglet
     public static void Handle(IntPtr owner, Action<object> send, string cmd, JsonElement r)
     {
-        string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-        string[] Paths() => r.TryGetProperty("paths", out var v) ? v.EnumerateArray().Select(x => x.GetString()).ToArray() : Array.Empty<string>();
-        string[] Ids() => r.TryGetProperty("ids", out var v) && v.ValueKind == JsonValueKind.Array ? v.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()).ToArray() : Array.Empty<string>();
-        string tab = Str("tab");
+        string? Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        string Req(string k) => Str(k) ?? throw new FormatException(k + " manquant");   // rattrapé plus bas (fs.done avec l'erreur), comme l'était l'exception levée sur le null
+        string?[] Paths() => r.TryGetProperty("paths", out var v) ? v.EnumerateArray().Select(x => x.GetString()).ToArray() : Array.Empty<string?>();   // un null du tableau reste null : chaque usage l'écarte
+        string[] Ids() => r.TryGetProperty("ids", out var v) && v.ValueKind == JsonValueKind.Array ? v.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToArray() : Array.Empty<string>();   // « ! » : une valeur JSON de type texte ne se lit jamais null
+        string? tab = Str("tab");
         try
         {
             switch (cmd)
@@ -64,12 +65,12 @@ static partial class Fs
                 case "fs.places": send(Places()); break;
                 case "fs.eject":   // hors du fil de l'interface : l'éjection peut attendre jusqu'à une seconde que Windows lâche le volume
                     {
-                        string drive = Str("drive");
-                        OffUiMany(owner, send, () => { string err = Eject(drive); var res = new List<object> { new { type = "fs.done", tab, error = err, ejected = err == null ? drive : null } }; if (err == null) res.Add(Places()); return res; });
+                        string? drive = Str("drive");
+                        OffUiMany(owner, send, () => { string? err = Eject(drive); var res = new List<object> { new { type = "fs.done", tab, error = err, ejected = err == null ? drive : null } }; if (err == null) res.Add(Places()); return res; });
                         break;
                     }
                 case "fs.list": send(List(Str("path"), tab)); break;
-                case "fs.open": Process.Start(new ProcessStartInfo(Str("path")) { UseShellExecute = true }); Host.Log("explorateur : ouvert " + Str("path")); break;
+                case "fs.open": Process.Start(new ProcessStartInfo(Req("path")) { UseShellExecute = true }); Host.Log("explorateur : ouvert " + Str("path")); break;
                 case "fs.copypath":   // « Copier le chemin » : chaque chemin entre guillemets, un par ligne (comme Windows)
                     { var ps = Paths().Where(p => !string.IsNullOrEmpty(p) && p.Length <= 520).Take(5000).ToArray(); if (ps.Length > 0) Clipboard.SetText(string.Join("\r\n", ps.Select(p => "\"" + p + "\""))); break; }
                 case "fs.openwith": if (!ShellData.OpenWithRun(Str("exe"), Str("path"))) send(new { type = "fs.done", tab, error = "Impossible d'ouvrir avec ce programme." }); break;
@@ -85,22 +86,22 @@ static partial class Fs
                     }
                 case "fs.new":
                     {
-                        string np = ShellData.CreateNew(Str("dir"), Str("ext"));
+                        string? np = ShellData.CreateNew(Str("dir"), Str("ext"));
                         if (np != null) { Undo.For(owner).Push(Undo.Created("Nouveau fichier", new[] { np })); send(Undo.State(owner)); }
-                        send(np != null ? new { type = "fs.done", tab, select = np, error = (string)null } : new { type = "fs.done", tab, select = (string)null, error = "Impossible de créer ce fichier." });
+                        send(np != null ? new { type = "fs.done", tab, select = np, error = (string?)null } : (object)new { type = "fs.done", tab, select = (string?)null, error = "Impossible de créer ce fichier." });
                         break;
                     }
                 case "fs.newshortcut":
                     {
-                        string sp = ShellData.CreateShortcut(Str("dir"), Str("name"), Str("target"));
+                        string? sp = ShellData.CreateShortcut(Str("dir"), Str("name"), Str("target"));
                         if (sp != null) { Undo.For(owner).Push(Undo.Created("Nouveau raccourci", new[] { sp })); send(Undo.State(owner)); }
-                        send(sp != null ? new { type = "fs.done", tab, select = sp, error = (string)null } : new { type = "fs.done", tab, select = (string)null, error = "Impossible de créer le raccourci (cible vide ?)." });
+                        send(sp != null ? new { type = "fs.done", tab, select = sp, error = (string?)null } : (object)new { type = "fs.done", tab, select = (string?)null, error = "Impossible de créer le raccourci (cible vide ?)." });
                         break;
                     }
                 case "fs.props": SHObjectProperties(owner, 0x2 /* SHOP_FILEPATH */, Str("path"), null); break;
                 case "fs.newfolder":
                     {
-                        string p = UniquePath(Str("dir"), "Nouveau dossier");
+                        string p = UniquePath(Req("dir"), "Nouveau dossier");
                         Directory.CreateDirectory(p);
                         Undo.For(owner).Push(Undo.Created("Nouveau dossier", new[] { p })); send(Undo.State(owner));
                         send(new { type = "fs.done", tab, select = p });
@@ -108,9 +109,9 @@ static partial class Fs
                     }
                 case "fs.rename":
                     {
-                        string src = Str("path"), name = Str("name");
+                        string src = Req("path"), name = Req("name");
                         if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Length == 0) { send(new { type = "fs.done", tab, error = "Nom invalide : les caractères \\ / : * ? \" < > | sont interdits." }); break; }
-                        string dst = Path.Combine(Path.GetDirectoryName(src.TrimEnd('\\')), name);
+                        string dst = Path.Combine(Path.GetDirectoryName(src.TrimEnd('\\')) ?? throw new IOException("La racine d'un disque ne se renomme pas."), name);   // (avant : ArgumentNullException, rattrapée de même)
                         if (!string.Equals(src, dst, StringComparison.Ordinal))
                         {
                             if (Directory.Exists(src)) Directory.Move(src, dst); else File.Move(src, dst);
@@ -123,29 +124,29 @@ static partial class Fs
                     {
                         // Hors du fil de l'interface : Windows parcourt tout l'arbre avant de le déplacer (un dossier de développement de 1 Go = des dizaines de secondes) ;
                         // sur le fil de l'interface, la fenêtre se figeait et la suppression semblait ne jamais se faire.
-                        var ps = Paths().Where(p => !string.IsNullOrEmpty(p) && Path.IsPathRooted(p) && Path.GetFileName(p.TrimEnd('\\')).Length > 0 && Path.Exists(p)).ToArray();
+                        var ps = Paths().OfType<string>().Where(p => !string.IsNullOrEmpty(p) && Path.IsPathRooted(p) && Path.GetFileName(p.TrimEnd('\\')).Length > 0 && Path.Exists(p)).ToArray();   // (OfType écarte les null, que le Where écartait déjà)
                         if (ps.Length == 0) { send(new { type = "fs.done", tab }); break; }
                         // Un disque sans corbeille (clé USB, partage, subst) : rien n'est supprimé avant que la page ait fait confirmer la suppression définitive.
                         var perm = ps.Where(p => !Recycle.HasBin(p)).ToHashSet(StringComparer.OrdinalIgnoreCase);
                         bool permOk = r.TryGetProperty("permOk", out var po) && po.ValueKind == JsonValueKind.True;
                         if (perm.Count > 0 && !permOk) { send(new { type = "fs.confirmperm", tab, paths = ps, perm = perm.ToArray() }); break; }
-                        var gone = new List<BinEntry>(); int noBin = 0, kept = 0; string firstErr = null;
-                        void Finish(string error)
+                        var gone = new List<BinEntry>(); int noBin = 0, kept = 0; string? firstErr = null;
+                        void Finish(string? error)
                         {
                             if (gone.Count > 0) { Undo.For(owner).Push(Undo.Deleted(gone.Count == 1 ? "Supprimer" : "Supprimer " + gone.Count + " éléments", gone)); send(Undo.State(owner)); }
-                            string msg = error ?? firstErr;
+                            string? msg = error ?? firstErr;
                             if (msg == null && kept > 0) msg = kept + " élément" + (kept > 1 ? "s n'ont" : " n'a") + " pas été supprimé" + (kept > 1 ? "s" : "") + " : la corbeille ne pouvait pas " + (kept > 1 ? "les" : "le") + " recevoir.";
                             if (msg == null && noBin > 0) msg = noBin + " élément" + (noBin > 1 ? "s ont" : " a") + " été supprimé" + (noBin > 1 ? "s" : "") + " définitivement (pas de corbeille sur ce disque).";
                             send(new { type = "fs.done", tab, error = msg });
                         }
                         void Recycle1(string p)
                         {
-                            if (perm.Contains(p)) { string e1 = Recycle.DeletePermanently(new[] { p }); lock (gone) { if (e1 == null) noBin++; else firstErr ??= e1; } return; }
+                            if (perm.Contains(p)) { string? e1 = Recycle.DeletePermanently(new[] { p }); lock (gone) { if (e1 == null) noBin++; else firstErr ??= e1; } return; }
                             try { var e = Recycle.DeleteToBin(p, owner); lock (gone) { if (e != null) gone.Add(e); else noBin++; } }
                             catch (OperationCanceledException) { lock (gone) kept++; }   // Windows a prévenu (trop gros pour la corbeille) et l'utilisateur a refusé
                         }
-                        if (Queue == null) { string err = null; foreach (var p in ps) try { Recycle1(p); } catch (Exception ex) { err ??= ex.Message; } Finish(err); break; }
-                        var ctx = SynchronizationContext.Current; string first = ps[0], from = Path.GetDirectoryName(first.TrimEnd('\\'));
+                        if (Queue == null) { string? err = null; foreach (var p in ps) try { Recycle1(p); } catch (Exception ex) { err ??= ex.Message; } Finish(err); break; }
+                        var ctx = SynchronizationContext.Current; string first = ps[0]; string? from = Path.GetDirectoryName(first.TrimEnd('\\'));
                         Queue.Enqueue("delete", (ps.Length == 1 ? Path.GetFileName(first.TrimEnd('\\')) : ps.Length + " éléments") + " → corbeille", job =>
                         {
                             job.Report(0, ps.Length);
@@ -166,11 +167,11 @@ static partial class Fs
                     {
                         var ps = Paths();
                         if (Queue == null) { send(new { type = "fs.done", tab, error = Recycle.DeletePermanently(ps) }); break; }
-                        var ctx = SynchronizationContext.Current; string first = ps.FirstOrDefault(x => !string.IsNullOrEmpty(x));
+                        var ctx = SynchronizationContext.Current; string? first = ps.FirstOrDefault(x => !string.IsNullOrEmpty(x));
                         if (first == null) { send(new { type = "fs.done", tab }); break; }
                         Queue.Enqueue("delete", ps.Length == 1 ? Path.GetFileName(first.TrimEnd('\\')) : ps.Length + " éléments", job =>
                         {
-                            string e = Copier.DeleteMany(ps, job);
+                            string? e = Copier.DeleteMany(ps, job);
                             if (e != null) throw new IOException(e);
                         }, j =>
                         {
@@ -185,7 +186,7 @@ static partial class Fs
                         OffUiMany(owner, send, () =>
                         {
                             var back = new List<string>(); var errs = new List<string>(); var res = new List<object>();
-                            foreach (var id in ids) { var (err, dest) = Recycle.Restore(id); if (err == null) back.Add(dest); else errs.Add(err); }
+                            foreach (var id in ids) { var (err, dest) = Recycle.Restore(id); if (err == null) back.Add(dest!); else errs.Add(err); }   // « ! » : sans erreur, Restore rend toujours le chemin retrouvé
                             if (back.Count > 0) { Undo.For(owner).Push(Undo.Created(back.Count == 1 ? "Restaurer" : "Restaurer " + back.Count + " éléments", back)); res.Add(Undo.State(owner)); }
                             res.Add(new { type = "fs.done", tab, error = errs.Count == 0 ? null : errs[0] + (errs.Count > 1 ? " (et " + (errs.Count - 1) + " autre" + (errs.Count > 2 ? "s" : "") + ")" : "") });
                             return res;
@@ -213,7 +214,7 @@ static partial class Fs
                     }
                 case "fs.preview":   // hors du fil de l'interface (un document lourd figeait toutes les fenêtres), annulé par l'aperçu suivant du même onglet
                     {
-                        string pp = Str("path"); var key = (owner, tab ?? ""); var cts = new CancellationTokenSource();
+                        string? pp = Str("path"); var key = (owner, tab ?? ""); var cts = new CancellationTokenSource();
                         lock (previews) { if (previews.TryGetValue(key, out var old)) old.Cancel(); previews[key] = cts; }
                         var ctx = SynchronizationContext.Current;
                         _ = Task.Run(() =>
@@ -229,7 +230,7 @@ static partial class Fs
                 case "fs.copy": SetClipboard(Paths(), r.TryGetProperty("cut", out var c) && c.GetBoolean()); break;
                 case "fs.paste":
                     {
-                        var (files, cut) = ClipboardFiles(); string pdir = Str("dir");
+                        var (files, cut) = ClipboardFiles(); string? pdir = Str("dir");
                         if (files.Count == 0) { send(new { type = "fs.done", tab }); break; }
                         RunTransfer(owner, send, files, pdir, cut, null, tab, cut ? () => Clipboard.Clear() : null);
                         break;
@@ -237,7 +238,7 @@ static partial class Fs
                 case "fs.drop":
                     {
                         bool mv = r.TryGetProperty("move", out var mvv) && mvv.ValueKind == JsonValueKind.True;
-                        var ps = Paths(); string dir = Str("dir");
+                        var ps = Paths(); string? dir = Str("dir");
                         RunTransfer(owner, send, ps, dir, mv, Str("conflict"), tab);
                         break;
                     }

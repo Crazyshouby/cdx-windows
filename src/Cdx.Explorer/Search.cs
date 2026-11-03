@@ -5,7 +5,7 @@ namespace Cdx;
 // La recherche dans les sous-dossiers : parcourt un dossier (ou, sans dossier, tous les disques fixes) en arrière-plan et envoie les éléments qui correspondent par paquets (« fs.found »).
 // Critères : des mots du nom (tous doivent s'y trouver ; « * » et « ? » sont des jokers), un type (dossiers, documents, images...), une date de modification et une taille.
 // Les liens et jonctions ne sont pas suivis (pas de boucle) ; les éléments cachés suivent le réglage « show.hidden » ; au plus MaxResults éléments.
-sealed record SearchSpec(string Root, string Query, string Kind, string Date, string Size);
+sealed record SearchSpec(string Root, string? Query, string? Kind, string? Date, string? Size);   // null : critère absent
 
 static class Search
 {
@@ -23,7 +23,7 @@ static class Search
     };
 
     // Le test d'un nom : chaque mot de la requête doit s'y trouver (sous-chaîne sans casse), ou, s'il contient « * » ou « ? », correspondre au joker.
-    public static Func<string, bool> NameMatcher(string query)
+    public static Func<string, bool> NameMatcher(string? query)
     {
         var words = (query ?? "").Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) return _ => true;
@@ -36,12 +36,12 @@ static class Search
         return n => tests.All(t => t(n));
     }
 
-    static DateTime? Cutoff(string date) => date switch
+    static DateTime? Cutoff(string? date) => date switch
     {
         "today" => DateTime.Today, "week" => DateTime.Now.AddDays(-7), "month" => DateTime.Now.AddDays(-30), "year" => DateTime.Now.AddDays(-365), _ => null,
     };
 
-    static (long min, long max)? SizeRange(string size) => size switch
+    static (long min, long max)? SizeRange(string? size) => size switch
     {
         "small" => (0, 1L << 20), "medium" => (1L << 20, 100L << 20), "large" => (100L << 20, long.MaxValue), "huge" => (1L << 30, long.MaxValue), _ => null,
     };
@@ -60,7 +60,7 @@ static class Search
     static bool ShowHidden() => Settings.Get("show.hidden") is { } n && n.GetValueKind() == System.Text.Json.JsonValueKind.True;
 
     // Parcourt et envoie. `emit` reçoit des messages « fs.found » ; le dernier a done = true. Lève OperationCanceledException si `ct` est annulé.
-    public static void Run(SearchSpec s, string tab, int sid, CancellationToken ct, Action<object> emit)
+    public static void Run(SearchSpec s, string? tab, int sid, CancellationToken ct, Action<object> emit)
     {
         var match = NameMatcher(s.Query);
         bool showHidden = ShowHidden();

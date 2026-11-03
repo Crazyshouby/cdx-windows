@@ -6,8 +6,8 @@ namespace Cdx;
 // Une suppression définitive n'est pas annulable (elle ne s'inscrit pas). 50 gestes au plus ; un nouveau geste efface la pile « rétablir ».
 sealed class Op
 {
-    public string Label;                  // « Renommer », « Déplacer »... (le menu dit « Annuler Renommer »)
-    public Func<string> Undo, Redo;       // rendent un message d'erreur, ou null si tout s'est bien passé
+    public required string Label;         // « Renommer », « Déplacer »... (le menu dit « Annuler Renommer »)
+    public required Func<string?> Undo, Redo;   // rendent un message d'erreur, ou null si tout s'est bien passé
 }
 
 sealed class UndoLog
@@ -19,33 +19,33 @@ sealed class UndoLog
     readonly object gate = new(), running = new();
 
     public void Push(Op op) { lock (gate) { undo.Add(op); if (undo.Count > Max) undo.RemoveAt(0); redo.Clear(); } }
-    public string UndoLabel { get { lock (gate) return undo.Count > 0 ? undo[^1].Label : null; } }
-    public string RedoLabel { get { lock (gate) return redo.Count > 0 ? redo[^1].Label : null; } }
+    public string? UndoLabel { get { lock (gate) return undo.Count > 0 ? undo[^1].Label : null; } }
+    public string? RedoLabel { get { lock (gate) return redo.Count > 0 ? redo[^1].Label : null; } }
     public int UndoCount { get { lock (gate) return undo.Count; } }
     public int RedoCount { get { lock (gate) return redo.Count; } }
 
     // Défait le dernier geste : (étiquette, erreur). Un geste qui échoue est retiré de la pile (on ne reste pas bloqué dessus).
-    public (string label, string error) DoUndo()
+    public (string? label, string? error) DoUndo()
     {
         lock (running)
         {
             Op op; lock (gate) { if (undo.Count == 0) return (null, null); op = undo[^1]; undo.RemoveAt(undo.Count - 1); }
-            string err = Safe(op.Undo); if (err == null) lock (gate) redo.Add(op);
+            string? err = Safe(op.Undo); if (err == null) lock (gate) redo.Add(op);
             return (op.Label, err);
         }
     }
 
-    public (string label, string error) DoRedo()
+    public (string? label, string? error) DoRedo()
     {
         lock (running)
         {
             Op op; lock (gate) { if (redo.Count == 0) return (null, null); op = redo[^1]; redo.RemoveAt(redo.Count - 1); }
-            string err = Safe(op.Redo); if (err == null) lock (gate) undo.Add(op);
+            string? err = Safe(op.Redo); if (err == null) lock (gate) undo.Add(op);
             return (op.Label, err);
         }
     }
 
-    static string Safe(Func<string> f) { try { return f(); } catch (OperationCanceledException) { return "Annulé."; } catch (Exception ex) { return ex.Message; } }
+    static string? Safe(Func<string?> f) { try { return f(); } catch (OperationCanceledException) { return "Annulé."; } catch (Exception ex) { return ex.Message; } }
 }
 
 static class Undo
@@ -57,14 +57,14 @@ static class Undo
     // Ce que la page doit savoir : ce qu'on peut annuler et rétablir (étiquettes), pour le menu et la barre d'état.
     public static object State(IntPtr window) { var l = For(window); return new { type = "fs.undostate", undo = l.UndoLabel, redo = l.RedoLabel }; }
 
-    static string First(List<string> errs) => errs.Count == 0 ? null : errs.Count == 1 ? errs[0] : errs[0] + " (et " + (errs.Count - 1) + " autre" + (errs.Count > 2 ? "s" : "") + ")";
+    static string? First(List<string> errs) => errs.Count == 0 ? null : errs.Count == 1 ? errs[0] : errs[0] + " (et " + (errs.Count - 1) + " autre" + (errs.Count > 2 ? "s" : "") + ")";
 
     // Déplace un élément (le dossier d'arrivée est créé au besoin) sans écraser : l'arrivée doit être libre.
-    static string MovePath(string from, string to)
+    static string? MovePath(string from, string to)
     {
         if (!Path.Exists(from)) return "« " + Path.GetFileName(from) + " » est introuvable.";
         if (Path.Exists(to)) return "« " + Path.GetFileName(to) + " » existe déjà.";
-        Directory.CreateDirectory(Path.GetDirectoryName(to));
+        Directory.CreateDirectory(Path.GetDirectoryName(to)!);   // « ! » : to est le chemin d'un élément dans un dossier, jamais la racine d'un disque
         bool dir = Directory.Exists(from);
         if (string.Equals(Path.GetPathRoot(from), Path.GetPathRoot(to), StringComparison.OrdinalIgnoreCase)) { if (dir) Directory.Move(from, to); else File.Move(from, to); }
         else
@@ -89,20 +89,20 @@ static class Undo
     public static Op Created(string label, IEnumerable<string> paths) => BinOp(label, paths.ToList(), null);
 
     // Des éléments supprimés (vers la corbeille) : défaire = les restaurer, refaire = les remettre à la corbeille. `entries` : leur origine et l'identifiant de leur entrée.
-    public static Op Deleted(string label, List<BinEntry> entries) => BinOp(label, entries.Select(e => e.Original).ToList(), entries.Select(e => e.Id).ToList());
+    public static Op Deleted(string label, List<BinEntry> entries) => BinOp(label, entries.Select(e => e.Original).ToList(), entries.Select(e => e.Id).ToList<string?>());
 
     // `ids` null : les éléments existent (leurs chemins) ; sinon ils sont à la corbeille (ces identifiants).
-    static Op BinOp(string label, List<string> paths, List<string> ids)
+    static Op BinOp(string label, List<string> paths, List<string?>? ids)
     {
-        string Bin()      // met les éléments à la corbeille et retient leurs identifiants
+        string? Bin()     // met les éléments à la corbeille et retient leurs identifiants
         {
-            var errs = new List<string>(); var got = new List<string>();
+            var errs = new List<string>(); var got = new List<string?>();   // null : l'élément n'est pas allé à la corbeille
             foreach (var p in paths)
             {
                 if (!Path.Exists(p)) { errs.Add("« " + Path.GetFileName(p) + " » est introuvable."); got.Add(null); continue; }
                 // Annuler ou Rétablir ne supprime jamais pour de bon : sans corbeille sur ce disque, l'élément reste où il est.
                 if (!Recycle.HasBin(p)) { errs.Add("« " + Path.GetFileName(p) + " » est resté en place : ce disque n'a pas de corbeille."); got.Add(null); continue; }
-                BinEntry e = null;
+                BinEntry? e = null;
                 try { e = Recycle.DeleteToBin(p); } catch (OperationCanceledException) { }
                 got.Add(e?.Id);
                 if (e == null && Path.Exists(p)) errs.Add("« " + Path.GetFileName(p) + " » est resté en place : la corbeille ne pouvait pas le recevoir.");
@@ -110,10 +110,11 @@ static class Undo
             }
             ids = got; return First(errs);
         }
-        string Unbin()    // sort les éléments de la corbeille, à leur place d'origine
+        string? Unbin()   // sort les éléments de la corbeille, à leur place d'origine
         {
             var errs = new List<string>();
-            foreach (var id in ids) { if (id == null) continue; var (err, _) = Recycle.Restore(id); if (err != null) errs.Add(err); }
+            // « ! » : Unbin n'est appelé que quand ids n'est pas null (voir le return)
+            foreach (var id in ids!) { if (id == null) continue; var (err, _) = Recycle.Restore(id); if (err != null) errs.Add(err); }
             ids = null; return First(errs);
         }
         return new Op { Label = label, Undo = () => ids == null ? Bin() : Unbin(), Redo = () => ids == null ? Bin() : Unbin() };

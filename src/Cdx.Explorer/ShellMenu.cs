@@ -69,21 +69,21 @@ static class ShellMenu
     const uint TPM_RETURNCMD = 0x100, TPM_RIGHTBUTTON = 2, MF_BYPOSITION = 0x400;
 
     // ---------- état pendant l'affichage (pour Forward) ----------
-    static IContextMenu2 cm2; static IContextMenu3 cm3;
+    static IContextMenu2? cm2; static IContextMenu3? cm3;   // non null pendant l'affichage seulement
     public static bool Active => cm2 != null || cm3 != null;
 
     // Les éléments doivent exister et se trouver dans le même dossier (c'est ce que sait faire le menu d'une sélection).
-    public static string[] Validate(IEnumerable<string> paths)
+    public static string[] Validate(IEnumerable<string>? paths)
     {
         var list = paths?.Where(p => !string.IsNullOrEmpty(p) && p.Length <= 520 && Path.IsPathRooted(p)).Select(p => p.TrimEnd('\\')).Where(p => p.Length > 2 && (File.Exists(p) || Directory.Exists(p))).Take(500).ToArray() ?? Array.Empty<string>();
         if (list.Length == 0) return list;
-        string parent = Path.GetDirectoryName(list[0]);
+        string? parent = Path.GetDirectoryName(list[0]);
         return list.All(p => string.Equals(Path.GetDirectoryName(p), parent, StringComparison.OrdinalIgnoreCase)) ? list : Array.Empty<string>();
     }
 
     sealed class Built : IDisposable
     {
-        public IContextMenu Cm; public IntPtr Menu; readonly List<IntPtr> pidls = new(); IShellFolder folder;
+        public IContextMenu? Cm; public IntPtr Menu; readonly List<IntPtr> pidls = new(); IShellFolder? folder;   // posés par Create, remis à null par Dispose
         public static Built Create(IntPtr hwnd, string[] paths, uint flags)
         {
             var b = new Built(); var kids = new List<IntPtr>();
@@ -100,7 +100,8 @@ static class ShellMenu
                     kids.Add(child);   // pointe dans `abs` : il vit autant que lui
                 }
                 var cmid = IID_IContextMenu;
-                int hr = b.folder.GetUIObjectOf(hwnd, (uint)kids.Count, kids.ToArray(), ref cmid, IntPtr.Zero, out var obj);
+                // « ! » : paths n'est jamais vide (Probe et Show le vérifient), le premier tour de la boucle a posé folder
+                int hr = b.folder!.GetUIObjectOf(hwnd, (uint)kids.Count, kids.ToArray(), ref cmid, IntPtr.Zero, out var obj);
                 if (hr != 0 || obj == null) throw new IOException("Windows ne fournit pas de menu (0x" + hr.ToString("X8") + ")");
                 b.Cm = (IContextMenu)obj;
                 b.Menu = CreatePopupMenu();
@@ -146,7 +147,7 @@ static class ShellMenu
             {
                 var info = new CMINVOKECOMMANDINFOEX { fMask = 0x4000 | 0x20000000 /* UNICODE | PTINVOKE */, hwnd = hwnd, lpVerb = (IntPtr)(cmd - FirstId), lpVerbW = (IntPtr)(cmd - FirstId), nShow = 1, ptX = x, ptY = y };
                 info.cbSize = Marshal.SizeOf<CMINVOKECOMMANDINFOEX>();
-                int hr = b.Cm.InvokeCommand(ref info);
+                int hr = b.Cm!.InvokeCommand(ref info);   // « ! » : Create pose Cm, ou lève
                 if (hr != 0) Host.Log("menu natif : la commande " + (cmd - FirstId) + " a rendu 0x" + hr.ToString("X8"));
             }
         }

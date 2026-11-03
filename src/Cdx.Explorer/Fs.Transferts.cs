@@ -17,9 +17,9 @@ static partial class Fs
         for (int i = 2; ; i++) { p = Path.Combine(dir, $"{stem} ({i}){ext}"); if (!Path.Exists(p)) return p; }
     }
 
-    static void SetClipboard(string[] paths, bool cut)
+    static void SetClipboard(string?[] paths, bool cut)
     {
-        var sc = new StringCollection(); sc.AddRange(paths);
+        var sc = new StringCollection(); sc.AddRange(paths!);   // « ! » : StringCollection accepte les null (Add(string?)) ; seule la signature d'AddRange dit string[]
         var data = new DataObject();
         data.SetFileDropList(sc);
         data.SetData("Preferred DropEffect", new MemoryStream(BitConverter.GetBytes(cut ? 2 : 1)));   // 2 = déplacer, 1 = copier : compatible avec l'Explorateur de Windows
@@ -30,14 +30,15 @@ static partial class Fs
     // d'origine donne « nom (2) ». Un nom déjà pris dans la destination est un CONFLIT : sans consigne (onConflict null), rien n'est fait et les noms sont rendus pour que la page demande ;
     // avec « replace » (remplacer), « keep » (garder les deux : « nom (2) ») ou « skip » (ignorer), l'opération suit. Les conflits ne passent jamais par les boîtes de Windows : elles s'ouvrent
     // sans fenêtre parente, peuvent rester cachées derrière les autres, et bloquent le fil d'interface pendant le glisser-déposer.
-    public sealed record TransferResult(string Error, List<string> Conflicts, List<(string src, string dst)> Done = null);
+    public sealed record TransferResult(string? Error, List<string>? Conflicts, List<(string src, string dst)>? Done = null);   // null : pas d'erreur, pas de conflit, rien de fait
 
     // Ce qu'un transfert va faire, une fois les conflits réglés : chaque élément avec sa destination. `Error` : refusé d'avance ; `Conflicts` : des noms pris, il faut une consigne.
-    sealed record TransferPlan(List<PlanItem> Items, bool Move, string Dir, string Error, List<string> Conflicts);
+    // Items est vide dans ces deux cas (il n'est lu qu'après eux).
+    sealed record TransferPlan(List<PlanItem> Items, bool Move, string? Dir, string? Error, List<string>? Conflicts);
 
-    static TransferPlan Plan(IEnumerable<string> sources, string dir, bool move, string onConflict)
+    static TransferPlan Plan(IEnumerable<string?> sources, string? dir, bool move, string? onConflict)
     {
-        if (string.IsNullOrEmpty(dir) || dir.Length > 520 || !Path.IsPathRooted(dir) || !Directory.Exists(dir)) return new(null, move, dir, "Dossier de destination introuvable.", null);
+        if (string.IsNullOrEmpty(dir) || dir.Length > 520 || !Path.IsPathRooted(dir) || !Directory.Exists(dir)) return new(new(), move, dir, "Dossier de destination introuvable.", null);
         string dirN = dir.TrimEnd('\\');
         var items = new List<(string src, bool isDir, string name, bool sameDir)>();
         foreach (var raw in sources)
@@ -47,13 +48,13 @@ static partial class Fs
             if (!isDir && !File.Exists(src)) continue;
             string name = Path.GetFileName(src);
             if (name.Length == 0) continue;   // la racine d'un disque ne se déplace pas
-            if (isDir && (string.Equals(src, dirN, StringComparison.OrdinalIgnoreCase) || dirN.StartsWith(src + "\\", StringComparison.OrdinalIgnoreCase))) return new(null, move, dir, "Impossible de placer un dossier dans lui-même.", null);
+            if (isDir && (string.Equals(src, dirN, StringComparison.OrdinalIgnoreCase) || dirN.StartsWith(src + "\\", StringComparison.OrdinalIgnoreCase))) return new(new(), move, dir, "Impossible de placer un dossier dans lui-même.", null);
             bool sameDir = string.Equals(Path.GetDirectoryName(src), dirN, StringComparison.OrdinalIgnoreCase);
             if (move && sameDir) continue;
             items.Add((src, isDir, name, sameDir));
         }
         var conflicts = items.Where(i => !i.sameDir && Path.Exists(Path.Combine(dir, i.name))).Select(i => i.name).ToList();
-        if (conflicts.Count > 0 && onConflict == null) return new(null, move, dir, null, conflicts);
+        if (conflicts.Count > 0 && onConflict == null) return new(new(), move, dir, null, conflicts);
         var plan = new List<PlanItem>();
         foreach (var (src, isDir, name, sameDir) in items)
         {
@@ -71,11 +72,11 @@ static partial class Fs
 
     static TransferResult ResultOf(CopyOutcome o)
     {
-        string err = o.Errors.Count == 0 ? null : o.Errors[0] + (o.Errors.Count > 1 ? " (et " + (o.Errors.Count - 1) + " autre" + (o.Errors.Count > 2 ? "s" : "") + ")" : "");
+        string? err = o.Errors.Count == 0 ? null : o.Errors[0] + (o.Errors.Count > 1 ? " (et " + (o.Errors.Count - 1) + " autre" + (o.Errors.Count > 2 ? "s" : "") + ")" : "");
         return new(err, null, o.Done);
     }
 
-    public static TransferResult Transfer(IEnumerable<string> sources, string dir, bool move, string onConflict = null)
+    public static TransferResult Transfer(IEnumerable<string?> sources, string? dir, bool move, string? onConflict = null)
     {
         var p = Plan(sources, dir, move, onConflict);
         if (p.Error != null || p.Conflicts != null) return new(p.Error, p.Conflicts);
@@ -83,7 +84,7 @@ static partial class Fs
     }
 
     // La file de tâches de fond (posée par le programme : sans elle, par exemple dans l'auto-test, les transferts se font sur place) et la question « cette fenêtre existe-t-elle encore ? ».
-    internal static JobQueue Queue;
+    internal static JobQueue? Queue;
     internal static Func<IntPtr, bool> WindowAlive = _ => true;
 
     // Le « 3 éléments » ou le nom d'un seul, pour intituler un transfert.
@@ -92,7 +93,7 @@ static partial class Fs
 
     // Le transfert d'une fenêtre : conflits d'abord (la page demande), puis, si la file existe, en tâche de fond (le résultat revient par `send` quand c'est fini) ; sinon sur place.
     // `afterOk` : à faire une fois le transfert réussi (vider le presse-papiers après un « couper »).
-    static void RunTransfer(IntPtr owner, Action<object> send, IEnumerable<string> sources, string dir, bool move, string onConflict, string tab, Action afterOk = null)
+    static void RunTransfer(IntPtr owner, Action<object> send, IEnumerable<string?> sources, string? dir, bool move, string? onConflict, string? tab, Action? afterOk = null)
     {
         var list = sources.ToList(); var p = Plan(list, dir, move, onConflict);
         if (p.Error != null || p.Conflicts != null) { send(Outcome(new(p.Error, p.Conflicts), tab, list, dir, move)); return; }
@@ -114,10 +115,10 @@ static partial class Fs
             }
             if (ctx != null) ctx.Post(_ => Back(), null); else Back();
         }
-        Job Start(TransferPlan q, string from)
+        Job Start(TransferPlan q, string? from)
         {
-            string parent = Path.GetDirectoryName(q.Items[0].Src);
-            return Queue.Enqueue(move ? "move" : "copy", TitleOf(q.Items), job =>
+            string parent = Path.GetDirectoryName(q.Items[0].Src)!;   // « ! » : Plan écarte les racines de disque, chaque source a un dossier parent
+            return Queue!.Enqueue(move ? "move" : "copy", TitleOf(q.Items), job =>   // « ! » : Start n'est appelé qu'après le test de Queue, plus haut
             {
                 var o = Copier.Run(q.Items, move, job);
                 var r = ResultOf(o); job.Tag = r; job.Failed.AddRange(o.Failed);
@@ -125,7 +126,7 @@ static partial class Fs
                 if (r.Error != null) throw new IOException(r.Error);
             }, Finish, j =>
             {
-                j.Items = q.Items.Count; j.To = FolderLabel(dir); j.Path = q.Items[0].Dst;
+                j.Items = q.Items.Count; j.To = FolderLabel(dir!); j.Path = q.Items[0].Dst;   // « ! » : Plan refuse un dossier vide (Error) avant tout départ
                 j.From = from ?? (q.Items.All(i => Path.GetDirectoryName(i.Src) == parent) ? FolderLabel(parent) : "plusieurs dossiers");
                 // « Réessayer » : seulement ce qui a échoué, en remplaçant ce qu'une copie interrompue aurait laissé à moitié
                 j.Retry = () =>
@@ -158,20 +159,20 @@ static partial class Fs
     }
 
     // Tous les éléments sont-ils sur le disque (ou le partage) de la destination ?
-    public static bool SameVolume(IEnumerable<string> paths, string dir)
+    public static bool SameVolume(IEnumerable<string?> paths, string? dir)
     {
-        string root(string p) { try { return Path.GetPathRoot(p) ?? ""; } catch { return ""; } }
+        string root(string? p) { try { return Path.GetPathRoot(p) ?? ""; } catch { return ""; } }
         string dr = root(dir); var valid = paths.Where(p => !string.IsNullOrEmpty(p) && Path.IsPathRooted(p)).ToList();
         return dr.Length > 0 && valid.Count > 0 && valid.All(p => string.Equals(root(p), dr, StringComparison.OrdinalIgnoreCase));
     }
 
     // Le résultat d'un dépôt, à renvoyer à la page : « fs.done » (avec l'erreur éventuelle) ou « fs.conflict » (noms déjà pris ; la page demande, puis renvoie fs.drop avec sa réponse).
-    static object Outcome(TransferResult r, string tab, IEnumerable<string> paths, string dir, bool move)
+    static object Outcome(TransferResult r, string? tab, IEnumerable<string?> paths, string? dir, bool move)
         => r.Conflicts is { Count: > 0 } ? new { type = "fs.conflict", tab, paths = paths.ToArray(), dir, move, names = r.Conflicts } : new { type = "fs.done", tab, error = r.Error };
 
     // Des fichiers glissés depuis une autre application (l'Explorateur de Windows, le Bureau) ou une autre fenêtre de l'Explorateur : leurs chemins viennent de WebView2 (HostForm.DroppedPaths).
     // Comme dans Windows : Maj déplace, Ctrl copie ; sans touche, on déplace sur le même disque et on copie d'un disque à l'autre.
-    public static void DropFiles(IntPtr owner, Action<object> send, IEnumerable<string> paths, string dir, bool shift, bool ctrl, string tab)
+    public static void DropFiles(IntPtr owner, Action<object> send, IEnumerable<string>? paths, string? dir, bool shift, bool ctrl, string? tab)
     {
         var list = (paths ?? Array.Empty<string>()).ToList();
         bool move = shift || (!ctrl && SameVolume(list, dir));

@@ -12,7 +12,7 @@ static class Settings
     const int MaxValueBytes = 256 * 1024, MaxKeys = 200;
     static readonly Regex KeyOk = new(@"^[a-z0-9][a-z0-9._\-]{0,63}$", RegexOptions.Compiled);
     static readonly object gate = new();
-    static JsonObject cache;
+    static JsonObject? cache;   // null : pas encore lu
 
     public static string FilePath => Path.Combine(Host.DataDir, "explorer.json");
 
@@ -36,13 +36,13 @@ static class Settings
         lock (gate) { using var d = JsonDocument.Parse(Load().ToJsonString()); return d.RootElement.Clone(); }
     }
 
-    public static JsonNode Get(string key)
+    public static JsonNode? Get(string key)
     {
         lock (gate) { var v = Load()[key]; return v?.DeepClone(); }
     }
 
     // Enregistre (ou, avec une valeur null, efface) un réglage. Refusé : clé hors du motif, valeur de plus de 256 Ko, plus de 200 clés. True : enregistré.
-    public static bool Set(string key, JsonElement value)
+    public static bool Set(string? key, JsonElement value)
     {
         if (key == null || !KeyOk.IsMatch(key)) return false;
         lock (gate)

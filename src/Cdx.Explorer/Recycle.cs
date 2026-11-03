@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -11,12 +12,12 @@ sealed record BinEntry(string Id, string DataPath, string Original, long Size, D
 
 static class Recycle
 {
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHEmptyRecycleBin(IntPtr hwnd, string root, uint flags);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHEmptyRecycleBin(IntPtr hwnd, string? root, uint flags);
 
     // Le « chemin » qui désigne la corbeille dans l'Explorateur (la page l'utilise comme un dossier).
     public const string TrashPath = "::corbeille";
 
-    static string sid;
+    static string? sid;
     static string Sid => sid ??= WindowsIdentity.GetCurrent().User?.Value ?? "";
 
     static IEnumerable<string> Roots()
@@ -27,7 +28,7 @@ static class Recycle
     public static string BinDir(string root) => Path.Combine(root, "$Recycle.Bin", Sid);
 
     // Le contenu d'un « $I » : version 1 (Vista, 7, 8 : 8 + 8 + 8 octets, puis le chemin sur 520 octets) ou 2 (10, 11 : même entête, puis la longueur du chemin en caractères, puis le chemin).
-    public static (long size, DateTime deleted, string original)? ParseInfo(byte[] b)
+    public static (long size, DateTime deleted, string original)? ParseInfo(byte[]? b)
     {
         if (b == null || b.Length < 28) return null;
         long ver = BitConverter.ToInt64(b, 0), size = BitConverter.ToInt64(b, 8), ft = BitConverter.ToInt64(b, 16);
@@ -47,7 +48,7 @@ static class Recycle
     }
 
     // Les éléments de la corbeille d'un disque (ou de tous les disques fixes si `root` est null).
-    public static List<BinEntry> List(string root = null)
+    public static List<BinEntry> List(string? root = null)
     {
         var res = new List<BinEntry>();
         foreach (var r in root != null ? new[] { root } : Roots().ToArray())
@@ -73,17 +74,17 @@ static class Recycle
     }
 
     // Un identifiant venu de la page est-il bien un « $I » de la corbeille de l'utilisateur ?
-    public static bool IsEntryId(string id)
+    public static bool IsEntryId([NotNullWhen(true)] string? id)
     {
         if (string.IsNullOrEmpty(id) || id.Length > 520 || !Path.IsPathRooted(id) || !Path.GetFileName(id).StartsWith("$I", StringComparison.Ordinal)) return false;
-        try { string dir = Path.GetDirectoryName(id); return Roots().Any(r => string.Equals(BinDir(r).TrimEnd('\\'), dir?.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)); } catch { return false; }
+        try { string? dir = Path.GetDirectoryName(id); return Roots().Any(r => string.Equals(BinDir(r).TrimEnd('\\'), dir?.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)); } catch { return false; }
     }
 
-    static BinEntry Read(string id)
+    static BinEntry? Read(string? id)
     {
         if (!IsEntryId(id) || !File.Exists(id)) return null;
         var info = ParseInfo(File.ReadAllBytes(id)); if (info == null) return null;
-        string data = Path.Combine(Path.GetDirectoryName(id), "$R" + Path.GetFileName(id)[2..]); bool isDir = Directory.Exists(data);
+        string data = Path.Combine(Path.GetDirectoryName(id)!, "$R" + Path.GetFileName(id)[2..]); bool isDir = Directory.Exists(data);   // « ! » : IsEntryId a vérifié que id est dans un dossier $Recycle.Bin
         return isDir || File.Exists(data) ? new BinEntry(id, data, info.Value.original, info.Value.size, info.Value.deleted, isDir) : null;
     }
 
@@ -104,12 +105,12 @@ static class Recycle
     // Met un fichier ou un dossier à la corbeille et rend son entrée ; null si Windows l'a supprimé pour de bon.
     // Par IFileOperation, sans boîte de confirmation ni de progression, mais avec l'avertissement de Windows quand un élément ne peut pas aller à la corbeille
     // (trop gros, disque sans corbeille) : l'utilisateur choisit, au lieu d'une suppression définitive silencieuse. S'il refuse, OperationCanceledException.
-    public static BinEntry DeleteToBin(string path, IntPtr owner = default)
+    public static BinEntry? DeleteToBin(string path, IntPtr owner = default)
     {
         // Le Shell veut un fil STA : celui de la file de tâches ne l'est pas, on lui en prête un le temps de l'opération.
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
         {
-            BinEntry res = null; Exception err = null;
+            BinEntry? res = null; Exception? err = null;
             var t = new Thread(() => { try { res = DeleteToBin(path, owner); } catch (Exception ex) { err = ex; } }) { IsBackground = true, Name = "corbeille" };
             t.SetApartmentState(ApartmentState.STA); t.Start(); t.Join();
             if (err != null) throw err;
@@ -117,7 +118,7 @@ static class Recycle
         }
         DateTime since = DateTime.Now.AddSeconds(-5);
         ShellDelete(path, owner);
-        string root = Path.GetPathRoot(path);
+        string? root = Path.GetPathRoot(path);
         return List(root).Where(e => e.Deleted >= since && string.Equals(e.Original.TrimEnd('\\'), path.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)).OrderByDescending(e => e.Deleted).FirstOrDefault();
     }
 
@@ -155,10 +156,10 @@ static class Recycle
 
     static void ShellDelete(string path, IntPtr owner)
     {
-        IFileOperation op = null; IShellItem item = null;
+        IFileOperation? op = null; IShellItem? item = null;
         try
         {
-            op = (IFileOperation)Activator.CreateInstance(Type.GetTypeFromCLSID(FileOperationClsid, true));
+            op = (IFileOperation)Activator.CreateInstance(Type.GetTypeFromCLSID(FileOperationClsid, true)!)!;   // « ! » : avec throwOnError, GetTypeFromCLSID lève plutôt que de rendre null ; CreateInstance ne rend null que pour un Nullable<T>
             // Pas de « Voulez-vous vraiment… » (la page a déjà demandé), mais l'avertissement de suppression définitive reste (FOF_WANTNUKEWARNING l'emporte sur FOF_NOCONFIRMATION).
             op.SetOperationFlags(FOF_ALLOWUNDO | FOFX_RECYCLEONDELETE | FOF_NOCONFIRMATION | FOF_WANTNUKEWARNING | FOF_SILENT | FOF_NOERRORUI);
             if (owner != IntPtr.Zero) op.SetOwnerWindow(owner);
@@ -177,13 +178,13 @@ static class Recycle
     }
 
     // Remet l'élément à sa place d'origine (le dossier est recréé s'il a disparu). Rend (message d'erreur ou null, chemin retrouvé). Un nom déjà pris à l'emplacement d'origine n'est jamais écrasé.
-    public static (string error, string dest) Restore(string id)
+    public static (string? error, string? dest) Restore(string id)
     {
         try
         {
             var e = Read(id); if (e == null) return ("L'élément n'est plus dans la corbeille.", null);
             if (Path.Exists(e.Original)) return ("« " + Path.GetFileName(e.Original) + " » existe déjà à son emplacement d'origine.", e.Original);
-            Directory.CreateDirectory(Path.GetDirectoryName(e.Original));
+            Directory.CreateDirectory(Path.GetDirectoryName(e.Original)!);   // « ! » : l'origine d'une entrée est un chemin complet (ParseInfo), jamais une racine de disque
             if (e.IsDir) Directory.Move(e.DataPath, e.Original); else File.Move(e.DataPath, e.Original);
             File.Delete(e.Id);
             return (null, e.Original);
@@ -202,9 +203,9 @@ static class Recycle
     }
 
     // Efface pour de bon des éléments de la corbeille (jamais irrécupérables par erreur : la page demande confirmation avant).
-    public static string Purge(IEnumerable<string> ids)
+    public static string? Purge(IEnumerable<string?> ids)
     {
-        string err = null;
+        string? err = null;
         foreach (var id in ids)
         {
             try { var e = Read(id); if (e == null) continue; DeleteTree(e.DataPath); File.Delete(e.Id); }
@@ -217,9 +218,9 @@ static class Recycle
     public static bool EmptyAll() => SHEmptyRecycleBin(IntPtr.Zero, null, 0x1 | 0x2 | 0x4 /* sans confirmation, sans progression, sans son */) == 0;
 
     // Supprime des éléments sans passer par la corbeille (Maj+Suppr, après confirmation) ; sans autre boîte. Rend le premier message d'erreur.
-    public static string DeletePermanently(IEnumerable<string> paths)
+    public static string? DeletePermanently(IEnumerable<string?> paths)
     {
-        string err = null;
+        string? err = null;
         foreach (var p in paths)
         {
             if (string.IsNullOrEmpty(p) || !Path.IsPathRooted(p) || p.Length > 520 || Path.GetFileName(p.TrimEnd('\\')).Length == 0) continue;   // jamais la racine d'un disque

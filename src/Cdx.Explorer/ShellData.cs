@@ -16,7 +16,7 @@ static class ShellData
     public sealed record SendItem(string Name, string Path, string Kind);   // Kind : « dir », « lnk » ou « drive »
 
     // ---------- chaînes localisées ----------
-    static string Indirect(string s)
+    static string? Indirect(string? s)
     {
         if (string.IsNullOrEmpty(s) || s[0] != '@') return s;
         var sb = new StringBuilder(260);
@@ -24,7 +24,7 @@ static class ShellData
     }
 
     // L'exécutable d'une commande de registre : « "C:\x\y.exe" "%1" » ou « C:\x\y.exe %1 ».
-    static string ExeOf(string command)
+    static string? ExeOf(string? command)
     {
         if (string.IsNullOrWhiteSpace(command)) return null;
         command = Environment.ExpandEnvironmentVariables(command.Trim());
@@ -32,7 +32,7 @@ static class ShellData
         return exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(exe) ? exe : null;
     }
 
-    static string AppPath(string exeName)
+    static string? AppPath(string exeName)
     {
         foreach (var hive in new[] { Registry.CurrentUser, Registry.LocalMachine })
         {
@@ -41,7 +41,7 @@ static class ShellData
         return null;
     }
 
-    static string FromSystem(string exeName)
+    static string? FromSystem(string exeName)
     {
         foreach (var d in new[] { Environment.SystemDirectory, Environment.GetFolderPath(Environment.SpecialFolder.Windows) })
         { string p = Path.Combine(d, exeName); if (File.Exists(p)) return p; }
@@ -50,11 +50,11 @@ static class ShellData
 
     // ---------- Ouvrir avec ----------
     // Les programmes que Windows connaît pour une extension (« .txt »), sans doublons, au plus 12 : la liste récente de l'Explorateur, celle des classes, les identifiants de programme associés.
-    public static List<(string name, string exe)> OpenWith(string ext)
+    public static List<(string name, string exe)> OpenWith(string? ext)
     {
         var res = new List<Prog>(); var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        void Add(string exe) { if (exe == null || !seen.Add(exe)) return; string name; try { name = FileVersionInfo.GetVersionInfo(exe).FileDescription; } catch { name = null; } res.Add(new Prog(string.IsNullOrWhiteSpace(name) ? Path.GetFileNameWithoutExtension(exe) : name.Trim(), exe)); }
-        string AppCommand(string exeName)
+        void Add(string? exe) { if (exe == null || !seen.Add(exe)) return; string? name; try { name = FileVersionInfo.GetVersionInfo(exe).FileDescription; } catch { name = null; } res.Add(new Prog(string.IsNullOrWhiteSpace(name) ? Path.GetFileNameWithoutExtension(exe) : name.Trim(), exe)); }
+        string? AppCommand(string exeName)
         {
             try { using var k = Registry.ClassesRoot.OpenSubKey(@"Applications\" + exeName + @"\shell\open\command"); var e = ExeOf(k?.GetValue(null) as string); if (e != null) return e; } catch { }
             return AppPath(exeName) ?? FromSystem(exeName);
@@ -77,7 +77,7 @@ static class ShellData
     }
 
     // Lance un programme sur un fichier : le programme doit exister, être un .exe, et le fichier aussi.
-    public static bool OpenWithRun(string exe, string path)
+    public static bool OpenWithRun(string? exe, string? path)
     {
         if (string.IsNullOrEmpty(exe) || string.IsNullOrEmpty(path) || !exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !Path.IsPathRooted(exe) || !File.Exists(exe) || !(File.Exists(path) || Directory.Exists(path))) return false;
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(path) };
@@ -86,7 +86,7 @@ static class ShellData
     }
 
     // « Choisir une autre application… » : la boîte de Windows.
-    public static void OpenAsDialog(string path)
+    public static void OpenAsDialog(string? path)
     {
         if (string.IsNullOrEmpty(path) || !(File.Exists(path) || Directory.Exists(path))) return;
         var psi = new ProcessStartInfo("rundll32.exe") { UseShellExecute = false };
@@ -123,7 +123,7 @@ static class ShellData
 
     // Ce que « Envoyer vers » doit faire d'un élément de la liste : un dossier (ou un disque) reçoit une copie, un programme reçoit les fichiers en arguments.
     // `item` doit appartenir à la liste (le dossier SendTo ou un disque amovible) : jamais un chemin quelconque envoyé par la page.
-    public static (string dir, string exe) SendToTarget(string item)
+    public static (string? dir, string? exe) SendToTarget(string? item)
     {
         if (string.IsNullOrEmpty(item)) return (null, null);
         bool inList = SendTo().Any(s => string.Equals(s.Path.TrimEnd('\\'), item.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase));
@@ -135,7 +135,7 @@ static class ShellData
         return (null, t.Value.target);
     }
 
-    public static void RunProgramOn(string exe, IEnumerable<string> paths)
+    public static void RunProgramOn(string? exe, IEnumerable<string?> paths)
     {
         if (exe == null || !File.Exists(exe)) return;
         var psi = new ProcessStartInfo(exe) { UseShellExecute = false };
@@ -148,7 +148,7 @@ static class ShellData
     {
         try
         {
-            dynamic sh = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+            dynamic sh = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell") ?? throw new COMException("WScript.Shell absent"))!;   // (absent : rattrapé plus bas, comme l'était l'ArgumentNullException) ; « ! » : CreateInstance ne rend null que pour un Nullable<T>
             dynamic sc = sh.CreateShortcut(lnk);
             string t = sc.TargetPath; string a = sc.Arguments;
             Marshal.FinalReleaseComObject(sc); Marshal.FinalReleaseComObject(sh);
@@ -158,14 +158,14 @@ static class ShellData
     }
 
     // Crée un raccourci « name.lnk » vers une cible (fichier, dossier ou adresse web) dans `dir` ; rend son chemin, ou null.
-    public static string CreateShortcut(string dir, string name, string target)
+    public static string? CreateShortcut(string? dir, string? name, string? target)
     {
         if (string.IsNullOrWhiteSpace(target) || !Directory.Exists(dir)) return null;
         name = string.Concat((string.IsNullOrWhiteSpace(name) ? "Raccourci" : name.Trim()).Split(Path.GetInvalidFileNameChars()));
         string path = Fs.UniquePath(dir, name + ".lnk");
         try
         {
-            dynamic sh = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell"));
+            dynamic sh = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell") ?? throw new COMException("WScript.Shell absent"))!;   // (de même)
             dynamic sc = sh.CreateShortcut(path);
             sc.TargetPath = target.Trim().Trim('"');
             if (Directory.Exists(target.Trim().Trim('"'))) sc.WorkingDirectory = target.Trim().Trim('"');
@@ -177,8 +177,8 @@ static class ShellData
     }
 
     // ---------- Nouveau (ShellNew) ----------
-    static List<NewKind> newCache;
-    sealed record Tpl(string Ext, string Prog, string FileName, byte[] Data, bool Null);
+    static List<NewKind>? newCache;
+    sealed record Tpl(string Ext, string? Prog, string? FileName, byte[]? Data, bool Null);   // sans Null ni Data, FileName est donné (NewKinds n'inscrit pas les autres)
     static readonly Dictionary<string, Tpl> templates = new(StringComparer.OrdinalIgnoreCase);
 
     // Les types de fichiers que Windows sait créer vides ou depuis un modèle (une entrée ShellNew dans le registre) : document texte, image bitmap, document Word... Gardé en mémoire.
@@ -197,15 +197,15 @@ static class ShellData
                 try
                 {
                     using var e = Registry.ClassesRoot.OpenSubKey(ext); if (e == null) continue;
-                    RegistryKey sn = e.OpenSubKey("ShellNew"); string prog = e.GetValue(null) as string;
+                    RegistryKey? sn = e.OpenSubKey("ShellNew"); string? prog = e.GetValue(null) as string;
                     if (sn == null) foreach (var sub in e.GetSubKeyNames()) { var c = e.OpenSubKey(sub + @"\ShellNew"); if (c != null) { sn = c; prog = sub; break; } }
                     if (sn == null) continue;
                     using (sn)
                     {
                         if (ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase) || sn.GetValue("Command") != null) continue;   // le raccourci a sa propre commande ; les commandes de modèle sont laissées à Windows
-                        bool isNull = sn.GetValue("NullFile") != null; string fn = sn.GetValue("FileName") as string; var data = sn.GetValue("Data") as byte[];
+                        bool isNull = sn.GetValue("NullFile") != null; string? fn = sn.GetValue("FileName") as string; var data = sn.GetValue("Data") as byte[];
                         if (!isNull && fn == null && data == null) continue;
-                        string friendly = null;
+                        string? friendly = null;
                         using (var pk = prog == null ? null : Registry.ClassesRoot.OpenSubKey(prog))
                             friendly = Indirect(pk?.GetValue("FriendlyTypeName") as string) ?? pk?.GetValue(null) as string;
                         if (string.IsNullOrWhiteSpace(friendly)) friendly = "Fichier " + ext[1..].ToUpperInvariant();
@@ -220,7 +220,7 @@ static class ShellData
     }
 
     // Crée « Nouveau <type>.<ext> » dans `dir` (nom unique) d'après le modèle ; rend son chemin, ou null.
-    public static string CreateNew(string dir, string ext)
+    public static string? CreateNew(string? dir, string? ext)
     {
         if (!Directory.Exists(dir)) return null;
         NewKinds();
@@ -234,7 +234,8 @@ static class ShellData
             else if (t.Data != null) File.WriteAllBytes(path, t.Data);
             else
             {
-                string src = t.FileName; if (!Path.IsPathRooted(src)) foreach (var d in new[] { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "ShellNew"), Environment.GetFolderPath(Environment.SpecialFolder.Templates) }) { var c = Path.Combine(d, src); if (File.Exists(c)) { src = c; break; } }
+                // « ! » : ni Null ni Data, le modèle a donc un FileName (voir Tpl)
+                string src = t.FileName!; if (!Path.IsPathRooted(src)) foreach (var d in new[] { Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "ShellNew"), Environment.GetFolderPath(Environment.SpecialFolder.Templates) }) { var c = Path.Combine(d, src); if (File.Exists(c)) { src = c; break; } }
                 if (!File.Exists(src)) return null;
                 File.Copy(src, path);
             }
@@ -260,7 +261,7 @@ static class ShellData
         try
         {
             if (Bus.Send("terminal", "open-path", new { path = dir }, "explorer")) return true;
-            string exe = Path.Combine(AppContext.BaseDirectory, "cdx-terminal.exe");
+            string? exe = Path.Combine(AppContext.BaseDirectory, "cdx-terminal.exe");
             if (!File.Exists(exe)) exe = Suite.AppPath("terminal");
             if (exe == null) return false;
             var psi = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(exe) };
@@ -271,7 +272,7 @@ static class ShellData
         catch (Exception ex) { Host.Log("terminal CDX : " + ex.Message); return false; }
     }
 
-    public static void OpenTerminal(string dir)
+    public static void OpenTerminal(string? dir)
     {
         if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
         if (OpenCdxTerminal(dir)) return;

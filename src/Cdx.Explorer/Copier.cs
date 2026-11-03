@@ -19,11 +19,11 @@ static class Copier
 {
     delegate uint CopyProgressRoutine(long total, long transferred, long streamSize, long streamTransferred, uint streamNo, uint reason, IntPtr src, IntPtr dst, IntPtr data);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    static extern bool CopyFileEx(string src, string dst, CopyProgressRoutine routine, IntPtr data, ref int cancel, uint flags);
+    static extern bool CopyFileEx(string src, string dst, CopyProgressRoutine? routine, IntPtr data, ref int cancel, uint flags);
     const uint COPY_FILE_FAIL_IF_EXISTS = 0x1, COPY_FILE_ALLOW_DECRYPTED_DESTINATION = 0x8;
     const uint PROGRESS_CONTINUE = 0, PROGRESS_CANCEL = 1;
     const int ERROR_REQUEST_ABORTED = 1235;
-    internal static Action<string, long> TestHook;   // réservé aux essais : appelé à chaque avancement d'un fichier (nom, octets copiés), sur le fil de la copie
+    internal static Action<string, long>? TestHook;   // réservé aux essais : appelé à chaque avancement d'un fichier (nom, octets copiés), sur le fil de la copie
 
     // Les chemins de plus de 260 caractères passent par le préfixe « \\?\ ».
     internal static string Long(string p)
@@ -58,7 +58,7 @@ static class Copier
     }
 
     // Exécute le plan. `job` null : en entier sur le fil appelant, sans progression (essais, appels sans file).
-    public static CopyOutcome Run(IEnumerable<PlanItem> plan, bool move, Job job)
+    public static CopyOutcome Run(IEnumerable<PlanItem> plan, bool move, Job? job)
     {
         var items = plan.ToList(); var o = new CopyOutcome();
         var sizes = new List<long>(); long total = 0; if (job != null) { foreach (var it in items) { long n = SizeOf(it, move); sizes.Add(n); total += n; } job.Report(0, Math.Max(total, 1)); }
@@ -74,7 +74,7 @@ static class Copier
             {
                 if (move && !it.Overwrite && SameVolume(it.Src, it.Dst) && !Path.Exists(it.Dst))   // même disque, rien en travers : on renomme
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(it.Dst));
+                    Directory.CreateDirectory(Path.GetDirectoryName(it.Dst)!);   // « ! » : Dst est un élément dans un dossier, jamais la racine d'un disque
                     if (it.IsDir) Directory.Move(Long(it.Src), Long(it.Dst)); else File.Move(Long(it.Src), Long(it.Dst));
                     o.Done.Add((it.Src, it.Dst)); continue;
                 }
@@ -110,16 +110,16 @@ static class Copier
     }
 
     // Un fichier : CopyFileEx avec progression, pause (on attend dans le rappel) et annulation (le rappel rend PROGRESS_CANCEL : Windows efface la copie partielle).
-    static bool CopyOne(string src, string dst, bool overwrite, Job job, long baseDone, long total, string name, List<string> created, CopyOutcome o)
+    static bool CopyOne(string src, string dst, bool overwrite, Job? job, long baseDone, long total, string name, List<string> created, CopyOutcome o)
     {
         try
         {
             if (job != null && job.WaitPaused()) throw new OperationCanceledException();   // aussi entre deux petits fichiers : pause et annulation répondent tout de suite
-            Directory.CreateDirectory(Path.GetDirectoryName(dst));
+            Directory.CreateDirectory(Path.GetDirectoryName(dst)!);   // « ! » : dst est un fichier dans un dossier
             bool existed = File.Exists(Long(dst));
             if (existed && overwrite) { try { File.SetAttributes(Long(dst), FileAttributes.Normal); } catch { } }
             int cancel = 0;
-            CopyProgressRoutine cb = job == null ? null : (tot, xfer, ss, sx, sn, reason, s, d, data) =>
+            CopyProgressRoutine? cb = job == null ? null : (tot, xfer, ss, sx, sn, reason, s, d, data) =>
             {
                 try { TestHook?.Invoke(name, xfer); } catch { }
                 if (job.WaitPaused()) return PROGRESS_CANCEL;
@@ -143,7 +143,7 @@ static class Copier
     }
 
     // Un dossier : l'arborescence est recréée, chaque fichier copié ; un fichier en échec n'arrête pas les autres (mais l'original du dossier ne sera pas effacé).
-    static bool CopyTree(PlanItem it, CopyOutcome o, Job job, long baseDone, long total, List<string> created, List<string> createdDirs)
+    static bool CopyTree(PlanItem it, CopyOutcome o, Job? job, long baseDone, long total, List<string> created, List<string> createdDirs)
     {
         bool all = true; long done = baseDone;
         if (!Directory.Exists(Long(it.Dst))) { Directory.CreateDirectory(Long(it.Dst)); createdDirs.Add(it.Dst); }
@@ -193,9 +193,9 @@ static class Copier
     }
 
     // Supprime pour de bon (Maj+Suppr, après confirmation) en rendant compte de l'avancement fichier par fichier ; rend le premier message d'erreur. Jamais la racine d'un disque ni un chemin relatif.
-    public static string DeleteMany(IEnumerable<string> paths, Job job)
+    public static string? DeleteMany(IEnumerable<string?> paths, Job? job)
     {
-        var tops = paths.Where(p => !string.IsNullOrEmpty(p) && Path.IsPathRooted(p) && p.Length <= 520 && Path.GetFileName(p.TrimEnd('\\')).Length > 0 && Path.Exists(p)).Select(p => p.TrimEnd('\\')).ToList();
+        var tops = paths.OfType<string>().Where(p => !string.IsNullOrEmpty(p) && Path.IsPathRooted(p) && p.Length <= 520 && Path.GetFileName(p.TrimEnd('\\')).Length > 0 && Path.Exists(p)).Select(p => p.TrimEnd('\\')).ToList();
         var files = new List<string>(); var dirs = new List<string>();
         foreach (var t in tops)
         {
@@ -214,7 +214,7 @@ static class Copier
                 catch { }
             }
         }
-        long total = files.Count + dirs.Count, done = 0; string err = null;
+        long total = files.Count + dirs.Count, done = 0; string? err = null;
         job?.Report(0, Math.Max(total, 1));
         foreach (var f in files)
         {

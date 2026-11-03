@@ -65,7 +65,7 @@ static partial class Fs
                 var sh = zip.GetEntry("xl/worksheets/sheet1.xml"); if (sh == null) return new { type = "fs.preview", path, kind = "error", error = "Classeur sans première feuille lisible" };
                 using (var r = Part(sh))
                 {
-                    int rows = 0; var cells = new List<string>(); string cellType = null; string val = null;
+                    int rows = 0; var cells = new List<string>(); string? cellType = null; string? val = null;
                     for (bool more = r.Read(); more && !Full();)
                     {
                         ct.ThrowIfCancellationRequested();
@@ -107,10 +107,11 @@ static partial class Fs
         catch (Exception ex) { return new { type = "fs.preview", path, kind = "error", error = "Document illisible : " + ex.Message }; }
     }
     // Aperçu d'un fichier texte : les 64 premiers Ko, décodés en UTF-16 / UTF-8 (avec ou sans BOM), à défaut en Latin-1. Un octet nul = binaire.
-    static object Preview(string path, string tab, CancellationToken ct = default)
+    static object Preview(string? path, string? tab, CancellationToken ct = default)
     {
         try
         {
+            if (path == null) return new { type = "fs.preview", path, kind = "error", error = "Fichier introuvable" };   // (avant : l'exception de FileInfo, rattrapée plus bas)
             var fi = new FileInfo(path);
             if (!fi.Exists) return new { type = "fs.preview", path, kind = "error", error = "Fichier introuvable" };
             string ext = fi.Extension.ToLowerInvariant();

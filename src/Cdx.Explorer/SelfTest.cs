@@ -19,7 +19,7 @@ static class SelfTest
         Directory.CreateDirectory(dir);
         var replies = new List<JsonElement>();
         void Send(object o) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(o)); replies.Add(d.RootElement.Clone()); }
-        void Do(string json) { replies.Clear(); using var d = JsonDocument.Parse(json); Fs.Handle(IntPtr.Zero, Send, d.RootElement.GetProperty("cmd").GetString(), d.RootElement); }
+        void Do(string json) { replies.Clear(); using var d = JsonDocument.Parse(json); Fs.Handle(IntPtr.Zero, Send, d.RootElement.GetProperty("cmd").GetString()!, d.RootElement); }   // « ! » : chaque message d'essai porte un cmd texte
         void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
         string J(string s) => JsonSerializer.Serialize(s);   // échappe les antislashs du chemin
 
@@ -112,7 +112,7 @@ static class SelfTest
                 Check("réglages : une clé hors du motif est refusée (majuscule, chemin, vide)", !Settings.Set("Vue", sj.RootElement) && !Settings.Set("../x", sj.RootElement) && !Settings.Set("", sj.RootElement) && !Settings.Set(null, sj.RootElement));
             }
             Settings.Reset();
-            Check("réglages : relus depuis le fichier après oubli de la mémoire", Settings.Get("vue.dossier")?["b"]?.AsArray().Count == 3 && File.Exists(Settings.FilePath) && !Directory.GetFiles(Path.GetDirectoryName(Settings.FilePath), Path.GetFileName(Settings.FilePath) + "*.tmp").Any());
+            Check("réglages : relus depuis le fichier après oubli de la mémoire", Settings.Get("vue.dossier")?["b"]?.AsArray().Count == 3 && File.Exists(Settings.FilePath) && !Directory.GetFiles(Path.GetDirectoryName(Settings.FilePath)!, Path.GetFileName(Settings.FilePath) + "*.tmp").Any());   // « ! » : FilePath est un fichier du dossier des données
             using (var nul = JsonDocument.Parse("null")) Check("réglages : une valeur null efface la clé", Settings.Set("vue.dossier", nul.RootElement) && Settings.Get("vue.dossier") == null);
             using (var big = JsonDocument.Parse("\"" + new string('x', 300 * 1024) + "\"")) Check("réglages : une valeur de plus de 256 Ko est refusée", !Settings.Set("gros", big.RootElement));
             File.WriteAllText(Settings.FilePath, "{ pas du json"); Settings.Reset();
@@ -166,12 +166,12 @@ static class SelfTest
             var kinds = ShellData.NewKinds();
             Check("Nouveau : Windows sait créer un document texte (modèle ShellNew de « .txt »)", kinds.Any(k => k.Ext == ".txt") && kinds.All(k => k.Name.Length > 0 && k.Ext != ".lnk"));
             string nd = Path.Combine(dir, "nouveaux"); Directory.CreateDirectory(nd);
-            string n1 = ShellData.CreateNew(nd, ".txt"), n2 = ShellData.CreateNew(nd, ".txt");
+            string? n1 = ShellData.CreateNew(nd, ".txt"), n2 = ShellData.CreateNew(nd, ".txt");
             Check("Nouveau : crée un fichier .txt vide, puis un second au nom différent", n1 != null && n2 != null && n1 != n2 && File.Exists(n1) && new FileInfo(n1).Length == 0 && n1.EndsWith(".txt") && Path.GetDirectoryName(n1) == nd);
             Check("Nouveau : une extension sans modèle ou un dossier inexistant donne null", ShellData.CreateNew(nd, ".zzqq9") == null && ShellData.CreateNew(Path.Combine(dir, "nulle"), ".txt") == null && ShellData.CreateNew(nd, null) == null);
-            string lnk = ShellData.CreateShortcut(nd, "vers cible", cible);
+            string? lnk = ShellData.CreateShortcut(nd, "vers cible", cible);
             Check("Raccourci : « vers cible.lnk » est créé et pointe vers le dossier", lnk != null && lnk.EndsWith("vers cible.lnk") && File.Exists(lnk) && ShellData.ResolveLink(lnk)?.target.TrimEnd('\\') == cible.TrimEnd('\\'));
-            string lnk2 = ShellData.CreateShortcut(nd, "vers cible", cible);
+            string? lnk2 = ShellData.CreateShortcut(nd, "vers cible", cible);
             Check("Raccourci : un second du même nom devient « vers cible (2).lnk »", lnk2 != null && lnk2.EndsWith("vers cible (2).lnk"));
             Check("Raccourci : une cible vide ou un dossier inexistant donne null", ShellData.CreateShortcut(nd, "x", "  ") == null && ShellData.CreateShortcut(Path.Combine(dir, "nulle"), "x", cible) == null);
             var st = ShellData.SendTo();
@@ -250,10 +250,10 @@ static class SelfTest
             string bin1 = Path.Combine(dir, "pour-corbeille.txt"); File.WriteAllText(bin1, "contenu à garder");
             var be = Recycle.DeleteToBin(bin1);
             Check("corbeille : DeleteToBin met le fichier à la corbeille et rend son entrée (origine, taille, date récente)", be != null && !File.Exists(bin1) && be.Original == bin1 && be.Size == new FileInfo(be.DataPath).Length && be.DataPath != null && File.Exists(be.DataPath) && (DateTime.Now - be.Deleted).TotalMinutes < 2 && !be.IsDir);
-            Check("corbeille : l'entrée est dans la liste et son identifiant est reconnu ; un chemin ordinaire ne l'est pas", Recycle.List().Any(x => x.Id == be.Id) && Recycle.IsEntryId(be.Id) && !Recycle.IsEntryId(bin1) && !Recycle.IsEntryId(@"C:\Windows\notepad.exe") && !Recycle.IsEntryId(null));
-            var (rerr, rdest) = Recycle.Restore(be.Id);
+            Check("corbeille : l'entrée est dans la liste et son identifiant est reconnu ; un chemin ordinaire ne l'est pas", Recycle.List().Any(x => x.Id == be!.Id) && Recycle.IsEntryId(be!.Id) && !Recycle.IsEntryId(bin1) && !Recycle.IsEntryId(@"C:\Windows\notepad.exe") && !Recycle.IsEntryId(null));
+            var (rerr, rdest) = Recycle.Restore(be!.Id);   // « ! » (ici et au-dessus) : be vérifié non null par l'essai précédent ; null, l'essai s'arrêterait sur l'exception, comme avant
             Check("corbeille : Restore remet le fichier à sa place avec son contenu, et l'entrée disparaît", rerr == null && rdest == bin1 && File.ReadAllText(bin1) == "contenu à garder" && !Recycle.List().Any(x => x.Id == be.Id));
-            var be2 = Recycle.DeleteToBin(bin1); File.WriteAllText(bin1, "un autre fichier au même nom");
+            var be2 = Recycle.DeleteToBin(bin1)!; File.WriteAllText(bin1, "un autre fichier au même nom");   // « ! » : ce disque a une corbeille (vérifié plus haut) ; null, l'essai s'arrêterait sur l'exception, comme avant
             var (cerr, _) = Recycle.Restore(be2.Id);
             Check("corbeille : restaurer sur un nom pris ne l'écrase jamais (message, l'entrée reste)", cerr != null && cerr.Contains("existe déjà") && File.ReadAllText(bin1) == "un autre fichier au même nom" && Recycle.List().Any(x => x.Id == be2.Id));
             Check("corbeille : Purge efface l'entrée pour de bon (« $R » et « $I »)", Recycle.Purge(new[] { be2.Id }) == null && !Recycle.List().Any(x => x.Id == be2.Id) && !File.Exists(be2.DataPath) && !File.Exists(be2.Id));
@@ -266,7 +266,7 @@ static class SelfTest
             // --- annuler / rétablir ---
             var ul = new UndoLog();
             string ua = Path.Combine(dir, "ua"); Directory.CreateDirectory(ua); string uf = Path.Combine(ua, "u1.txt"), ug = Path.Combine(ua, "sous", "u1.txt"); File.WriteAllText(uf, "u");
-            Directory.CreateDirectory(Path.GetDirectoryName(ug)); File.Move(uf, ug);
+            Directory.CreateDirectory(Path.GetDirectoryName(ug)!); File.Move(uf, ug);   // « ! » : ug est un fichier dans un dossier
             ul.Push(Undo.Moved("Déplacer", new List<(string, string)> { (uf, ug) }));
             Check("annuler : l'étiquette du dernier geste est dite (« Déplacer »), rien à rétablir", ul.UndoLabel == "Déplacer" && ul.RedoLabel == null && ul.UndoCount == 1);
             var u1 = ul.DoUndo();
@@ -282,7 +282,7 @@ static class SelfTest
             Check("annuler une création : l'élément va à la corbeille", c1 == ("Nouveau fichier", null) && !File.Exists(cf));
             var c2 = ul.DoRedo();
             Check("rétablir une création : il revient de la corbeille, avec son contenu", c2 == ("Nouveau fichier", null) && File.ReadAllText(cf) == "créé");
-            string df = Path.Combine(ua, "supprime.txt"); File.WriteAllText(df, "supprimé"); var de = Recycle.DeleteToBin(df);
+            string df = Path.Combine(ua, "supprime.txt"); File.WriteAllText(df, "supprimé"); var de = Recycle.DeleteToBin(df)!;   // (de même)
             ul.Push(Undo.Deleted("Supprimer", new List<BinEntry> { de }));
             var d1 = ul.DoUndo();
             Check("annuler une suppression : le fichier est restauré", d1 == ("Supprimer", null) && File.ReadAllText(df) == "supprimé");
@@ -312,7 +312,7 @@ static class SelfTest
             File.SetAttributes(Path.Combine(tree, "racine.txt"), FileAttributes.ReadOnly); var tracine = new DateTime(2020, 5, 17, 12, 30, 0, DateTimeKind.Utc); File.SetLastWriteTimeUtc(Path.Combine(tree, "racine.txt"), tracine);
             var rc = Fs.Transfer(new[] { tree }, dstDir, false);
             Check("moteur : copier un dossier recrée l'arborescence (dossier vide compris), le contenu, l'horodatage ; l'original reste intact", rc.Error == null && Directory.Exists(Path.Combine(dstDir, "arbre", "vide")) && File.ReadAllText(Path.Combine(dstDir, "arbre", "n1", "n2", "profond é.txt")) == "profond"
-                && File.GetLastWriteTimeUtc(Path.Combine(dstDir, "arbre", "racine.txt")) == tracine && File.Exists(Path.Combine(tree, "racine.txt")) && rc.Done.Count == 1);
+                && File.GetLastWriteTimeUtc(Path.Combine(dstDir, "arbre", "racine.txt")) == tracine && File.Exists(Path.Combine(tree, "racine.txt")) && rc.Done?.Count == 1);
             File.SetAttributes(Path.Combine(tree, "racine.txt"), FileAttributes.Normal);
             File.WriteAllText(Path.Combine(tree, "racine.txt"), "changé"); File.SetAttributes(Path.Combine(dstDir, "arbre", "racine.txt"), FileAttributes.ReadOnly);
             var rr = Fs.Transfer(new[] { tree }, dstDir, false, "replace");
@@ -321,7 +321,7 @@ static class SelfTest
             Check("moteur : « garder les deux » crée « arbre (2) » à côté, sans toucher au premier", rk.Error == null && Directory.Exists(Path.Combine(dstDir, "arbre (2)", "n1")) && File.ReadAllText(Path.Combine(dstDir, "arbre", "racine.txt")) == "changé");
             string mv = Path.Combine(srcDir, "a-deplacer"); Directory.CreateDirectory(mv); File.WriteAllText(Path.Combine(mv, "x.txt"), "x");
             var rm = Fs.Transfer(new[] { mv }, dstDir, true);
-            Check("moteur : déplacer sur le même disque renomme (le dossier arrive avec son contenu, l'original disparaît)", rm.Error == null && !Directory.Exists(mv) && File.ReadAllText(Path.Combine(dstDir, "a-deplacer", "x.txt")) == "x" && rm.Done[0].src == mv);
+            Check("moteur : déplacer sur le même disque renomme (le dossier arrive avec son contenu, l'original disparaît)", rm.Error == null && !Directory.Exists(mv) && File.ReadAllText(Path.Combine(dstDir, "a-deplacer", "x.txt")) == "x" && rm.Done?[0].src == mv);
             // chemin très long (plus de 260 caractères)
             string deep = srcDir; for (int k = 0; k < 6; k++) deep = Path.Combine(deep, new string('d', 50) + k);
             Directory.CreateDirectory(Copier.Long(deep)); File.WriteAllText(Copier.Long(Path.Combine(deep, "profond.txt")), "très long");
@@ -334,7 +334,7 @@ static class SelfTest
             var mq = new JobQueue(); string mbig = Path.Combine(srcDir, "gros.bin"); MakeBig(mbig, 64); string bigDst = Path.Combine(dstDir, "gros.bin");
             using (var mgate = new ManualResetEventSlim(false))
             {
-                Job pj = null; CopyOutcome po = null;
+                Job pj = null!; CopyOutcome? po = null;   // « null! » : pj est posé par Enqueue (et par le corps de la tâche) avant tout usage
                 Copier.TestHook = (name, x) => { if (name == "gros.bin" && x >= (1 << 20) && !mgate.IsSet) { pj.SetPaused(true); mgate.Set(); } };
                 var plan = new List<PlanItem> { new PlanItem(mbig, false, bigDst, false) };
                 pj = mq.Enqueue("copy", "gros.bin", job => { pj = job; po = Copier.Run(plan, false, job); });
@@ -342,7 +342,7 @@ static class SelfTest
                 Check("pause : la copie s'arrête au méga-octet demandé et n'avance plus tant qu'on ne la reprend pas", hit && md1 == md2 && md2 < (64L << 20) && pj.Total == (64L << 20) && pj.State == JobState.Running);
                 bool paused = mq.Pause(pj.Id) && pj.State == JobState.Paused; bool resumed = mq.Resume(pj.Id) && pj.State == JobState.Running;
                 Check("pause : la file annonce la tâche « en pause » puis « en cours » à la reprise", paused && resumed);
-                Check("reprise : la copie se termine, le fichier est identique à l'original (même empreinte)", WaitFor(() => pj.State == JobState.Done, 20000) && File.Exists(bigDst) && Sha(mbig) == Sha(bigDst) && po.Done.Count == 1 && pj.Done == pj.Total);
+                Check("reprise : la copie se termine, le fichier est identique à l'original (même empreinte)", WaitFor(() => pj.State == JobState.Done, 20000) && File.Exists(bigDst) && Sha(mbig) == Sha(bigDst) && po?.Done.Count == 1 && pj.Done == pj.Total);
                 Copier.TestHook = null;
             }
             File.Delete(bigDst);
@@ -350,7 +350,7 @@ static class SelfTest
             // annulation en plein fichier : rien de moitié copié
             using (var mgate = new ManualResetEventSlim(false))
             {
-                Job cj = null; CopyOutcome co = null;
+                Job cj = null!; CopyOutcome? co = null;   // (de même)
                 Copier.TestHook = (name, x) => { if (name == "gros.bin" && x >= (1 << 20) && !mgate.IsSet) { cj.SetPaused(true); mgate.Set(); } };
                 var plan = new List<PlanItem> { new PlanItem(mbig, false, bigDst, false) };
                 cj = mq.Enqueue("copy", "gros.bin", job => { cj = job; co = Copier.Run(plan, false, job); });
@@ -362,7 +362,7 @@ static class SelfTest
             string many = Path.Combine(srcDir, "lot"); Directory.CreateDirectory(many); foreach (var n in new[] { "f1.bin", "f2.bin", "f3.bin" }) MakeBig(Path.Combine(many, n), 4);
             using (var mgate = new ManualResetEventSlim(false))
             {
-                Job dj = null; CopyOutcome dout = null;
+                Job dj = null!; CopyOutcome? dout = null;   // (de même)
                 Copier.TestHook = (name, x) => { if (name == "f2.bin" && x >= (1 << 20) && !mgate.IsSet) { dj.SetPaused(true); mgate.Set(); } };
                 var plan = new List<PlanItem> { new PlanItem(many, true, Path.Combine(dstDir, "lot"), false) };
                 dj = mq.Enqueue("copy", "lot", job => { dj = job; dout = Copier.Run(plan, false, job); });
@@ -413,8 +413,8 @@ static class SelfTest
                 Do($"{{\"cmd\":\"fs.drop\",\"paths\":[{J(lk2)}],\"dir\":{J(dq)},\"move\":false,\"tab\":\"t\"}}");
                 bool failed = WaitFor(() => replies.Any(x => x.GetProperty("type").GetString() == "fs.done" && x.TryGetProperty("error", out var ee) && ee.ValueKind == JsonValueKind.String), 10000);
                 var fj = Fs.Queue.Snapshot().Last();
-                Check("file de tâches : une copie avec un fichier verrouillé finit « échec » avec le message, et sait quoi réessayer", failed && fj.State == JobState.Failed && fj.Error.Contains("tenu.txt") && fj.Failed.Count == 1 && fj.Retry != null);
-                hold2.Dispose(); var again = fj.Retry();
+                Check("file de tâches : une copie avec un fichier verrouillé finit « échec » avec le message, et sait quoi réessayer", failed && fj.State == JobState.Failed && fj.Error?.Contains("tenu.txt") == true && fj.Failed.Count == 1 && fj.Retry != null);
+                hold2.Dispose(); var again = fj.Retry?.Invoke();
                 Check("file de tâches : « réessayer » ne refait que l'élément en échec et mène la copie à terme", again != null && WaitFor(() => again.State == JobState.Done, 10000) && File.ReadAllText(Path.Combine(dq, "verrou3", "tenu.txt")) == "tenu");
                 Do($"{{\"cmd\":\"fs.deleteperm\",\"paths\":[{J(Path.Combine(dq, "verrou3"))}],\"tab\":\"t\"}}");
                 Check("file de tâches : la suppression définitive passe aussi par la file (fichier par fichier) et efface le dossier", WaitFor(() => !Directory.Exists(Path.Combine(dq, "verrou3")), 10000) && Fs.Queue.Snapshot().Last().Kind == "delete" && WaitFor(() => Fs.Queue.Snapshot().Last().State == JobState.Done, 5000));
@@ -473,8 +473,8 @@ static class SelfTest
             Zip(xlsx, ("xl/sharedStrings.xml", $"<sst xmlns=\"{sns}\"><si><t>ligne</t></si></sst>"), ("xl/worksheets/sheet1.xml", sheet.ToString()));
             var swx = System.Diagnostics.Stopwatch.StartNew();
             var px = JsonDocument.Parse(JsonSerializer.Serialize(Fs.OfficePreview(xlsx, ".xlsx"))).RootElement;
-            string xt = px.GetProperty("text").GetString();
-            Check($"aperçu Excel en flux : 100 000 lignes, arrêt à 300, chaînes partagées résolues, tronqué ({swx.ElapsedMilliseconds} ms)", xt.StartsWith("ligne\t1\nligne\t2\n") && xt.Split('\n').Length <= 302 && px.GetProperty("truncated").GetBoolean() && swx.ElapsedMilliseconds < 3000);
+            string? xt = px.GetProperty("text").GetString();
+            Check($"aperçu Excel en flux : 100 000 lignes, arrêt à 300, chaînes partagées résolues, tronqué ({swx.ElapsedMilliseconds} ms)", xt != null && xt.StartsWith("ligne\t1\nligne\t2\n") && xt.Split('\n').Length <= 302 && px.GetProperty("truncated").GetBoolean() && swx.ElapsedMilliseconds < 3000);
             string evil = Path.Combine(dir, "dtd.docx");
             Zip(evil, ("word/document.xml", "<!DOCTYPE x [<!ENTITY a \"aaaaaaaaaa\"><!ENTITY b \"&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;\">]><w:document xmlns:w=\"" + wns + "\"><w:body><w:p><w:r><w:t>&b;</w:t></w:r></w:p></w:body></w:document>"));
             Check("aperçu Office : un document avec DTD (bombe d'entités) est refusé, sans exception", JsonDocument.Parse(JsonSerializer.Serialize(Fs.OfficePreview(evil, ".docx"))).RootElement.GetProperty("kind").GetString() == "error");
@@ -500,7 +500,7 @@ static class SelfTest
             }
 
             Check("corbeille : un disque fixe en a une ; un partage réseau non", Recycle.HasBin(dir) && !Recycle.HasBin(@"\\localhost\C$\Windows"));
-            string letter = "QRSTUVWXYZ".Select(c => c + ":").FirstOrDefault(l => !Directory.Exists(l + "\\"));
+            string? letter = "QRSTUVWXYZ".Select(c => c + ":").FirstOrDefault(l => !Directory.Exists(l + "\\"));
             if (letter == null) Check("corbeille : un lecteur libre pour subst", false);
             else
             {
@@ -515,7 +515,7 @@ static class SelfTest
                         File.Exists(onSubst) && replies.Count == 1 && replies[0].GetProperty("type").GetString() == "fs.confirmperm" && replies[0].GetProperty("perm").GetArrayLength() == 1);
                     Do($"{{\"cmd\":\"fs.delete\",\"paths\":[{J(onSubst)}],\"permOk\":true,\"tab\":\"t\"}}");
                     Check("après confirmation (permOk) : supprimé, et le message dit « définitivement »",
-                        !File.Exists(onSubst) && replies.Any(x => x.GetProperty("type").GetString() == "fs.done" && x.TryGetProperty("error", out var em) && em.ValueKind == JsonValueKind.String && em.GetString().Contains("définitivement")));
+                        !File.Exists(onSubst) && replies.Any(x => x.GetProperty("type").GetString() == "fs.done" && x.TryGetProperty("error", out var em) && em.ValueKind == JsonValueKind.String && em.GetString()!.Contains("définitivement")));   // « ! » : une valeur JSON de type texte ne se lit jamais null
                 }
                 finally { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("subst", $"{letter} /D") { CreateNoWindow = true, UseShellExecute = false })!.WaitForExit(); }
             }
@@ -575,7 +575,7 @@ static class SelfTest
                 ExplorerForm.MapDrives(c);
                 c.WebMessageReceived += (s2, e2) =>
                 {
-                    using var d = JsonDocument.Parse(e2.WebMessageAsJson); string t = d.RootElement.GetProperty("t").GetString();
+                    using var d = JsonDocument.Parse(e2.WebMessageAsJson); string t = d.RootElement.GetProperty("t").GetString()!;   // « ! » : la page d'essai envoie toujours un texte
                     if (t == "done") Finish(); else results.Add(t);
                 };
                 c.Navigate("https://cdx.shell/explorer/_test-preview.html?img=" + Uri.EscapeDataString("https://" + Url("image test é.png"))

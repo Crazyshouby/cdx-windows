@@ -10,30 +10,30 @@ delegate void JobBody(Job job);
 sealed class Job
 {
     public int Id { get; init; }
-    public string Kind { get; init; }          // « copy », « move », « delete », « search »...
-    public string Title { get; init; }
+    public required string Kind { get; init; } // « copy », « move », « delete », « search »...
+    public required string Title { get; init; }
     public JobState State { get; internal set; } = JobState.Queued;
     public long Done { get; private set; }       // octets (ou éléments) traités
     public long Total { get; private set; }      // total connu, 0 tant qu'on ne sait pas
-    public string Current { get; private set; }  // l'élément en cours
-    public string Error { get; internal set; }
+    public string? Current { get; private set; } // l'élément en cours (null avant le premier)
+    public string? Error { get; internal set; }   // null : pas d'erreur
     public double Speed { get; private set; }    // octets par seconde, lissé
     public DateTime Started { get; internal set; }
-    public string From, To, Path;                // d'où, vers où, et ce que « Ouvrir » désigne (pour la fenêtre des transferts)
+    public string? From, To, Path;               // d'où, vers où, et ce que « Ouvrir » désigne (pour la fenêtre des transferts)
     public int Items;                            // éléments de premier niveau
     public List<string> Failed = new();          // ceux qui n'ont pas pu être traités : de quoi réessayer
-    public object Tag;                           // le résultat du travail, pour celui qui l'a demandé
-    public Func<Job> Retry;                      // remet les éléments en échec dans la file ; rend la nouvelle tâche
-    internal Action<Job> Finished;               // appelé à la fin (réussie, annulée ou en échec), hors du fil d'interface
+    public object? Tag;                          // le résultat du travail, pour celui qui l'a demandé
+    public Func<Job?>? Retry;                    // remet les éléments en échec dans la file ; rend la nouvelle tâche (null : rien à réessayer)
+    internal Action<Job>? Finished;              // appelé à la fin (réussie, annulée ou en échec), hors du fil d'interface
     public CancellationToken Token => cts.Token;
     internal readonly CancellationTokenSource cts = new();
     readonly ManualResetEventSlim gate = new(true);   // levé : on avance ; baissé : en pause
-    internal JobBody Body;
-    internal Action<Job> Notify;
+    internal required JobBody Body;
+    internal Action<Job>? Notify;
     DateTime lastTick; long lastDone;
 
     // Le corps de la tâche dit où il en est. `total` : 0 = inchangé.
-    public void Report(long done, long total = 0, string current = null)
+    public void Report(long done, long total = 0, string? current = null)
     {
         Done = done; if (total > 0) Total = total; if (current != null) Current = current;
         var now = DateTime.UtcNow; double dt = (now - lastTick).TotalSeconds;
@@ -60,12 +60,12 @@ sealed class JobQueue
     readonly List<Job> jobs = new();
     readonly Queue<Job> waiting = new();
     int nextId = 1; bool running;
-    public event Action<Job> Changed;
+    public event Action<Job>? Changed;
 
     public IReadOnlyList<Job> Snapshot() { lock (lk) return jobs.ToList(); }
 
     // Met une tâche en file ; elle part quand les précédentes ont fini. Rend la tâche (son Id sert à la piloter).
-    public Job Enqueue(string kind, string title, JobBody body, Action<Job> finished = null, Action<Job> setup = null)
+    public Job Enqueue(string kind, string title, JobBody body, Action<Job>? finished = null, Action<Job>? setup = null)
     {
         Job j;
         lock (lk)
@@ -97,7 +97,7 @@ sealed class JobQueue
             // annulée avant d'avoir commencé : son appelant est quand même prévenu (Finished), sans quoi la page attendait un fs.done qui ne venait jamais
             if (skipped) { try { j.Finished?.Invoke(j); } catch (Exception ex) { Host.Log("tâche " + j.Id + " : fin : " + ex.Message); } continue; }
             Fire(j);
-            JobState end; string err = null;
+            JobState end; string? err = null;
             try { j.Body(j); end = j.Token.IsCancellationRequested ? JobState.Canceled : JobState.Done; }
             catch (OperationCanceledException) { end = JobState.Canceled; }
             catch (Exception ex) { end = JobState.Failed; err = ex.Message; Host.Log("tâche " + j.Id + " (" + j.Kind + ") : " + ex.Message); }
@@ -111,19 +111,19 @@ sealed class JobQueue
 
     public bool Busy { get { lock (lk) return jobs.Any(j => j.State is JobState.Queued or JobState.Running or JobState.Paused); } }
 
-    public Job Get(int id) => Find(id);
+    public Job? Get(int id) => Find(id);
 
-    Job Find(int id) { lock (lk) return jobs.FirstOrDefault(j => j.Id == id); }
+    Job? Find(int id) { lock (lk) return jobs.FirstOrDefault(j => j.Id == id); }
 
     public bool Pause(int id)
     {
-        Job j;
+        Job? j;
         lock (lk) { j = jobs.FirstOrDefault(x => x.Id == id); if (j == null || j.State != JobState.Running) return false; j.SetPaused(true); j.State = JobState.Paused; }
         Fire(j); return true;
     }
     public bool Resume(int id)
     {
-        Job j;
+        Job? j;
         lock (lk) { j = jobs.FirstOrDefault(x => x.Id == id); if (j == null || j.State != JobState.Paused) return false; j.State = JobState.Running; j.ResetClock(); j.SetPaused(false); }
         Fire(j); return true;
     }
@@ -131,7 +131,7 @@ sealed class JobQueue
     // Annule : une tâche en attente est retirée sans démarrer ; une tâche en cours reçoit le signal (et sort d'une éventuelle pause).
     public bool Cancel(int id)
     {
-        Job j; bool wasQueued;
+        Job? j; bool wasQueued;
         lock (lk)
         {
             j = jobs.FirstOrDefault(x => x.Id == id); if (j == null || j.State is JobState.Done or JobState.Failed or JobState.Canceled) return false;
