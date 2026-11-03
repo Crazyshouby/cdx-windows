@@ -211,6 +211,62 @@ TEST(purge_drops_old_unreferenced_devices_only) {
     CHECK_EQ(c.devices.count(L"never"), size_t(0));
 }
 
+// A config.json held exclusively by another program must not be read as
+// "absent" and then overwritten with defaults (all setups lost).
+TEST(locked_config_is_read_only_not_missing) {
+    wchar_t tmp[MAX_PATH] = {};
+    GetTempPathW(MAX_PATH, tmp);
+    std::wstring appData = std::wstring(tmp) + L"audio_linker_store_" + std::to_wstring(GetCurrentProcessId());
+    CreateDirectoryW(appData.c_str(), nullptr);
+    wchar_t oldAppData[MAX_PATH] = {};
+    DWORD hadOld = GetEnvironmentVariableW(L"APPDATA", oldAppData, MAX_PATH);
+    SetEnvironmentVariableW(L"APPDATA", appData.c_str());
+
+    // Missing file: first run, writable.
+    ConfigStore fresh;
+    fresh.init();
+    DeleteFileW(fresh.path().c_str());
+    AppConfig defaults;
+    CHECK(!fresh.load(defaults));
+    CHECK(!fresh.readOnly());
+
+    // A real config with one setup, then held with no sharing at all.
+    AppConfig real;
+    OutputSettings dev; dev.lastSeen = static_cast<long long>(time(nullptr));
+    real.devices[kDevA] = dev;
+    Setup s; s.name = L"Salon"; s.devices.emplace_back(kDevA, dev); real.setups.push_back(s);
+    CHECK(fresh.save(real));
+    std::string before;
+    { std::ifstream in(fresh.path(), std::ios::binary); before.assign(std::istreambuf_iterator<char>(in), {}); }
+    HANDLE hold = CreateFileW(fresh.path().c_str(), GENERIC_READ, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    CHECK(hold != INVALID_HANDLE_VALUE);
+
+    ConfigStore locked;
+    locked.init();
+    AppConfig got;
+    CHECK(!locked.load(got));
+    CHECK(locked.readOnly());
+    CHECK(!locked.save(got));   // refuses: the defaults never go over the real file
+    CloseHandle(hold);
+
+    std::string after;
+    { std::ifstream in(fresh.path(), std::ios::binary); after.assign(std::istreambuf_iterator<char>(in), {}); }
+    CHECK(after == before);
+
+    // Once released, a new store reads it normally.
+    ConfigStore again;
+    again.init();
+    AppConfig back;
+    CHECK(again.load(back));
+    CHECK(!again.readOnly());
+    CHECK_EQ(back.setups.size(), size_t(1));
+
+    DeleteFileW(fresh.path().c_str());
+    RemoveDirectoryW((appData + L"\\cdx-audio_linker").c_str());
+    RemoveDirectoryW(appData.c_str());
+    SetEnvironmentVariableW(L"APPDATA", hadOld ? oldAppData : nullptr);
+}
+
 TEST(split_pipes_keeps_empty_fields) {
     auto p = SplitPipes(L"a||c|");
     CHECK_EQ(p.size(), size_t(4));

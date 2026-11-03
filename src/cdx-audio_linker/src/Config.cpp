@@ -445,18 +445,26 @@ void ConfigStore::init() {
 
 namespace {
 
-bool ReadWholeFile(const std::wstring& file, std::string& out) {
-    HANDLE h = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                           FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return false;
+// "Missing" only when the file really is not there: any other failure
+// (sharing violation, access denied, oversized, short read) is an Error,
+// which must never be mistaken for a first run.
+enum class ReadResult { Ok, Missing, Error };
+
+ReadResult ReadWholeFile(const std::wstring& file, std::string& out) {
+    HANDLE h = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        DWORD e = GetLastError();
+        return (e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND) ? ReadResult::Missing : ReadResult::Error;
+    }
     LARGE_INTEGER size;
-    if (!GetFileSizeEx(h, &size) || size.QuadPart > (64 << 20)) { CloseHandle(h); return false; }
+    if (!GetFileSizeEx(h, &size) || size.QuadPart > (64 << 20)) { CloseHandle(h); return ReadResult::Error; }
     out.resize(static_cast<size_t>(size.QuadPart));
     DWORD read = 0;
     bool ok = out.empty() || (ReadFile(h, out.data(), static_cast<DWORD>(out.size()), &read, nullptr) &&
                               read == out.size());
     CloseHandle(h);
-    return ok;
+    return ok ? ReadResult::Ok : ReadResult::Error;
 }
 
 bool EndsWithNoCase(const std::wstring& s, const wchar_t* suffix) {
@@ -482,7 +490,18 @@ bool ConfigStore::writeFileAtomic(const std::wstring& file, const std::string& b
 
 bool ConfigStore::load(AppConfig& cfg) {
     std::string text;
-    if (ReadWholeFile(jsonPath_, text)) {
+    ReadResult r = ReadWholeFile(jsonPath_, text);
+    for (int attempt = 0; r == ReadResult::Error && attempt < 3; ++attempt) {
+        Sleep(100);   // an antivirus or a backup tool usually lets go quickly
+        r = ReadWholeFile(jsonPath_, text);
+    }
+    if (r == ReadResult::Error) {
+        readOnly_ = true;
+        LOG_ERROR(L"config.json existe mais ne peut pas être lu (" + jsonPath_ +
+                  L") : réglages par défaut pour cette session, et rien ne sera enregistré par-dessus.");
+        return false;
+    }
+    if (r == ReadResult::Ok) {
         if (ParseConfig(text, cfg)) return true;
         // Unreadable JSON: keep it aside for inspection rather than
         // overwrite it at the next save, and start from defaults.
@@ -503,6 +522,7 @@ bool ConfigStore::load(AppConfig& cfg) {
 }
 
 bool ConfigStore::save(AppConfig& cfg) {
+    if (readOnly_) return false;   // see load(): the real file was not read, never overwrite it
     int purged = PurgeStaleDevices(cfg, static_cast<long long>(std::time(nullptr)));
     if (purged > 0) LOG_INFO(std::to_wstring(purged) + L" périphérique(s) absent(s) depuis plus de 90 jours retiré(s) de la configuration.");
     if (!writeFileAtomic(jsonPath_, SerializeConfig(cfg))) {
@@ -519,5 +539,5 @@ bool ConfigStore::exportTo(const std::wstring& file, const AppConfig& cfg) const
 bool ConfigStore::importFrom(const std::wstring& file, AppConfig& cfg) const {
     if (EndsWithNoCase(file, L".ini")) return ParseLegacyIni(file, cfg);
     std::string text;
-    return ReadWholeFile(file, text) && ParseConfig(text, cfg);
+    return ReadWholeFile(file, text) == ReadResult::Ok && ParseConfig(text, cfg);
 }

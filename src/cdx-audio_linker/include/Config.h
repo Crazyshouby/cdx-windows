@@ -155,9 +155,15 @@ public:
     // Loads config.json into cfg. If it does not exist but the legacy INI
     // does, migrates it (writes config.json, renames the INI to .bak).
     // Returns false when neither existed (cfg keeps its defaults).
+    // A config.json that exists but cannot be read (locked by another
+    // program, no rights, too big) is NOT "absent": after a few retries the
+    // store turns read-only for the session, so the defaults in memory never
+    // overwrite the user's real setups.
     bool load(AppConfig& cfg);
     // Purges stale devices, then writes atomically (temp file + rename).
+    // Writes nothing (returns false) while the store is read-only.
     bool save(AppConfig& cfg);
+    bool readOnly() const { return readOnly_; }
     // Writes cfg as JSON to an arbitrary file (export) / reads one back
     // (import: .json, or a legacy .ini).
     bool exportTo(const std::wstring& file, const AppConfig& cfg) const;
@@ -167,4 +173,5 @@ private:
     bool writeFileAtomic(const std::wstring& file, const std::string& bytes) const;
     std::wstring jsonPath_;
     std::wstring iniPath_;
+    bool readOnly_ = false;
 };
