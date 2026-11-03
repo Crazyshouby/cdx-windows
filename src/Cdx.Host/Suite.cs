@@ -22,9 +22,16 @@ static class Suite
     // L'accent écrit dans suite.json, ou `fallback` si le fichier manque, est abîmé ou d'une autre version : une application ne plante jamais pour cela.
     public static string ReadAccent(string fallback = "rouge")
     {
+        try { return ParseAccent(System.IO.File.ReadAllText(FilePath), fallback); }
+        catch (Exception) { return fallback; }
+    }
+
+    // Le contenu d'un suite.json → l'accent (même réponse que cdx_bus.h et cdx_bus.rs : cas communs dans cdx-ui bus/bus-vectors.json, rejoués par --selftest-bus).
+    public static string ParseAccent(string json, string fallback = "rouge")
+    {
         try
         {
-            using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(FilePath));
+            using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
             if (r.ValueKind != JsonValueKind.Object) return fallback;
             if (r.TryGetProperty("version", out var v) && (v.ValueKind != JsonValueKind.Number || v.GetInt32() != 1)) return fallback;

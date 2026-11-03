@@ -577,6 +577,24 @@ static class SelfTest
                     try { AtomicFile.WriteJson(af, new { i = -2 }); } catch (Exception) { lockedThrows = true; }
                 }
                 Check("AtomicFile : un fichier verrouillé fait échouer l'écriture sans le toucher ni laisser de .tmp", lockedThrows && File.ReadAllText(af).Contains("tenu") && !Directory.GetFiles(dir, "atomique.json*.tmp").Any());
+
+                // ---- cas communs aux trois clients du bus (cdx-ui bus/bus-vectors.json, recopié par charte-sync) : C#, C++ (ctest d'Audio Linker) et Rust (cargo test de Messages)
+                using (var vec = JsonDocument.Parse(File.ReadAllText(Path.Combine(Host.FindWebRoot(), "cdx", "bus-vectors.json"))))
+                {
+                    var vr = vec.RootElement;
+                    Check("vecteurs du bus : la limite de ligne est la limite commune", vr.GetProperty("max_line").GetInt32() == Bus.MaxLine);
+                    var vapps = vr.GetProperty("apps").EnumerateArray().Select(a => a.GetString()).ToHashSet();
+                    Check("vecteurs du bus : la liste des programmes est la liste commune", vapps.SetEquals(Bus.Apps) && vapps.Count == Bus.Apps.Length);
+                    var wrong = new List<string>();
+                    int cases = 0;
+                    foreach (var c in vr.GetProperty("accent").EnumerateArray())
+                    {
+                        cases++;
+                        string got = Suite.ParseAccent(c.GetProperty("json").GetString(), c.GetProperty("fallback").GetString()), want = c.GetProperty("expect").GetString();
+                        if (got != want) wrong.Add($"{c.GetProperty("why").GetString()} : {got} (attendu {want})");
+                    }
+                    Check($"vecteurs du bus : les {cases} cas d'accent de suite.json donnent la réponse attendue" + (wrong.Count > 0 ? " — " + string.Join(" ; ", wrong) : ""), cases >= 10 && wrong.Count == 0);
+                }
             }
             catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
             finally { anchor.BeginInvoke(new Action(Application.ExitThread)); }

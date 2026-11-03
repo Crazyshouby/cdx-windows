@@ -27,7 +27,7 @@ namespace al {
 namespace {
 
 constexpr wchar_t kPipeName[] = L"\\\\.\\pipe\\cdx.audio_linker";
-constexpr size_t kMaxLine = 8192;
+constexpr size_t kMaxLine = static_cast<size_t>(cdx::kBusMaxLine);   // la limite commune du bus (cdx-ui bus-vectors.json), 8 Ko avant
 
 enum LinkMsg : WPARAM { kConnected = 0, kCommand = 1, kGet = 2 };
 

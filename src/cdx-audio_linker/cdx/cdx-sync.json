@@ -1,5 +1,5 @@
 {
-  "cdxUi": "2.4.0",
+  "cdxUi": "2.5.0",
   "files": {
     "cdx/cdx-ui.css": {
       "from": "cdx-ui.css",
@@ -15,7 +15,11 @@
     },
     "cdx/cdx_bus.h": {
       "from": "cdx_bus.h",
-      "sha256": "7e340f40a8eb2829ae48b9e5f610029ffe1b7e196267ae3f04c8d151c83ee65f"
+      "sha256": "e63c552cedf1fae4250680069ad79de72ebd537609c5c8a9dc7ff7711457526b"
+    },
+    "cdx/bus-vectors.json": {
+      "from": "bus-vectors.json",
+      "sha256": "61695fe1bfa71af2f9c42d12bc08fbecb62b1213f5b5302313da716c20dd2677"
     },
     "tools/cdx-verify.mjs": {
       "from": "cdx-verify.mjs",
@@ -27,7 +31,7 @@
     },
     "cdx/cdx-bridge.js": {
       "from": "cdx-bridge.js",
-      "sha256": "9a584fc4cb2f36e22a06694150996a7d289388d549d6e64287c4434319ee5e17"
+      "sha256": "fed968433f222e82f8b62a65d8f8937cce35981bf1713b090fdd990ccde19b7c"
     },
     "cdx/cdx-frame.js": {
       "from": "cdx-frame.js",
