@@ -267,7 +267,7 @@ seconde (`lecture`) ; notre plein écran remplace celui de YouTube.
 son panneau dans la fiche), **compte** (nom lu dans le menu de l'avatar ; se déconnecter : cookies du profil effacés ; changer de compte). `cdx-youtube --sonder <chemin>`
 garde les données d'une page de YouTube sous `youtube\brut\` pour relever un format. Essai : `tests\youtube.ps1`
 (`-Isole` : profil neuf et anonyme). Au premier lancement, les données de `%LOCALAPPDATA%\CdxYouTube` (prototype) sont déplacées sous `youtube\`.
-**Interface du 03/11/2026** (maquette `Dev\CDXrchives\maquettes\youtube\maquette-youtube.html`) : une rangée en haut (retour, Accueil/Abonnements, recherche ; le compte
+**Interface du 03/11/2026** (maquette `Dev\CDX\archives\maquettes\youtube\maquette-youtube.html`) : une rangée en haut (retour, Accueil/Abonnements, recherche ; le compte
 dans le menu de la barre de titre) ; **la platine** en bas, une seule bande : l'afficheur de la charte (l'état ; pendant une vidéo, son temps et son titre) et le transport.
 Accueil en **rubans** par moment (en direct, aujourd'hui, hier, cette semaine…, Shorts, listes) ; abonnements en **règle du temps** (vers 14 h, par jour, « pas encore vue ») ;
 recherche en **liste à colonnes** (`CdxColumns`) ou en vignettes ; vidéo en **mode cinéma** (À suivre numérotée, Description avec les **chapitres** cliquables, Liste) ;
