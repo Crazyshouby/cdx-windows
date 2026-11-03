@@ -9,12 +9,12 @@ class MailMsg
 {
     public string Id = "", ThreadId = "", From = "", To = "", Cc = "", Subject = "", Snippet = "", MessageId = "", References = "";
     public long Date; public bool Unread, Starred; public List<string> Labels = new();
-    public string Html, Text;                                    // null : pas de corps de ce type
+    public string? Html, Text;                                   // null : pas de corps de ce type
     public List<MailAttachment> Attachments = new();
     public object Summary() => new { id = Id, threadId = ThreadId, from = From, to = To, cc = Cc, subject = Subject, snippet = Snippet, date = Date, unread = Unread, starred = Starred, labels = Labels };
     public object Full() => new { id = Id, threadId = ThreadId, from = From, to = To, cc = Cc, subject = Subject, snippet = Snippet, date = Date, unread = Unread, starred = Starred, labels = Labels, html = Html, text = Text, messageId = MessageId, references = References, attachments = Attachments.Select(a => new { id = a.Id, name = a.Name, mime = a.Mime, size = a.Size }) };
 }
-class MailAttachment { public string Id = "", Name = "", Mime = ""; public long Size; public string Data; }   // Data : base64url du contenu quand il est livré avec le message (petites pièces)
+class MailAttachment { public string Id = "", Name = "", Mime = ""; public long Size; public string? Data; }   // Data : base64url du contenu quand il est livré avec le message (petites pièces)
 
 static class Gmail
 {
@@ -27,7 +27,7 @@ static class Gmail
     public static string LabelName(string id, string name) => SystemNames.TryGetValue(id, out var n) ? n : name;
     public static bool Hidden(string id) => id is "UNREAD" or "CHAT" || id.StartsWith("CATEGORY_");
 
-    static string S(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : "";
+    static string S(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
     static string Header(JsonElement payload, string name)
     {
         if (!payload.TryGetProperty("headers", out var hs) || hs.ValueKind != JsonValueKind.Array) return "";
@@ -38,7 +38,7 @@ static class Gmail
     public static MailMsg Parse(JsonElement m)
     {
         var x = new MailMsg { Id = S(m, "id"), ThreadId = S(m, "threadId"), Snippet = System.Net.WebUtility.HtmlDecode(S(m, "snippet")) };
-        if (m.TryGetProperty("labelIds", out var ls) && ls.ValueKind == JsonValueKind.Array) foreach (var l in ls.EnumerateArray()) x.Labels.Add(l.GetString());
+        if (m.TryGetProperty("labelIds", out var ls) && ls.ValueKind == JsonValueKind.Array) foreach (var l in ls.EnumerateArray()) if (l.GetString() is { } lid) x.Labels.Add(lid);   // un libellé null (jamais vu chez Google) n'entre pas dans la liste
         x.Unread = x.Labels.Contains("UNREAD"); x.Starred = x.Labels.Contains("STARRED");
         if (m.TryGetProperty("internalDate", out var d) && long.TryParse(d.GetString(), out var ms)) x.Date = ms;
         if (m.TryGetProperty("payload", out var p))

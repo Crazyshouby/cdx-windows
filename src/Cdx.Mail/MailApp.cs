@@ -10,27 +10,27 @@ namespace Cdx;
 // jointes) et garde la dernière liste de la boîte de réception en cache (courrier-cache.json) pour l'afficher hors ligne. Un nouveau courrier est signalé à la barre.
 sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
 {
-    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
+    public HostForm? ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     string theme;
     readonly string root;
-    readonly IDisposable watch;
-    MailForm form;
-    CoreWebView2Environment env;
+    readonly IDisposable? watch;   // null : thème imposé par --theme, pas de suivi de suite.json
+    MailForm? form;
+    CoreWebView2Environment? env;
     public Control Anchor { get; } = new Control();   // installe le contexte de synchronisation de l'interface et sert à y poser un travail
     readonly System.Windows.Forms.Timer poll = new() { Interval = 90_000 };
     bool busy; string lastError = "";
     string curLabel = "INBOX", curQuery = "";
-    List<object> lastThreads; List<object> lastLabels;
+    List<object>? lastThreads; List<object>? lastLabels;   // null : rien encore (ou compte oublié)
     int lastUnread = -1;
     // Le quota Gmail se compte en unités par minute et par utilisateur : threads.get en coûte 10, labels.get 1. On relit donc un fil seulement si sa version
     // (historyId) a changé depuis la dernière fois, on ne demande les compteurs que pour la boîte de réception et le libellé ouvert, et on s'arrête 30 s quand Google dit stop.
-    readonly Dictionary<string, (string history, object summary)> threadCache = new();
+    readonly Dictionary<string, (string? history, object? summary)> threadCache = new();   // null possibles s'ils l'étaient dans le cache relu
     readonly Dictionary<string, (int unread, int total)> counts = new();
     DateTime quotaUntil = DateTime.MinValue; int loadSeq;
     static readonly string[] Scopes = { GoogleAuth.ScopeGmail };
     static string CacheFile => Path.Combine(Host.DataDir, "courrier-cache.json");
 
-    public MailApp(string theme)
+    public MailApp(string? theme)
     {
         this.theme = theme ?? Suite.ReadAccent(); root = Host.FindWebRoot();
         _ = Anchor.Handle;
@@ -76,7 +76,9 @@ sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
     void PushState() => form?.Send(new { type = "state", connected = GoogleAuth.IsConnected && GoogleAuth.HasScope(GoogleAuth.ScopeGmail), email = GoogleAuth.Email, hasClient = GoogleAuth.HasClient, busy, error = lastError, clientFile = GoogleAuth.ClientFile, label = curLabel, q = curQuery });
     void Fail(string what, Exception ex) { lastError = IsQuota(ex) ? what + " : quota Google dépassé (trop d'appels en une minute), nouvel essai dans 30 s." : what + " : " + ex.Message; Host.Log(what + " : " + ex.Message); form?.Send(new { type = "error", text = lastError }); PushState(); }
     bool Ready => GoogleAuth.IsConnected && GoogleAuth.HasScope(GoogleAuth.ScopeGmail);
-    static string S(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : "";
+    static string S(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+    // Un identifiant manquant (page fautive) lève la même ArgumentNullException qu'Uri.EscapeDataString(null), que Fail affiche.
+    static string Esc(string? s) => Uri.EscapeDataString(s ?? throw new ArgumentNullException("stringToEscape"));
     static int I(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
 
     // ---------- libellés ----------
@@ -109,7 +111,7 @@ sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
         string path = Gmail.Me + "/threads?maxResults=" + max + (label == "ALL" ? "" : "&labelIds=" + Uri.EscapeDataString(label)) + (label is "SPAM" or "TRASH" ? "&includeSpamTrash=true" : "") + (q.Length > 0 ? "&q=" + Uri.EscapeDataString(q) : "");
         using var d = await GoogleAuth.ApiAsync(HttpMethod.Get, path);
         var ids = d.RootElement.TryGetProperty("threads", out var ts) ? ts.EnumerateArray().Select(t => (id: S(t, "id"), history: S(t, "historyId"))).ToList() : new();
-        var result = new object[ids.Count]; var gate = new SemaphoreSlim(8); int fetched = 0;
+        var result = new object?[ids.Count]; var gate = new SemaphoreSlim(8); int fetched = 0;
         await Task.WhenAll(ids.Select(async (th, i) =>
         {
             string id = th.id;
@@ -130,7 +132,7 @@ sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
             finally { gate.Release(); }
         }));
         if (fetched > 0) Host.Log($"fils relus : {fetched} sur {ids.Count}");
-        return result.Where(r => r != null).ToList();
+        return result.OfType<object>().ToList();   // sans les null (fils illisibles), comme le Where d'avant
     }
 
     async Task LoadThreadsAsync(string label, string q)
@@ -151,7 +153,7 @@ sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
         finally { if (seq == loadSeq) { busy = false; PushState(); } }
     }
 
-    async Task OpenThreadAsync(string id)
+    async Task OpenThreadAsync(string? id)
     {
         if (!Ready || string.IsNullOrEmpty(id) || QuotaHold()) return;
         try
@@ -166,13 +168,13 @@ sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
     }
 
     // archive · trash · spam · inbox · read · unread · star · unstar
-    async Task ActAsync(string id, string what)
+    async Task ActAsync(string? id, string? what)
     {
         if (!Ready || string.IsNullOrEmpty(id) || QuotaHold()) return;
         try
         {
             string p = Gmail.Me + "/threads/" + Uri.EscapeDataString(id);
-            object body = what switch
+            object? body = what switch
             {
                 "archive" => new { removeLabelIds = new[] { "INBOX" } }, "inbox" => new { addLabelIds = new[] { "INBOX" }, removeLabelIds = new[] { "TRASH", "SPAM" } }, "spam" => new { addLabelIds = new[] { "SPAM" }, removeLabelIds = new[] { "INBOX" } },
                 "read" => new { removeLabelIds = new[] { "UNREAD" } }, "unread" => new { addLabelIds = new[] { "UNREAD" } }, "star" => new { addLabelIds = new[] { "STARRED" } }, "unstar" => new { removeLabelIds = new[] { "STARRED" } }, _ => null,
@@ -188,12 +190,12 @@ sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
     }
 
     // ---------- pièces jointes ----------
-    async Task<byte[]> AttachmentBytesAsync(string msgId, string attId)
+    async Task<byte[]> AttachmentBytesAsync(string? msgId, string? attId)
     {
-        string txt = await GoogleAuthRaw.SendAsync(HttpMethod.Get, Gmail.Me + "/messages/" + Uri.EscapeDataString(msgId) + "/attachments/" + Uri.EscapeDataString(attId), null, null);
+        string txt = await GoogleAuthRaw.SendAsync(HttpMethod.Get, Gmail.Me + "/messages/" + Esc(msgId) + "/attachments/" + Esc(attId), null, null);
         using var d = JsonDocument.Parse(txt); return Gmail.B64UrlDecode(S(d.RootElement, "data"));
     }
-    async Task SaveAttachmentAsync(string msgId, string attId, string name, string dir)
+    async Task SaveAttachmentAsync(string? msgId, string? attId, string? name, string? dir)
     {
         try
         {
@@ -212,14 +214,14 @@ sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
     // ---------- envoi ----------
     async Task SendAsync(JsonElement r)
     {
-        string St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : "";
+        string St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
         if (!Ready) return;
         if (St("to").Trim().Length == 0 && St("cc").Trim().Length == 0 && St("bcc").Trim().Length == 0) { form?.Send(new { type = "error", text = "Il manque un destinataire." }); return; }
         try
         {
             var files = new List<(string name, byte[] data, string mime)>();
             if (r.TryGetProperty("files", out var fs) && fs.ValueKind == JsonValueKind.Array)
-                foreach (var f in fs.EnumerateArray()) { string p = f.GetString(); if (File.Exists(p)) files.Add((Path.GetFileName(p), await File.ReadAllBytesAsync(p), Gmail.Mime(p))); }
+                foreach (var f in fs.EnumerateArray()) { string? p = f.GetString(); if (File.Exists(p)) files.Add((Path.GetFileName(p), await File.ReadAllBytesAsync(p), Gmail.Mime(p))); }
             if (r.TryGetProperty("forward", out var fw) && fw.ValueKind == JsonValueKind.Array)   // pièces jointes d'un message transféré, relues chez Google
                 foreach (var a in fw.EnumerateArray()) files.Add((S(a, "name"), await AttachmentBytesAsync(S(a, "msg"), S(a, "id")), S(a, "mime")));
             long total = files.Sum(f => f.data.LongLength);
@@ -254,7 +256,7 @@ sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
     async Task ConnectAsync()
     {
         busy = true; lastError = ""; PushState();
-        try { string err = await GoogleAuth.ConnectAsync(Scopes); if (err != null) { lastError = err; Host.Log("Google : " + err); } }
+        try { string? err = await GoogleAuth.ConnectAsync(Scopes); if (err != null) { lastError = err; Host.Log("Google : " + err); } }
         finally { busy = false; PushState(); }
         if (Ready) { await LoadThreadsAsync("INBOX", ""); await LoadLabelsAsync(); }
     }
@@ -266,8 +268,8 @@ sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
         {
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
-            string cmd = r.GetProperty("cmd").GetString();
-            string St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            string cmd = r.GetProperty("cmd").GetString() ?? throw new FormatException("cmd null");   // rattrapé plus bas, comme l'était le déréférencement
+            string? St(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
             if (cmd.StartsWith("win.")) { Host.WindowCommand(from, cmd, r); return; }
             switch (cmd)
             {

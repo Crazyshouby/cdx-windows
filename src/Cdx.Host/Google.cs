@@ -229,14 +229,14 @@ static class GoogleAuthRaw
 {
     static readonly HttpClient http = new() { Timeout = TimeSpan.FromMinutes(5) };
     // Un envoi avec un corps brut (message RFC 2822 vers /upload/gmail/v1/…) ou une lecture brute (pièce jointe) ; mêmes règles que ApiAsync.
-    public static async Task<string> SendAsync(HttpMethod method, string path, byte[] content, string contentType, CancellationToken ct = default)
+    public static async Task<string> SendAsync(HttpMethod method, string path, byte[]? content, string? contentType, CancellationToken ct = default)   // content null : une lecture, sans corps
     {
         for (int attempt = 0; ; attempt++)
         {
             string? tok = await GoogleAuth.AccessTokenAsync(ct).ConfigureAwait(false);
             using var req = new HttpRequestMessage(method, GoogleAuth.Url(path));
             req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tok);
-            if (content != null) { req.Content = new ByteArrayContent(content); req.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType); }
+            if (content != null) { req.Content = new ByteArrayContent(content); req.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType ?? "application/octet-stream"); }
             using var res = await http.SendAsync(req, ct).ConfigureAwait(false);
             string text = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             if (res.StatusCode == HttpStatusCode.Unauthorized && attempt == 0) { GoogleAuth.Expire(); continue; }
