@@ -40,7 +40,7 @@ jobs:
       version: ${{ steps.ver.outputs.version }}
       signed: ${{ env.HAS_SIGNPATH == 'true' || env.HAS_CERT == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # The version lives in CMakeLists.txt only. A release tag must match it
       # (audio_linker-v1.4.0, or audio_linker-v1.4.0-rc1 for a pre-release of 1.4.0).
@@ -94,7 +94,7 @@ jobs:
 
       - name: Install Inno Setup
         shell: pwsh
-        run: choco install innosetup --no-progress -y
+        run: choco install innosetup --version=6.7.1 --no-progress -y   # version fixée : un installeur se reconstruit à l'identique
 
       - name: Prepare code signing
         if: env.HAS_CERT == 'true' && env.HAS_SIGNPATH != 'true'
@@ -108,7 +108,8 @@ jobs:
           $tool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
                   Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
           if (-not $tool) { throw 'signtool.exe introuvable' }
-          "AL_SIGN_ARGS=/f `"$pfx`" /p `"$env:SIGN_PFX_PASSWORD`" /tr http://timestamp.digicert.com /td sha256 /fd sha256" >> $env:GITHUB_ENV
+          # sans le mot de passe : GITHUB_ENV est lu par toutes les étapes suivantes ; sign.cmd l'ajoute depuis SIGN_PFX_PASSWORD, donné à la seule étape qui signe l'installeur
+          "AL_SIGN_ARGS=/f `"$pfx`" /tr http://timestamp.digicert.com /td sha256 /fd sha256" >> $env:GITHUB_ENV
           "$($tool.DirectoryName)" >> $env:GITHUB_PATH
           # the exe first (the installer then signs itself and its uninstaller)
           & $tool.FullName sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 build\Release\cdx-audio_linker.exe
@@ -120,7 +121,7 @@ jobs:
       - name: Upload unsigned exe (SignPath)
         if: env.HAS_SIGNPATH == 'true'
         id: unsigned-exe
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unsigned-exe
           path: src/cdx-audio_linker/build/Release/cdx-audio_linker.exe
@@ -128,7 +129,7 @@ jobs:
 
       - name: Sign cdx-audio_linker.exe (SignPath)
         if: env.HAS_SIGNPATH == 'true'
-        uses: signpath/github-action-submit-signing-request@v3
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -149,6 +150,8 @@ jobs:
 
       - name: Build installer
         shell: pwsh
+        env:
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
         run: |
           if ($env:HAS_CERT -eq 'true' -and $env:HAS_SIGNPATH -ne 'true') { .\installer\build.ps1 -ExePath build\Release\cdx-audio_linker.exe -Sign }
           else { .\installer\build.ps1 -ExePath build\Release\cdx-audio_linker.exe }
@@ -159,7 +162,7 @@ jobs:
       - name: Upload unsigned installer (SignPath)
         if: env.HAS_SIGNPATH == 'true'
         id: unsigned-installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unsigned-installer
           path: src/cdx-audio_linker/installer/Output/cdx-audio_linker-Setup-${{ steps.ver.outputs.version }}.exe
@@ -167,7 +170,7 @@ jobs:
 
       - name: Sign the installer (SignPath)
         if: env.HAS_SIGNPATH == 'true'
-        uses: signpath/github-action-submit-signing-request@v3
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -214,7 +217,7 @@ jobs:
           if (Test-Path "$dir\cdx-audio_linker.exe") { throw 'cdx-audio_linker.exe encore présent après désinstallation' }
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cdx-audio_linker-installer
           path: |
@@ -223,7 +226,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload portable exe
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cdx-audio_linker-portable
           path: src/cdx-audio_linker/build/Release/cdx-audio_linker.exe
@@ -238,11 +241,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Only the two final artifacts: the unsigned files sent to SignPath are
       # artifacts of the same run and must never end up in the release.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           pattern: cdx-audio_linker-*
@@ -273,7 +276,7 @@ jobs:
           cat "$sums"
           sha256sum --check "$sums"
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
             dist/cdx-audio_linker-Setup-*.exe
