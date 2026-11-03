@@ -17,7 +17,6 @@ pwsh -File restaurer.ps1           # arrête le shell et rend sa barre à Window
 | `bin\cdx-repos.exe [--theme t]` | **Dépôts** : tous les projets git du PC (ce qui reste à enregistrer ou à envoyer sur GitHub), en lecture seule | une (un second lancement passe devant) | `journal-repos.log`, `repos.json` (dossiers explorés, projets masqués) |
 | `bin\cdx-agenda.exe [--theme t]` | **Agenda** : calendrier et tâches du compte Google relié à la suite (voir « Agenda et brique Google ») | une (un second lancement passe devant) | `journal-agenda.log` |
 | `bin\cdx-mail.exe [--theme t]` | **Courrier** : la boîte Gmail du compte Google relié à la suite (voir « Courrier ») | une (un second lancement passe devant) | `journal-mail.log` |
-| `bin\cdx-pilote.exe [--theme t]` | **Pilote** : le chat avec Claude réservé à l'organisation et à la création des projets ; Claude Code en sous-processus, la suite en outils (voir « Pilote ») | une (un second lancement passe devant) | `journal-pilote.log`, `pilote.json`, `pilote\<conversation>.json` |
 | `bin\cdx-terminal.exe [--theme t] [dossier]` | **Terminal** : un shell (PowerShell 7 s'il est installé, sinon Windows PowerShell) dans une fenêtre de la charte : cadre CDX, fond noir, texte à la couleur d'accent, aucun coin arrondi. Pseudo-console Windows (ConPTY) côté C#, xterm.js dans la page. **Onglets** (Ctrl+Maj+T / W, Ctrl+Tab, Ctrl+Alt+1..9), **volets** côte à côte ou l'un sous l'autre (Alt+Maj+D, menu clic droit, séparateurs déplaçables, Alt+flèches), un shell par volet ; police pixel à chasse fixe de la charte (CDX Pixel Mono, case de 7 px), texte dessiné par WebGL. Lancé avec un dossier (ou, s'il tourne déjà, un second lancement) : un onglet dans ce dossier. **Win+T** l'ouvre depuis le shell ; la tuile « Terminal CDX » du menu Démarrer le lance ; « Ouvrir dans un terminal » de l'Explorateur l'utilise (Windows Terminal puis cmd en repli) | une (un second lancement passe devant) | `journal-terminal.log` |
 | `bin\cdx-youtube.exe [--theme t]` | **YouTube** : accueil, abonnements, recherche, fiche et lecture d'une vidéo (le vrai lecteur de YouTube, posé dans la fenêtre), par une page YouTube cachée (session Google, uBlock Origin Lite) ; voir « YouTube » | une (un second lancement passe devant) | `journal-youtube.log`, `youtube\` (profil de la page cachée, uBOL, `veille.log`), `webview-youtube\` |
 | `bin\cdx-audio_linker.exe [--tray] [--quit]` | **Audio Linker** (ex-AudioLinker, C++) : le son du PC sur plusieurs sorties à la fois (latence, volume, égaliseur par sortie, setups) ; son groupe est dans la barre ; voir « Audio Linker » | une (un second lancement passe devant) | `%APPDATA%\cdx-audio_linker\config.json`, journal `%LOCALAPPDATA%\cdx-audio_linker\` |
@@ -34,7 +33,6 @@ src\Cdx.Shell\      cdx-shell : Program.cs (barre, Démarrer, centre, Alt+Tab, c
 src\Cdx.Explorer\   cdx-explorer : Fs.cs (fichiers), ExplorerForm.cs
 src\Cdx.Browser\    cdx-browser : Browser.cs (onglets, favoris, historique, téléchargements)
 src\Cdx.Repos\      cdx-repos : Git.cs (recherche et lecture de git, jamais d'écriture), ReposApp.cs
-src\Cdx.Pilote\     cdx-pilote : Claude.cs (claude.exe en sous-processus, stream-json), PilotTools.cs (les outils de la suite, tube cdx.pilote.outils), PiloteApp.cs (conversations, accords, page) ; src\Cdx.PiloteMcp\ cdx-pilote-mcp (le relais MCP « cdx-suite ») ; dans Cdx.Host : ClaudeFlux.cs (l'analyseur du flux), PilotPolicy.cs (la politique d'autorisation)
 src\cdx-audio_linker\  Audio Linker (C++ : CMake, MSVC, WebView2 en bibliothèque statique) : son propre README, CHANGELOG, essais (build.cmd tests), installeur et publication (.github\workflows\audio_linker.yml)
 src\Cdx.YouTube\    cdx-youtube : YtLecture.cs (la couche de lecture YouTube, seul fichier qui connaît les formats de YouTube), PageCachee.cs (la page cachée : navigation interne, interception des réponses youtubei, connexion, consentement), Ubol.cs, Veille.cs, YouTubeApp.cs
 src\Cdx.Terminal\   cdx-terminal : ConPty.cs (la pseudo-console : lancer le shell, faire passer les octets, redimensionner), TerminalApp.cs (fenêtre, une session par volet, messages de la page, presse-papiers)
@@ -42,13 +40,13 @@ web\terminal\       la page du terminal (terminal.html, terminal.css, terminal.j
 web\cdx\            la charte, copie exacte de cdx-ui/dist (node tools/charte-sync.mjs --write cdx-windows), rien d'autre
 web\host\           ce que les pages ajoutent à la charte : host.js (le pont vers l'hôte C#), page.css (socle html/body/.win), grammaire-worker.js (Grammalecte)
 web\shell\ web\explorer\ web\browser\ web\repos\ web\youtube\   les pages de chaque programme (les _test-*.html servent aux auto-tests)
-tests\              pilote.ps1 (Pilote contre fake_claude.py et fake_gmail.py : 41 vérifications), navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée), youtube.ps1 (YouTube : le parcours de cdx-youtube --essai sur le vrai YouTube, lecture, plein écran et fiche qui suit compris, avec les vraies données ou -Isole)
+tests\              navigateur.ps1 (52 vérifications), suite.ps1 (lancement, relais, isolation), bus.ps1 (bus et accent, isolé), repos.ps1 (Dépôts : 21 vérifications sur des dépôts jetables), explorer.ps1 (l'Explorateur : liste, réglages, surveillance, sélection, raccourcis, menus, recherche, corbeille, annuler : 134 vérifications), dnd.ps1 (glisser-déposer de l'Explorateur : 31 vérifications, dans la vraie fenêtre isolée), youtube.ps1 (YouTube : le parcours de cdx-youtube --essai sur le vrai YouTube, lecture, plein écran et fiche qui suit compris, avec les vraies données ou -Isole)
 ```
 
 ## Essais (aucune entrée simulée)
 
 Les essais `tests\*.ps1` se lancent avec PowerShell 7 (`pwsh`, ou la console PowerShell de Claude Code) ; ils portent une marque d'ordre d'octets UTF-8 depuis le 01/11/2026 pour que
-Windows PowerShell 5.1 lise aussi leurs accents (sans elle, « écris » partait en « Ã©cris » et quatorze vérifications de Pilote échouaient sans que la ligne ÉCHEC soit repérable).
+Windows PowerShell 5.1 lise aussi leurs accents (sans elle, « écris » partait en « Ã©cris » et des vérifications échouaient sans que la ligne ÉCHEC soit repérable).
 
 - Auto-tests, sans fenêtre visible : `cdx-explorer --selftest-fs`, `--selftest-web` ; `cdx-shell --selftest-sys`, `--selftest-audio`, `--selftest-snap` (19 vérifications de l'aimantation), `--selftest-spell` (24 vérifications du correcteur orthographique) ; `cdx-browser --selftest-browser` ; `cdx-repos --selftest-git` (22 vérifications sur de vrais dépôts jetables) ; `cdx-terminal --selftest-pty` (10 vérifications de la pseudo-console : sortie, code de sortie, UTF-8, redimensionnement, arrêt) ; `tests\terminal.ps1 -Bin <dossier>` (43 vérifications dans la vraie fenêtre isolée : shells, police et WebGL, couleurs de la charte, accent, onglets, volets, raccourcis, redimensionnement, titre, fermeture, dossier de départ, et avec `-ExplorerBin` l'Explorateur qui ouvre un onglet puis relance le terminal).
   Résultats dans `%LOCALAPPDATA%\CdxShell\selftest*.txt`.
@@ -117,33 +115,6 @@ Réglages, `agenda.json`), fiche, création (bouton, Ctrl+N, double-clic sur un 
 cocher, renommer, échéance, supprimer, nouvelle liste) ; cache `agenda-cache.json` montré hors ligne. Essai `tests\agenda.ps1` (22 vérifications) contre `tests\fake_google.py`
 (OAuth, Calendar et Tasks en mémoire) : rien ne touche au vrai compte.
 
-## Pilote (01/11/2026)
-`src\Cdx.Pilote\` (**cdx-pilote**, onzième programme, tuile « Pilote », `cdx:pilote`) : un chat avec Claude, réservé à l'organisation et à la création des projets (décisions du 01/11/2026 :
-Claude Code en sous-processus plutôt que l'API ; un projet = fiche dans Notes + dossier dans `Dev\` + dépôt git ; lecture libre, irréversible confirmé ; nom « Pilote »).
-- **Le cerveau** : `Claude.cs` lance `claude.exe -p` en stream-json dans les deux sens (le canal mis au point pour Tennis), un processus persistant par conversation, repris après un
-  redémarrage par `--resume` (la session garde tout son contexte) ; `--permission-prompt-tool stdio` fait passer les demandes d'accord par ce même flux (forme relevée en vrai, voir
-  `Cdx.Host\ClaudeFlux.cs`, l'analyseur : texte au fil de l'eau, outils, résultats, demandes d'accord, quota de l'abonnement, fin de tour). Facturé sur l'abonnement de Valentin, aucune clé API.
-  `claude.exe` est cherché dans `CDX_CLAUDE_EXE`, puis `~\.local\bin`, puis le PATH ; `CDX_CLAUDE_ARGS` (essais) place des arguments devant.
-- **Les outils** : `PilotTools.cs` tient le tube `cdx.pilote.outils` ; `src\Cdx.PiloteMcp\` (**cdx-pilote-mcp**, serveur MCP « cdx-suite ») n'est qu'un relais JSON-RPC vers ce tube, lancé par
-  Claude Code d'après le `--mcp-config` que Pilote écrit (`pilote-mcp.json` : cdx-suite et cdx-notes, `--strict-mcp-config`). Outils : `suite_state`, `app_open`, `app_state`, `app_command`,
-  `browser_tabs/open/navigate/read/find/click/fill/back/scroll/screenshot`, `mail_search`, `mail_read` (le courrier, lu par Courrier sans rien marquer), `agenda_events`, `agenda_tasks` (par Agenda), `notify`, `project_folder`. Les programmes sont commandés par leur **canal de pilotage** `cdx.<nom>.pilot`
-  (`Host.StartPilotPipe`, toujours ouvert, utilisateur courant : `state`, `cmd <json>` et, pour le navigateur, `page.text/find/click/fill/scroll/shot`, des scripts fixes sur l'onglet actif ; Courrier : `search`, `thread` ; Agenda : `events`, `tasks` ;
-  jamais `eval`, réservé au canal de test). Un programme absent est lancé.
-- **Les accords** : `Cdx.Host\PilotPolicy.cs` décide seul ce qui peut l'être selon le niveau (Réglages > Autonomie : libre, prudent, auto) : lectures et outils de lecture toujours ; écritures dans
-  `Dev\` et le coffre, commandes sûres (git status/add/commit, npm install, dotnet build…), outils réversibles de la suite au niveau libre ; le reste (et toujours : git push, suppressions,
-  envoi de courrier, `notes_trash`) s'affiche dans le volet **Actions** avec Autoriser / Refuser (ou Refuser… avec un motif que Claude lit). Les questions à choix de Claude (AskUserQuestion)
-  s'y répondent aussi. Les outils de lecture sont en plus donnés par `--allowedTools`.
-- **La mémoire** (`Memory.cs`, décisions du 01/11/2026) : des notes du coffre, dossier `Pilote\` (`Profil.md`, `Décisions.md`, `Projets.md`, `Journal.md`, créées au premier lancement), injectées bornées
-  dans la consigne à chaque lancement de Claude (`--system-prompt-snapshot off` : une session reprise relit la mémoire du jour) ; Claude y écrit lui-même par les outils de Notes (faits durables dès qu'il les
-  apprend, une entrée datée Demandé / Fait / En suspens dans le journal à la fin d'un échange utile). Tout se lit et se corrige dans Notes (Réglages > Mémoire de Pilote) ; la mémoire
-  automatique de Claude Code est coupée pour Pilote (`CLAUDE_CODE_DISABLE_AUTO_MEMORY`).
-- **La page** `web\pilote\pilote.html` : conversations à gauche (clic droit : renommer, supprimer), le fil au centre (Markdown rendu par `web\notes\js\md.js`, texte en direct, appels d'outils
-  avec leur état), la saisie (Entrée envoie, Maj+Entrée à la ligne, Échap ou « Arrêter » interrompt), le volet des actions à droite ; ligne d'état : quota de l'abonnement, contexte occupé.
-  Réglages : autonomie, modèle, effort (pris au message suivant, `--resume`). Une demande d'accord faite alors que la fenêtre n'a pas le focus est signalée à la barre.
-- **Essais** : `cdx-shell --selftest-pilote` (36 vérifications : l'analyseur sur des lignes réelles de Claude Code 2.1.316, la politique) ; `tests\pilote.ps1` (41 vérifications contre
-  `tests\fake_claude.py`, un faux `claude -p` qui lance les vrais serveurs MCP et rejoue les scénarios : outils, navigateur piloté, accords automatiques et demandés, refus, question à choix,
-  commande d'un programme, création d'un projet dans un coffre jetable, lecture du courrier contre un faux Gmail, mémoire dans le coffre relue après reprise, redémarrage et reprise, arrêt). Rien ne touche au vrai Claude Code ni aux vrais programmes.
-
 ## Archives (02/11/2026)
 
 La couche DWM d'essai (`couche1`), les maquettes du 30/10 et la présentation animée du 01/11 sont dans `Dev\CDX\archives\`, hors du dépôt.
@@ -151,13 +122,13 @@ La couche DWM d'essai (`couche1`), les maquettes du 30/10 et la présentation an
 ## Icônes d'application (01/11/2026)
 
 Décision du 01/11/2026 : une icône pixel par application, d'une même famille, sans retouche des icônes existantes ; dessins approuvés par Valentin.
-- **La famille** vit dans la charte (cdx-ui `gen/pixel_icons.py`, dictionnaire `APPS`) : dix pictogrammes 16 × 16, chacun dans les couleurs de son objet (choix de Valentin :
+- **La famille** vit dans la charte (cdx-ui `gen/pixel_icons.py`, dictionnaire `APPS`) : dix pictogrammes 16 × 16 (celui de Pilote reste dans la charte, sans programme depuis le 03/11/2026), chacun dans les couleurs de son objet (choix de Valentin :
   pas le même rouge partout), avec la lumière de l'icône de Messages (arête claire en haut et à gauche, ombre en bas et à droite, contour noir). Explorateur : le dossier jaune existant ;
   Navigateur : globe bleu et vert ; Dépôts : classeur gris ; Notes : carnet à spirale blanc ; Terminal : écran noir dans un cadre gris, invite verte ; Agenda : page de calendrier au bandeau
   rouge ; Courrier : enveloppe beige ; Pilote : volant noir au klaxon rouge ; Transferts : flèches verte et bleue ; CDX : le carré rouge de l'accent et son C.
-- **Dans les pages** : les mêmes noms dans `icons.js` (`pix('notes')`, `data-ic="pilote"`…) ; les épingles de la barre et les tuiles du Démarrer (`Pins.cs` : une épingle d'une application
-  de la suite prend son icône de la famille même si `epingles.json` a été écrit avec un pictogramme générique), les notifications du centre (l'icône du programme qui notifie), le fil de Pilote
-  (l'icône du programme visé par l'outil, sinon la nature de l'outil). Alt+Tab et la liste des tâches montrent l'icône de la fenêtre, donc celle de l'exécutable.
+- **Dans les pages** : les mêmes noms dans `icons.js` (`pix('notes')`, `data-ic="depots"`…) ; les épingles de la barre et les tuiles du Démarrer (`Pins.cs` : une épingle d'une application
+  de la suite prend son icône de la famille même si `epingles.json` a été écrit avec un pictogramme générique), les notifications du centre (l'icône du programme qui notifie)
+  Alt+Tab et la liste des tâches montrent l'icône de la fenêtre, donc celle de l'exécutable.
 - **Les exécutables** : `icons\<nom>.ico` (16, 32, 48 et 256 px, images PNG dans l'ICO, rouge fixe), produits par `python gen/gen_app_icons.py ..\cdx-windows\icons` dans cdx-ui et
   versionnés ici ; `<ApplicationIcon>` dans les dix projets, `SetupIconFile` de l'installeur (`cdx.ico`). `HostForm` prend l'icône de son exécutable pour la fenêtre (Alt+Tab, liste
   des tâches de la barre).
@@ -192,7 +163,7 @@ ContextMenuRequested n'est jamais levé (c'est écrit dans sa spécification), d
   pas la typographie ni le style (apostrophes droites, espaces, majuscules… seraient du bruit). Les erreurs sont soulignées en pointillé « attention » (`--warn`) ; clic droit :
   le message de Grammalecte en titre, les suggestions, « Ignorer ici » (règle + mot, le temps de la fenêtre). Grammalecte ne signale qu'une faute à la fois par accord
   (« Les chat mange » : « chat » d'abord ; « mange » une fois « chats » écrit, puisqu'il s'accordait avec le singulier).
-- **Où** : l'éditeur de Notes (Réglages > Affichage > Correcteur orthographique, Grammaire), le message de Courrier, la zone de saisie de Pilote et la description d'un événement
+- **Où** : l'éditeur de Notes (Réglages > Affichage > Correcteur orthographique, Grammaire), le message de Courrier et la description d'un événement
   d'Agenda (Réglages > Correcteur orthographique, Correction automatique, Grammaire) ; réglages gardés par programme, en marche par défaut. Les autres programmes n'ont pas de zone
   de texte multiligne (les champs d'une ligne, comme un titre ou un nom, ne sont pas corrigés).
 - **Essais** : `cdx-shell --selftest-spell` (24 vérifications : mots, formes fausses, élisions, traits d'union, suggestions, dictionnaire personnel jetable, contrat des pages) et

@@ -71,7 +71,6 @@ Name: "notes"; Description: "Notes (coffre Markdown) et son serveur MCP pour Cla
 Name: "terminal"; Description: "Terminal"; Types: full
 Name: "agenda"; Description: "Agenda (calendrier et tâches du compte Google)"; Types: full
 Name: "mail"; Description: "Courrier (boîte Gmail du compte Google)"; Types: full
-Name: "pilote"; Description: "Pilote (chat avec Claude pour organiser et créer les projets ; demande Claude Code)"; Types: full
 Name: "youtube"; Description: "YouTube (accueil, recherche, vidéos ; page YouTube cachée avec uBlock Origin Lite)"; Types: full
 Name: "audio_linker"; Description: "Audio Linker (le son du PC sur plusieurs sorties à la fois ; demande VB-CABLE)"; Types: full
 
@@ -99,11 +98,16 @@ Source: "{#BinDir}\Cdx.Vault.deps.json"; DestDir: "{app}"; Components: notes; Fl
 Source: "{#BinDir}\cdx-terminal.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: terminal; Flags: ignoreversion
 Source: "{#BinDir}\cdx-agenda.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: agenda; Flags: ignoreversion
 Source: "{#BinDir}\cdx-mail.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: mail; Flags: ignoreversion
-Source: "{#BinDir}\cdx-pilote.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: pilote; Flags: ignoreversion
-Source: "{#BinDir}\cdx-pilote-mcp.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: pilote; Flags: ignoreversion
 Source: "{#BinDir}\cdx-youtube.*"; DestDir: "{app}"; Excludes: "*.pdb"; Components: youtube; Flags: ignoreversion
 ; Audio Linker (C++, compilé par build.ps1 dans bin\) : un seul exécutable autonome
 Source: "{#BinDir}\cdx-audio_linker.exe"; DestDir: "{app}"; Components: audio_linker; Flags: ignoreversion
+
+[InstallDelete]
+; Pilote, retiré de la suite le 03/11/2026 : une mise à jour par-dessus retire ses fichiers, sa page et son raccourci (ses données, elles, restent).
+Type: files; Name: "{app}\cdx-pilote.*"
+Type: files; Name: "{app}\cdx-pilote-mcp.*"
+Type: filesandordirs; Name: "{app}\web\pilote"
+Type: files; Name: "{autoprograms}\{#AppName}\Pilote {#AppName}.lnk"
 
 [Icons]
 Name: "{autoprograms}\{#AppName}\Barre {#AppName}"; Filename: "{app}\{#ShellExe}"; Components: shell
@@ -115,7 +119,6 @@ Name: "{autoprograms}\{#AppName}\Notes {#AppName}"; Filename: "{app}\cdx-notes.e
 Name: "{autoprograms}\{#AppName}\Terminal {#AppName}"; Filename: "{app}\cdx-terminal.exe"; Components: terminal
 Name: "{autoprograms}\{#AppName}\Agenda {#AppName}"; Filename: "{app}\cdx-agenda.exe"; Components: agenda
 Name: "{autoprograms}\{#AppName}\Courrier {#AppName}"; Filename: "{app}\cdx-mail.exe"; Components: mail
-Name: "{autoprograms}\{#AppName}\Pilote {#AppName}"; Filename: "{app}\cdx-pilote.exe"; Components: pilote
 Name: "{autoprograms}\{#AppName}\YouTube {#AppName}"; Filename: "{app}\cdx-youtube.exe"; Components: youtube
 Name: "{autoprograms}\{#AppName}\Audio Linker"; Filename: "{app}\cdx-audio_linker.exe"; Components: audio_linker
 
