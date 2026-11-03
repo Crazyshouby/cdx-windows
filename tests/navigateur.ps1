@@ -158,6 +158,12 @@ Ctl 'use 0' | Out-Null; $s = St
 Check "« Ouvrir dans une nouvelle fenêtre » : une troisième fenêtre reçoit l'onglet sans le recharger (même adresse, même titre)" (@($s.windows).Count -eq 3 -and $s.tabs[0].Url -eq $mv.Url -and $s.tabs[0].Title -eq $mv.Title)
 $evm = Ctl 'eval document.title'
 Check "la page déplacée répond toujours ($evm)" ($evm -and $evm -ne 'null' -and $evm.Length -gt 2)
+# l'onglet déplacé est bien branché sur sa nouvelle fenêtre : un changement de titre redessine la barre d'onglets de la fenêtre 3, pas de la fenêtre 1
+Ctl 'eval document.title = "DEPLACE-13"' | Out-Null; Start-Sleep 1
+Check "après le déplacement, le titre changé s'affiche dans la barre d'onglets de la nouvelle fenêtre" ((Ctl 'evalui [...document.querySelectorAll("#tabs .tab .tt")].map(x => x.textContent).join("|")') -match 'DEPLACE-13')
+Ctl 'use 1' | Out-Null
+Check "… et pas dans celle de l'ancienne" ((Ctl 'evalui [...document.querySelectorAll("#tabs .tab .tt")].map(x => x.textContent).join("|")') -notmatch 'DEPLACE-13')
+Ctl 'use 0' | Out-Null
 Ctl 'cmd {"cmd":"win.close"}' | Out-Null; Start-Sleep 2; Ctl 'use 2' | Out-Null; Ctl 'cmd {"cmd":"win.close"}' | Out-Null; Start-Sleep 2; Ctl 'use 0' | Out-Null
 $s = St; Check "fermer deux fenêtres : le programme continue avec la première" (@($s.windows).Count -eq 1 -and -not $brp.HasExited)
 

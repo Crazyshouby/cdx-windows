@@ -13,6 +13,7 @@ class BrowserTab
     public bool Loading; public int Group;   // 0 : hors groupe
     public CoreWebView2Controller Ctl;
     public string Filled;                    // adresse où nos identifiants ont été posés (une seule fois par page)
+    public BrowserForm Owner;                // la fenêtre qui tient l'onglet (change quand il est déplacé : Attach)
     public bool InternalOk;                  // la prochaine navigation vient du navigateur lui-même (barre d'adresse, cdx://, précédente…) : une page interne y est permise
 }
 class TabGroup { public int Id; public string Name = ""; public string Color = "accent"; public bool Collapsed; }
@@ -78,7 +79,7 @@ class BrowserForm : HostForm
 
     public async Task<BrowserTab> NewTabAsync(string url, bool activate = true, int group = 0, int after = -1)
     {
-        var t = new BrowserTab { Id = nextTab++, Web = new WebView2 { DefaultBackgroundColor = Color.FromArgb(0x22, 0x22, 0x22), Visible = false, Bounds = view }, Group = group };
+        var t = new BrowserTab { Owner = this, Id = nextTab++, Web = new WebView2 { DefaultBackgroundColor = Color.FromArgb(0x22, 0x22, 0x22), Visible = false, Bounds = view }, Group = group };
         if (after >= 0 && after < Tabs.Count) Tabs.Insert(after + 1, t); else Tabs.Add(t);
         if (group != 0) PlaceInGroup(t);
         Controls.Add(t.Web); t.Web.BringToFront();
@@ -147,7 +148,7 @@ class BrowserForm : HostForm
     // Un onglet venu d'une autre fenêtre : le contrôle WebView2 change de fenêtre parente (sa vue le suit : la page n'est pas rechargée).
     public void Attach(BrowserTab t)
     {
-        t.Id = nextTab++; t.Group = 0; Tabs.Add(t);
+        t.Owner = this; t.Id = nextTab++; t.Group = 0; Tabs.Add(t);
         try { Controls.Add(t.Web); } catch (Exception ex) { Host.Log("onglet déplacé : " + ex.Message); }
         t.Web.Bounds = view; Select(t);
     }
@@ -232,12 +233,15 @@ class BrowserForm : HostForm
     void Wire(BrowserTab t)
     {
         var c = t.Web.CoreWebView2;
+        // Tout passe par t.Owner, la fenêtre qui tient l'onglet MAINTENANT : un onglet déplacé dans une autre fenêtre (MoveToNewWindow) ne doit plus
+        // agir sur l'ancienne (fermer son onglet actif, y ouvrir une boîte d'enregistrement après sa fermeture…).
+        BrowserForm O() => t.Owner;
         c.SetVirtualHostNameToFolderMapping("cdx.shell", sh.Root, CoreWebView2HostResourceAccessKind.DenyCors);   // les pages internes (cdx://) sont des fichiers de la charte
         c.Settings.IsZoomControlEnabled = false; c.Settings.AreBrowserAcceleratorKeysEnabled = false; c.Settings.IsStatusBarEnabled = false;
         ApplySettings(t);
-        c.DocumentTitleChanged += (s, e) => { t.Title = string.IsNullOrWhiteSpace(c.DocumentTitle) ? DisplayUrl(c.Source) : c.DocumentTitle; if (t.Title == "") t.Title = "Nouvel onglet"; Push(); };
-        c.SourceChanged += (s, e) => { t.Url = c.Source; Push(); };
-        c.HistoryChanged += (s, e) => Push();
+        c.DocumentTitleChanged += (s, e) => { t.Title = string.IsNullOrWhiteSpace(c.DocumentTitle) ? DisplayUrl(c.Source) : c.DocumentTitle; if (t.Title == "") t.Title = "Nouvel onglet"; O().Push(); };
+        c.SourceChanged += (s, e) => { t.Url = c.Source; O().Push(); };
+        c.HistoryChanged += (s, e) => O().Push();
         // Les pages internes (réglages, mots de passe, historique) sont servies sous cdx.shell dans chaque onglet : une page web ne doit ni les ouvrir
         // ni les encadrer. Permis : une navigation lancée par le navigateur (Go, précédente, suivante, recharger), ou d'une page interne à une autre.
         c.NavigationStarting += (s, e) =>
@@ -245,39 +249,39 @@ class BrowserForm : HostForm
             bool ours = t.InternalOk; t.InternalOk = false;
             if (e.Uri.StartsWith("https://cdx.shell/", StringComparison.OrdinalIgnoreCase) && !(IsInternalUrl(e.Uri) && (ours || IsInternalUrl(c.Source))))
             { e.Cancel = true; Host.Log("page interne refusée (ouverte par une page) : " + e.Uri); return; }
-            t.Loading = true; t.Status = ""; Push();
+            t.Loading = true; t.Status = ""; O().Push();
         };
         c.FrameNavigationStarting += (s, e) => { if (e.Uri.StartsWith("https://cdx.shell/", StringComparison.OrdinalIgnoreCase)) { e.Cancel = true; Host.Log("cadre interne refusé : " + e.Uri); } };
         c.NavigationCompleted += (s, e) =>
         {
             t.Loading = false; t.Url = c.Source;
-            if (e.IsSuccess && !IsInternalUrl(c.Source) && c.Source.StartsWith("http")) { BrowserData.AddHistory(c.Source, c.DocumentTitle); Autofill(t); }
-            Push();
+            if (e.IsSuccess && !IsInternalUrl(c.Source) && c.Source.StartsWith("http")) { BrowserData.AddHistory(c.Source, c.DocumentTitle); O().Autofill(t); }
+            O().Push();
         };
         c.FaviconChanged += async (s, e) =>
         {
             try
             {
-                if (string.IsNullOrEmpty(c.FaviconUri)) { t.Favicon = ""; Push(); return; }
+                if (string.IsNullOrEmpty(c.FaviconUri)) { t.Favicon = ""; O().Push(); return; }
                 using var st = await c.GetFaviconAsync(CoreWebView2FaviconImageFormat.Png); using var ms = new MemoryStream(); await st.CopyToAsync(ms);
-                t.Favicon = Convert.ToBase64String(ms.ToArray()); Push();
+                t.Favicon = Convert.ToBase64String(ms.ToArray()); O().Push();
             }
             catch { }
         };
-        c.StatusBarTextChanged += (s, e) => { t.Status = c.StatusBarText ?? ""; if (t == active) Send(new { type = "status", text = t.Status }); };
-        c.WindowCloseRequested += (s, e) => CloseTab(t);
+        c.StatusBarTextChanged += (s, e) => { t.Status = c.StatusBarText ?? ""; if (t == O().active) O().Send(new { type = "status", text = t.Status }); };
+        c.WindowCloseRequested += (s, e) => O().CloseTab(t);
         c.NewWindowRequested += async (s, e) =>
         {
             // une fenêtre que la page ouvre d'elle-même (sans clic de l'utilisateur) : bloquée
             if (!e.IsUserInitiated) { e.Handled = true; Host.Log("fenêtre surgissante bloquée : " + e.Uri); return; }
             var d = e.GetDeferral();
-            try { var nt = await NewTabAsync(null, true, t.Group, Tabs.IndexOf(t)); e.NewWindow = nt.Web.CoreWebView2; e.Handled = true; }   // le nouvel onglet garde le lien « opener » : les fenêtres de connexion fonctionnent
+            try { var o = O(); var nt = await o.NewTabAsync(null, true, t.Group, o.Tabs.IndexOf(t)); e.NewWindow = nt.Web.CoreWebView2; e.Handled = true; }   // le nouvel onglet garde le lien « opener » : les fenêtres de connexion fonctionnent
             catch (Exception ex) { Host.Log("nouvel onglet : " + ex.Message); }
             finally { d.Complete(); }
         };
-        c.DownloadStarting += (s, e) => StartDownload(e);
-        c.ContainsFullScreenElementChanged += (s, e) => SetFullscreen(c.ContainsFullScreenElement);
-        c.WebMessageReceived += (s, e) => FromInternalPage(t, e);
+        c.DownloadStarting += (s, e) => O().StartDownload(e);
+        c.ContainsFullScreenElementChanged += (s, e) => O().SetFullscreen(c.ContainsFullScreenElement);
+        c.WebMessageReceived += (s, e) => O().FromInternalPage(t, e);
         // Le contrôle WinForms garde son contrôleur dans un champ privé (aucun accesseur public) : on le lit pour capter les raccourcis clavier des pages, le focus et le changement de fenêtre.
         t.Ctl = typeof(WebView2).GetField("_coreWebView2Controller", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(t.Web) as CoreWebView2Controller;
         if (t.Ctl == null) Host.Log("raccourcis des pages : contrôleur WebView2 introuvable");
@@ -285,12 +289,12 @@ class BrowserForm : HostForm
         {
             t.Ctl.AcceleratorKeyPressed += (s, e) =>
             {
-                if ((e.KeyEventKind == CoreWebView2KeyEventKind.KeyDown || e.KeyEventKind == CoreWebView2KeyEventKind.SystemKeyDown) && Shortcut(e.VirtualKey)) e.Handled = true;
+                if ((e.KeyEventKind == CoreWebView2KeyEventKind.KeyDown || e.KeyEventKind == CoreWebView2KeyEventKind.SystemKeyDown) && O().Shortcut(e.VirtualKey)) e.Handled = true;
             };
-            t.Ctl.GotFocus += (s, e) => { if (pane2 != null && t != active && (t == pane1 || t == pane2)) { active = t; Push(); } };   // pages scindées : le volet cliqué devient l'actif
+            t.Ctl.GotFocus += (s, e) => { var o = O(); if (o.pane2 != null && t != o.active && (t == o.pane1 || t == o.pane2)) { o.active = t; o.Push(); } };   // pages scindées : le volet cliqué devient l'actif
         }
-        c.Find.ActiveMatchIndexChanged += (s, e) => SendFind(c);
-        c.Find.MatchCountChanged += (s, e) => SendFind(c);
+        c.Find.ActiveMatchIndexChanged += (s, e) => O().SendFind(c);
+        c.Find.MatchCountChanged += (s, e) => O().SendFind(c);
     }
 
     public void ApplySettings(BrowserTab t)
