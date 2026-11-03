@@ -214,7 +214,7 @@ static class SelfTest
             Check("doublon (autre casse) : pas de seconde épingle", s.AddToBar("Essai bis", exe.ToUpperInvariant()) && s.Items.Count(p => string.Equals(p.Target, exe, StringComparison.OrdinalIgnoreCase)) == 1);
             Check("ajout d'une tuile existante à la barre : même entrée, Bar vrai", s.AddToBar("Calculatrice", "calc.exe") && s.Items.Count(p => p.Target == "calc.exe") == 1 && s.Find("calc.exe").Bar && s.Find("calc.exe").Tile);
 
-            Check("écriture atomique : aucun .tmp ne reste", File.Exists(file) && !File.Exists(file + ".tmp"));
+            Check("écriture atomique : aucun .tmp ne reste", File.Exists(file) && !Directory.GetFiles(Path.GetDirectoryName(file), Path.GetFileName(file) + "*.tmp").Any());
             var s2 = new PinStore(file);
             Check("relecture : même ordre, mêmes drapeaux", s2.Items.Select(p => p.Target + p.Bar + p.Tile).SequenceEqual(s.Items.Select(p => p.Target + p.Bar + p.Tile)));
 
@@ -513,7 +513,7 @@ static class SelfTest
                 Check("suite.json absent : rouge", Suite.ReadAccent() == "rouge");
                 Suite.WriteAccent("jean");
                 Check("écriture puis lecture : jean", Suite.ReadAccent() == "jean");
-                Check("écriture atomique : aucun .tmp ne reste", !File.Exists(Suite.FilePath + ".tmp"));
+                Check("écriture atomique : aucun .tmp ne reste", !Directory.GetFiles(Suite.Dir, "suite.json*.tmp").Any());
                 Check("la surveillance signale jean (< 1 s)", Until(() => accents.Contains("jean"), 1000));
                 bool threw = false; try { Suite.WriteAccent("../x"); } catch (ArgumentException) { threw = true; }
                 Check("accent inconnu refusé à l'écriture", threw && Suite.ReadAccent() == "jean");
@@ -530,6 +530,27 @@ static class SelfTest
                 Check("retour à un fichier valide : lavande signalé (< 1 s)", Until(() => accents.Contains("lavande"), 1000));
                 Suite.RegisterApp("shell", @"C:\Windows\System32\notepad.exe");
                 Check("apps.json : chemin enregistré, nom hors liste refusé", Suite.AppPath("shell") != null && Suite.AppPath("../evil") == null);
+                // plusieurs programmes qui s'inscrivent en même temps : aucune entrée perdue (verrou nommé autour de lire-modifier-écrire)
+                string[] names = { "explorer", "browser", "repos", "transfers", "notes", "terminal", "agenda", "mail" };
+                Parallel.ForEach(names, n => Suite.RegisterApp(n, @"C:\Windows\System32\notepad.exe"));
+                Check("apps.json : huit inscriptions simultanées, aucune perdue", names.All(n => Suite.AppPath(n) != null) && !Directory.GetFiles(Suite.Dir, "apps.json*.tmp").Any());
+
+                // ---- AtomicFile : écritures simultanées, et un lecteur qui tient le fichier
+                string af = Path.Combine(dir, "atomique.json");
+                Parallel.For(0, 40, i => { try { AtomicFile.WriteJson(af, new { i, pad = new string('x', 20000) }); } catch (IOException) { } catch (UnauthorizedAccessException) { } });
+                bool afOk; try { using var d = JsonDocument.Parse(File.ReadAllText(af)); afOk = d.RootElement.GetProperty("pad").GetString().Length == 20000; } catch { afOk = false; }
+                Check("AtomicFile : 40 écritures simultanées, le fichier final est entier et aucun .tmp ne reste", afOk && !Directory.GetFiles(dir, "atomique.json*.tmp").Any());
+                bool heldOk;
+                var briefReader = new FileStream(af, FileMode.Open, FileAccess.Read, FileShare.Read);   // un programme qui relit le fichier au même instant
+                _ = Task.Run(() => { Thread.Sleep(60); briefReader.Dispose(); });
+                try { AtomicFile.WriteJson(af, new { i = -1, pad = "tenu" }); heldOk = true; } catch { heldOk = false; }
+                Check("AtomicFile : un lecteur qui tient le fichier un instant retarde l'écriture sans la faire échouer", heldOk && File.ReadAllText(af).Contains("tenu"));
+                bool lockedThrows = false;
+                using (var locker = new FileStream(af, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    try { AtomicFile.WriteJson(af, new { i = -2 }); } catch (Exception) { lockedThrows = true; }
+                }
+                Check("AtomicFile : un fichier verrouillé fait échouer l'écriture sans le toucher ni laisser de .tmp", lockedThrows && File.ReadAllText(af).Contains("tenu") && !Directory.GetFiles(dir, "atomique.json*.tmp").Any());
             }
             catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
             finally { anchor.BeginInvoke(new Action(Application.ExitThread)); }

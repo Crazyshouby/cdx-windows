@@ -47,7 +47,7 @@ sealed class MailApp : ApplicationContext, IHostApp
 
     public bool Closing { get; private set; }
     protected override void ExitThreadCore() { Closing = true; poll.Dispose(); watch?.Dispose(); base.ExitThreadCore(); }
-    void SaveCache() { try { File.WriteAllText(CacheFile, JsonSerializer.Serialize(new { threads = lastThreads, labels = lastLabels, cache = threadCache.ToDictionary(k => k.Key, k => new { h = k.Value.history, s = k.Value.summary }) })); } catch (Exception ex) { Host.Log("cache : " + ex.Message); } }
+    void SaveCache() { try { AtomicFile.WriteAllText(CacheFile, JsonSerializer.Serialize(new { threads = lastThreads, labels = lastLabels, cache = threadCache.ToDictionary(k => k.Key, k => new { h = k.Value.history, s = k.Value.summary }) })); } catch (Exception ex) { Host.Log("cache : " + ex.Message); } }
     // Google a refusé pour quota : on attend 30 s avant tout nouvel appel, et on le dit.
     bool QuotaHold() { if (DateTime.UtcNow >= quotaUntil) return false; form?.Send(new { type = "error", text = $"Quota Google dépassé : nouvel essai possible dans {(int)(quotaUntil - DateTime.UtcNow).TotalSeconds + 1} s." }); return true; }
     bool IsQuota(Exception ex) { if (ex is GoogleApiException g && (g.Status == 429 || g.Message.Contains("Quota exceeded", StringComparison.OrdinalIgnoreCase))) { quotaUntil = DateTime.UtcNow.AddSeconds(30); return true; } return false; }

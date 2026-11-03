@@ -104,10 +104,8 @@ sealed class PinStore
     {
         try
         {
-            var tmp = file + ".tmp";
             var pins = Items.Select(p => new { name = p.Name, target = p.Target, ic = p.Ic, bar = p.Bar, tile = p.Tile, barIndex = p.Bar ? barOrder.FindIndex(t => Same(t, p.Target)) : -1 });
-            File.WriteAllText(tmp, JsonSerializer.Serialize(new { version = 1, seen = seen.ToArray(), pins }, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
-            File.Move(tmp, file, true);
+            AtomicFile.WriteJson(file, new { version = 1, seen = seen.ToArray(), pins }, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         }
         catch (Exception ex) { Host.Log("épingles : écriture échouée : " + ex.Message); }
     }

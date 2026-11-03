@@ -45,8 +45,8 @@ sealed class AgendaApp : ApplicationContext, IHostApp
     public bool Closing { get; private set; }
     protected override void ExitThreadCore() { Closing = true; watch?.Dispose(); base.ExitThreadCore(); }
 
-    void SaveSettings() { try { File.WriteAllText(SettingsFile, JsonSerializer.Serialize(new { hidden })); } catch (Exception ex) { Host.Log("agenda.json : " + ex.Message); } }
-    void SaveCache() { try { File.WriteAllText(CacheFile, JsonSerializer.Serialize(new { events = lastEvents, tasks = lastTasks })); } catch (Exception ex) { Host.Log("cache : " + ex.Message); } }
+    void SaveSettings() { try { AtomicFile.WriteJson(SettingsFile, new { hidden }); } catch (Exception ex) { Host.Log("agenda.json : " + ex.Message); } }
+    void SaveCache() { try { AtomicFile.WriteJson(CacheFile, new { events = lastEvents, tasks = lastTasks }); } catch (Exception ex) { Host.Log("cache : " + ex.Message); } }
 
     public async void Open()
     {

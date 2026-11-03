@@ -33,10 +33,7 @@ public static class VaultConfig
 
     public static void Save(string root)
     {
-        Directory.CreateDirectory(DataDir);
-        string tmp = FilePath + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(new { version = 1, vault = root }, new JsonSerializerOptions { WriteIndented = true }));
-        File.Move(tmp, FilePath, true);
+        AtomicFile.WriteJson(FilePath, new { version = 1, vault = root }, new JsonSerializerOptions { WriteIndented = true });
     }
 
     // Ouvre le coffre ; s'il n'existe pas encore, le crée avec quelques notes pour commencer (jamais dans un dossier qui contient déjà des fichiers).

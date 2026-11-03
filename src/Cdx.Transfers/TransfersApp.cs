@@ -79,9 +79,7 @@ sealed class TransfersApp : ApplicationContext, IHostApp
                 app = e.App, kind = e.Kind, title = e.Title, state = e.State, from = e.From, to = e.To, error = e.Error, path = e.Path, done = e.Done, total = e.Total, items = e.Items,
                 started = new DateTimeOffset(e.Started, TimeSpan.Zero).ToUnixTimeMilliseconds(), ended = new DateTimeOffset(e.Ended, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             }).ToList();
-            string tmp = HistFile + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(new { version = 1, items = fin }));
-            File.Move(tmp, HistFile, true);
+            AtomicFile.WriteJson(HistFile, new { version = 1, items = fin });
         }
         catch (Exception ex) { Host.Log("transferts.json : " + ex.Message); }
     }

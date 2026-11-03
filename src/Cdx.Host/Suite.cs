@@ -38,15 +38,7 @@ static class Suite
     public static void WriteAccent(string accent)
     {
         if (!IsAccent(accent)) throw new ArgumentException("accent inconnu : " + accent);
-        Directory.CreateDirectory(Dir);
-        AtomicWrite(FilePath, JsonSerializer.Serialize(new { version = 1, accent }));
-    }
-
-    static void AtomicWrite(string path, string text)
-    {
-        string tmp = path + ".tmp";
-        System.IO.File.WriteAllText(tmp, text);
-        System.IO.File.Move(tmp, path, true);
+        AtomicFile.WriteJson(FilePath, new { version = 1, accent });
     }
 
     // Surveille le fichier (sondage toutes les 250 ms : date et taille) ; `onChange` reçoit le nouvel accent, sur le fil qui a appelé Watch,
@@ -77,16 +69,23 @@ static class Suite
     }
 
     // apps.json : le chemin de l'exécutable de chaque programme de la suite, écrit par chacun au démarrage (voir SUITE.md §3.5).
+    // Lire, ajouter sa ligne, réécrire : sous un verrou nommé, sinon deux programmes lancés ensemble effacent l'entrée l'un de l'autre.
     public static void RegisterApp(string name, string exePath)
     {
         try
         {
-            Directory.CreateDirectory(Dir);
-            var map = new SortedDictionary<string, string>();
-            try { using var d = JsonDocument.Parse(System.IO.File.ReadAllText(AppsFile)); foreach (var p in d.RootElement.EnumerateObject()) if (p.Value.ValueKind == JsonValueKind.String) map[p.Name] = p.Value.GetString(); } catch (Exception) { }
-            if (map.TryGetValue(name, out var old) && old == exePath) return;
-            map[name] = exePath;
-            AtomicWrite(AppsFile, JsonSerializer.Serialize(map));
+            using var m = new Mutex(false, @"Local\cdx.apps");
+            bool owned = false;
+            try { owned = m.WaitOne(2000); } catch (AbandonedMutexException) { owned = true; }
+            try
+            {
+                var map = new SortedDictionary<string, string>();
+                try { using var d = JsonDocument.Parse(System.IO.File.ReadAllText(AppsFile)); foreach (var p in d.RootElement.EnumerateObject()) if (p.Value.ValueKind == JsonValueKind.String) map[p.Name] = p.Value.GetString(); } catch (Exception) { }
+                if (map.TryGetValue(name, out var old) && old == exePath) return;
+                map[name] = exePath;
+                AtomicFile.WriteJson(AppsFile, map);
+            }
+            finally { if (owned) m.ReleaseMutex(); }
         }
         catch (Exception ex) { Host.Log("apps.json : " + ex.Message); }
     }

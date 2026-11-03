@@ -28,8 +28,27 @@ class DownloadItem
 static class BrowserData
 {
     static string F(string n) => System.IO.Path.Combine(Host.DataDir, n);
-    static List<T> Load<T>(string n) { try { return JsonSerializer.Deserialize<List<T>>(File.ReadAllText(F(n))) ?? new(); } catch { return new(); } }
-    static void Save<T>(string n, List<T> l) { try { File.WriteAllText(F(n), JsonSerializer.Serialize(l)); } catch (Exception ex) { Host.Log("sauvegarde " + n + " : " + ex.Message); } }
+    // Un fichier qui existe mais ne se lit pas n'est jamais écrasé par une liste vide : abîmé, il est mis de côté (« .corrompu ») ;
+    // illisible pour une autre raison (verrouillé, droits), il n'est plus réécrit de la session.
+    static readonly HashSet<string> unreadable = new();
+    static List<T> Load<T>(string n)
+    {
+        string f = F(n);
+        try { return JsonSerializer.Deserialize<List<T>>(File.ReadAllText(f)) ?? new(); }
+        catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException) { return new(); }
+        catch (JsonException ex)
+        {
+            Host.Log(n + " abîmé, mis de côté en " + n + ".corrompu : " + ex.Message);
+            try { File.Move(f, f + ".corrompu", true); } catch { unreadable.Add(n); }
+            return new();
+        }
+        catch (Exception ex) { Host.Log(n + " illisible, il ne sera pas réécrit pendant cette session : " + ex.Message); unreadable.Add(n); return new(); }
+    }
+    static void Save<T>(string n, List<T> l)
+    {
+        if (unreadable.Contains(n)) return;
+        try { AtomicFile.WriteJson(F(n), l); } catch (Exception ex) { Host.Log("sauvegarde " + n + " : " + ex.Message); }
+    }
 
     public static readonly List<Bookmark> Bookmarks = Load<Bookmark>("favoris.json");
     public static readonly List<HistoryEntry> History = Load<HistoryEntry>("historique.json");
@@ -38,6 +57,21 @@ static class BrowserData
 
     public static void SaveBookmarks() => Save("favoris.json", Bookmarks);
     public static void SaveHistory() { if (History.Count > 5000) History.RemoveRange(0, History.Count - 5000); Save("historique.json", History); }
+
+    // L'historique (jusqu'à 5 000 entrées) n'est plus réécrit à chaque page : au plus une fois toutes les 2 s, et à la sortie.
+    // Minuteur WinForms : il tourne sur le fil de l'interface, comme AddHistory, donc la liste n'est jamais lue pendant qu'on la modifie.
+    static System.Windows.Forms.Timer historyTimer;
+    static void ScheduleHistorySave()
+    {
+        if (historyTimer == null)
+        {
+            historyTimer = new System.Windows.Forms.Timer { Interval = 2000 };
+            historyTimer.Tick += (s, e) => { historyTimer.Stop(); SaveHistory(); };
+        }
+        if (!historyTimer.Enabled) historyTimer.Start();
+    }
+    // À la sortie du programme (BrowserApp.ExitThreadCore) : l'historique en attente est écrit.
+    public static void FlushHistory() { if (historyTimer is { Enabled: true }) { historyTimer.Stop(); SaveHistory(); } }
     public static bool IsStarred(string url) => Bookmarks.Any(b => b.Url == url);
     public static void ToggleStar(string url, string title)
     {
@@ -51,7 +85,7 @@ static class BrowserData
         var last = History.LastOrDefault();
         if (last != null && last.Url == url && now - last.Time < 5000) { last.Title = title; return; }   // rechargement : pas de doublon
         History.Add(new HistoryEntry { Title = string.IsNullOrWhiteSpace(title) ? url : title, Url = url, Time = now });
-        SaveHistory();
+        ScheduleHistorySave();
     }
     public static int NextDownloadId() => ++dlSeq;
 
@@ -168,7 +202,7 @@ class BrowserSettings
     static string F => Path.Combine(Host.DataDir, "reglages-navigateur.json");
     public static BrowserSettings Current = Load();
     static BrowserSettings Load() { try { return JsonSerializer.Deserialize<BrowserSettings>(File.ReadAllText(F)) ?? new(); } catch { return new(); } }
-    public void Save() { try { File.WriteAllText(F, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); } catch (Exception ex) { Host.Log("réglages : " + ex.Message); } }
+    public void Save() { try { AtomicFile.WriteJson(F, this, new JsonSerializerOptions { WriteIndented = true }); } catch (Exception ex) { Host.Log("réglages : " + ex.Message); } }
     public object Payload() => new { search = Search, downloadDir = DownloadDir, downloadsFolder = DownloadsFolder, askWhere = AskWhere, restoreSession = RestoreSession, savePasswords = SavePasswords, autofill = Autofill, engines = Engines.Select(e => new { id = e.id, name = e.name }) };
 
     // Un réglage changé depuis la page cdx://reglages. Vrai si connu.
@@ -195,16 +229,23 @@ class Credential { public string Url { get; set; } = ""; public string User { ge
 static class Passwords
 {
     static string F => Path.Combine(Host.DataDir, "motsdepasse.bin");
+    static bool loadFailed;   // le fichier existe mais n'a pas pu être lu : il est mis de côté avant la première écriture, jamais écrasé
     public static readonly List<Credential> All = Load();
 
     static List<Credential> Load()
     {
         try { if (!File.Exists(F)) return new(); return JsonSerializer.Deserialize<List<Credential>>(Encoding.UTF8.GetString(Dpapi.Unprotect(File.ReadAllBytes(F)))) ?? new(); }
-        catch (Exception ex) { Host.Log("mots de passe illisibles : " + ex.Message); return new(); }
+        catch (Exception ex) { Host.Log("mots de passe illisibles : " + ex.Message); loadFailed = true; return new(); }
     }
     public static void Save()
     {
-        try { if (All.Count == 0) { File.Delete(F); return; } File.WriteAllBytes(F, Dpapi.Protect(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(All)), "CDX navigateur")); }
+        try
+        {
+            if (loadFailed && File.Exists(F)) { File.Move(F, F + ".illisible-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"), false); Host.Log("ancien motsdepasse.bin illisible conservé à côté"); }
+            loadFailed = false;
+            if (All.Count == 0) { File.Delete(F); return; }
+            AtomicFile.WriteAllBytes(F, Dpapi.Protect(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(All)), "CDX navigateur"));
+        }
         catch (Exception ex) { Host.Log("mots de passe : " + ex.Message); }
     }
 
@@ -287,7 +328,7 @@ static class Session
     }
     public static void Write(SessionFile s)
     {
-        try { string tmp = F + ".tmp"; File.WriteAllText(tmp, JsonSerializer.Serialize(s)); File.Move(tmp, F, true); }
+        try { AtomicFile.WriteJson(F, s); }
         catch (Exception ex) { Host.Log("session : " + ex.Message); }
     }
 }
@@ -302,7 +343,7 @@ static class Extensions
     static readonly HttpClient http = new() { Timeout = TimeSpan.FromMinutes(5) };
 
     static string IndexFile => Path.Combine(Dir, "index.json");
-    static void SaveIndex() { try { File.WriteAllText(IndexFile, JsonSerializer.Serialize(folderOf)); } catch { } }
+    static void SaveIndex() { try { AtomicFile.WriteJson(IndexFile, folderOf); } catch (Exception ex) { Host.Log("extensions\\index.json : " + ex.Message); } }
 
     // Au premier onglet : chaque dossier avec un manifest.json (sauf ceux qui commencent par « _ ») est ajouté au profil ; un dossier déjà connu garde son identifiant.
     public static async Task LoadAllAsync(CoreWebView2Profile p)

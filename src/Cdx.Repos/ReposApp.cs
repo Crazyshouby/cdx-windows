@@ -53,12 +53,7 @@ sealed class ReposApp : ApplicationContext, IHostApp
 
     void SaveRoots()
     {
-        try
-        {
-            string tmp = RootsFile + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(new { roots, hidden }));
-            File.Move(tmp, RootsFile, true);
-        }
+        try { AtomicFile.WriteJson(RootsFile, new { roots, hidden }); }
         catch (Exception ex) { Host.Log("repos.json : " + ex.Message); }
     }
 

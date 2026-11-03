@@ -34,7 +34,7 @@ sealed class BrowserApp : ApplicationContext, IHostApp
         Xfer.Control = BrowserData.Control;
     }
 
-    protected override void ExitThreadCore() { Closing = true; watch?.Dispose(); side.Dispose(); base.ExitThreadCore(); }
+    protected override void ExitThreadCore() { Closing = true; watch?.Dispose(); side.Dispose(); BrowserData.FlushHistory(); base.ExitThreadCore(); }
 
     BrowserForm Current => lastActive != null && !lastActive.IsDisposed && windows.Contains(lastActive) ? lastActive : windows.LastOrDefault(w => !w.IsDisposed);
 

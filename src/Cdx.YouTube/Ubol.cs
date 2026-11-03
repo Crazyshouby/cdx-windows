@@ -135,7 +135,7 @@ static class Ubol
     public static void OublierIdentifiant() { var e = Lire(); e.id = null; Ecrire(e); }
 
     static EtatUbol Lire() { try { return JsonSerializer.Deserialize<EtatUbol>(File.ReadAllText(Etat)) ?? new(); } catch { return new(); } }
-    static void Ecrire(EtatUbol e) { try { Directory.CreateDirectory(YtDonnees.Extensions); File.WriteAllText(Etat, JsonSerializer.Serialize(e)); } catch { } }
+    static void Ecrire(EtatUbol e) { try { AtomicFile.WriteJson(Etat, e); } catch (Exception ex) { Host.Log("ubol : état non enregistré : " + ex.Message); } }
 
     public static void Copier(string s, string d)
     {

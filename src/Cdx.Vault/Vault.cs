@@ -221,13 +221,8 @@ public sealed class Vault
     }
 
     // ---------- écriture ----------
-    static void WriteAtomic(string full, string text)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(full));
-        string tmp = full + ".cdx-tmp";
-        File.WriteAllText(tmp, text, new UTF8Encoding(false));
-        File.Move(tmp, full, true);
-    }
+    // Le temporaire finit par « .cdx-tmp » : la lecture du coffre ne le prend jamais pour une note.
+    static void WriteAtomic(string full, string text) => AtomicFile.WriteAllText(full, text, ".cdx-tmp");
 
     static void CheckSize(string text) { if (Encoding.UTF8.GetByteCount(text) > MaxNoteBytes) throw new VaultException("trop-grande", "La note dépasserait 2 Mo."); }
 

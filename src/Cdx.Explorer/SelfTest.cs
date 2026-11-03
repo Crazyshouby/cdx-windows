@@ -112,7 +112,7 @@ static class SelfTest
                 Check("réglages : une clé hors du motif est refusée (majuscule, chemin, vide)", !Settings.Set("Vue", sj.RootElement) && !Settings.Set("../x", sj.RootElement) && !Settings.Set("", sj.RootElement) && !Settings.Set(null, sj.RootElement));
             }
             Settings.Reset();
-            Check("réglages : relus depuis le fichier après oubli de la mémoire", Settings.Get("vue.dossier")?["b"]?.AsArray().Count == 3 && File.Exists(Settings.FilePath) && !File.Exists(Settings.FilePath + ".tmp"));
+            Check("réglages : relus depuis le fichier après oubli de la mémoire", Settings.Get("vue.dossier")?["b"]?.AsArray().Count == 3 && File.Exists(Settings.FilePath) && !Directory.GetFiles(Path.GetDirectoryName(Settings.FilePath), Path.GetFileName(Settings.FilePath) + "*.tmp").Any());
             using (var nul = JsonDocument.Parse("null")) Check("réglages : une valeur null efface la clé", Settings.Set("vue.dossier", nul.RootElement) && Settings.Get("vue.dossier") == null);
             using (var big = JsonDocument.Parse("\"" + new string('x', 300 * 1024) + "\"")) Check("réglages : une valeur de plus de 256 Ko est refusée", !Settings.Set("gros", big.RootElement));
             File.WriteAllText(Settings.FilePath, "{ pas du json"); Settings.Reset();

@@ -62,13 +62,7 @@ static class Settings
 
     static void Save(JsonObject o)
     {
-        try
-        {
-            Directory.CreateDirectory(Host.DataDir);
-            string tmp = FilePath + ".tmp";
-            File.WriteAllText(tmp, o.ToJsonString());
-            File.Move(tmp, FilePath, true);
-        }
+        try { AtomicFile.WriteAllText(FilePath, o.ToJsonString()); }
         catch (Exception ex) { Host.Log("explorer.json : " + ex.Message); }
     }
 }

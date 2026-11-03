@@ -12,5 +12,10 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- La même écriture atomique que le reste de la suite (Cdx.Host n'est pas une dépendance du coffre : le fichier est partagé tel quel). -->
+    <Compile Include="..\Cdx.Host\AtomicFile.cs" Link="AtomicFile.cs" />
+  </ItemGroup>
+
 </Project>
 

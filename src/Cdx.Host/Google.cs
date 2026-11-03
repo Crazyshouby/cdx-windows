@@ -56,7 +56,7 @@ static class GoogleAuth
         try
         {
             if (token == null) { File.Delete(TokenFile); return; }
-            Directory.CreateDirectory(Suite.Dir); File.WriteAllBytes(TokenFile, Dpapi.Protect(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(token)), "CDX Google"));
+            AtomicFile.WriteAllBytes(TokenFile, Dpapi.Protect(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(token)), "CDX Google"));
         }
         catch (Exception ex) { Host.Log("jeton Google : " + ex.Message); }
     }
