@@ -21,7 +21,11 @@ namespace Cdx;
 
 // Genre : video, short, direct, liste (liste de lecture, podcast, émission), mix. Pour une liste ou un mix : ListeId est la liste, Id sa première vidéo (peut manquer),
 // Duree le nombre de vidéos (« 124 vidéos »). Pour une vidéo d'une liste : ListeId et Index la situent dans la liste (lecture dans l'ordre de la liste).
-public sealed record Video(string Id, string Titre, string Chaine, string ChaineId, string Duree, string Miniature, string Vues, string Date, string Genre, string ListeId = null, int? Index = null);
+// Vu : la part déjà regardée (0-100), quand YouTube la montre sous la miniature (compte connecté, vidéo commencée).
+public sealed record Video(string Id, string Titre, string Chaine, string ChaineId, string Duree, string Miniature, string Vues, string Date, string Genre, string ListeId = null, int? Index = null, int? Vu = null);
+
+// Un chapitre d'une vidéo (barre de lecture de YouTube) : son titre et son début en secondes.
+public sealed class Chapitre { public string Titre; public double Debut; }
 
 public sealed class Onglet { public string Titre, Url, Params; public bool Actif; }
 
@@ -54,6 +58,7 @@ public sealed class Fiche
 {
     public string Id, Titre, Chaine, ChaineId, Avatar, Abonnes, Vues, Date, Description, Miniature;
     public List<Video> Suggestions = new();
+    public List<Chapitre> Chapitres = new();   // vides si la vidéo n'a pas de chapitres (la page les cherche alors dans la description)
     public ListeEnCours Liste;   // la vidéo est lue dans une liste (playlist.playlist de la réponse) ; absent pour un mix
     public int PubsFiltrees;
 }
@@ -163,7 +168,8 @@ public static class YtLecture
         string vues = Texte(r, "viewCountText") ?? Texte(r, "shortViewCountText");
         var we = Chemin(r, "navigationEndpoint", "watchEndpoint");
         return new Video(id, titre, chaine, chaineId, duree, Miniature(Chemin(r, "thumbnail", "thumbnails")), vues, Texte(r, "publishedTimeText"), g,
-            we == null ? null : Str(we.Value, "playlistId"), we != null && we.Value.TryGetProperty("index", out var ix) && ix.TryGetInt32(out var ixn) ? ixn : null);
+            we == null ? null : Str(we.Value, "playlistId"), we != null && we.Value.TryGetProperty("index", out var ix) && ix.TryGetInt32(out var ixn) ? ixn : null,
+            Progression(Chemin(r, "thumbnailOverlays")));
     }
 
     // playlistRenderer / radioRenderer (ancien format, résultats de recherche) : une liste de lecture, ou un mix
@@ -249,7 +255,36 @@ public static class YtLecture
             }
         if (titre == null) { Veille.Noter("format", "lockupViewModel sans titre"); return null; }
         return new Video(id, titre, chaine, chaineId, duree, vm == null ? null : Miniature(Chemin(vm.Value, "image", "sources")), vues, date, g,
-            we == null ? null : Str(we.Value, "playlistId"), we != null && we.Value.TryGetProperty("index", out var ix) && ix.TryGetInt32(out var ixn) ? ixn : null);
+            we == null ? null : Str(we.Value, "playlistId"), we != null && we.Value.TryGetProperty("index", out var ix) && ix.TryGetInt32(out var ixn) ? ixn : null,
+            vm == null ? null : Progression(Chemin(vm.Value, "overlays")));
+    }
+
+    // La barre « déjà vu » sous une miniature : thumbnailOverlayResumePlaybackRenderer.percentDurationWatched (ancien format),
+    // thumbnailOverlayProgressBarViewModel.startPercent (lockupViewModel). Rend null sans barre.
+    static int? Progression(JsonElement? overlays)
+    {
+        if (overlays is not { } o) return null;
+        foreach (var cle in new[] { "percentDurationWatched", "startPercent" })
+            if (Chercher(o, cle, 8) is { ValueKind: JsonValueKind.Number } n && n.TryGetDouble(out var d) && d > 0) return (int)Math.Clamp(Math.Round(d), 1, 100);
+        return null;
+    }
+
+    // Les chapitres de la vidéo : les chapterRenderer de la barre de lecture (playerOverlays…markersMap), dans l'ordre, sans doublon.
+    static void Chapitres(JsonElement e, List<Chapitre> res, int profondeur)
+    {
+        if (profondeur < 0) return;
+        if (e.ValueKind == JsonValueKind.Array) { foreach (var x in e.EnumerateArray()) Chapitres(x, res, profondeur - 1); return; }
+        if (e.ValueKind != JsonValueKind.Object) return;
+        foreach (var p in e.EnumerateObject())
+        {
+            if (p.Name == "chapterRenderer" && p.Value.ValueKind == JsonValueKind.Object)
+            {
+                string t = Texte(p.Value, "title");
+                if (t != null && p.Value.TryGetProperty("timeRangeStartMillis", out var ms) && ms.TryGetDouble(out var d) && !res.Any(c => c.Debut == d / 1000))
+                    res.Add(new Chapitre { Titre = t, Debut = d / 1000 });
+            }
+            else Chapitres(p.Value, res, profondeur - 1);
+        }
     }
 
     static bool EstVues(JsonElement part)
@@ -436,6 +471,7 @@ public static class YtLecture
         if (f.Titre == null) Veille.Noter("format", "fiche : videoPrimaryInfoRenderer absent ou sans titre");
         if (f.Chaine == null) Veille.Noter("format", "fiche : chaîne illisible (videoOwnerRenderer absent, ou sans title ni attributedTitle)");
         if (f.Id != null) f.Miniature = $"https://i.ytimg.com/vi/{f.Id}/hqdefault.jpg";
+        if (Chemin(racine, "playerOverlays") is { } po) { Chapitres(po, f.Chapitres, 40); f.Chapitres.Sort((a, b) => a.Debut.CompareTo(b.Debut)); }
         // lue dans une liste : le panneau de la liste (pas pour un mix, que YouTube enchaîne sans panneau)
         if (Chemin(two.Value, "playlist", "playlist") is { } pl)
         {

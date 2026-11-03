@@ -841,6 +841,7 @@ sealed class PageCachee
 
     // Pour l'essai : un script exécuté comme s'il venait d'un geste de l'utilisateur (protocole DevTools, userGesture) : un clic sur le bouton plein écran du
     // lecteur, sur un lien de YouTube… sans simuler la souris ni le clavier.
+    public Task<string> CdpAsync(string methode, object args) => core.CallDevToolsProtocolMethodAsync(methode, JsonSerializer.Serialize(args));
     public Task<string> GesteAsync(string js) => core.CallDevToolsProtocolMethodAsync("Runtime.evaluate", JsonSerializer.Serialize(new { expression = js, userGesture = true, awaitPromise = true }));
     public bool EnPleinEcran => core?.ContainsFullScreenElement == true;
 

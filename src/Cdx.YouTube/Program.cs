@@ -23,7 +23,7 @@ sealed class Options
 {
     public string Theme, Requete = "documentaire espace", FichierALire, Video, Liste, Bloquee = "Cr381pDsSsA";
     public List<string> Sonder = new();
-    public bool PageVisible, Essai;
+    public bool PageVisible, Essai, SondeMini;   // SondeMini : pendant l'essai, la vidéo continue-t-elle quand la page cachée part ailleurs ? (mesure, puis fin)
     public PageCachee.Extraction Extraction = PageCachee.Extraction.CSharp;
 
     public static Options Lire(string[] a)
@@ -39,6 +39,7 @@ sealed class Options
                 case "--extraction": o.Extraction = Suivant() == "fetch" ? PageCachee.Extraction.Fetch : PageCachee.Extraction.CSharp; break;
                 case "--trace": PageCachee.Trace = true; break;
                 case "--essai": o.Essai = true; break;
+                case "--sonde-mini": o.Essai = true; o.SondeMini = true; break;
                 case "--requete": o.Requete = Suivant(); break;
                 case "--video": o.Video = Suivant(); break;
                 case "--liste": o.Liste = Suivant(); break;

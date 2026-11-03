@@ -515,6 +515,25 @@ sealed class YouTubeApp : ApplicationContext, IHostApp
                 double T(JsonElement e) => e.GetProperty("t").ValueKind == JsonValueKind.Number ? e.GetProperty("t").GetDouble() : -1;
                 Verifier(l2.GetProperty("pause").ValueKind == JsonValueKind.False && T(l2) > T(l1) + 1, $"lecture en cours : {T(l1)} s → {T(l2)} s en 4 s, lecteur {l2.GetProperty("lecteur").GetString()} dans une vue de {l2.GetProperty("largeur")} × {l2.GetProperty("hauteur")}");
                 Verifier(!l2.GetProperty("pub").GetBoolean(), "pas de pub dans le lecteur (ad-showing)");
+                if (o.SondeMini)
+                {
+                    // la page cachée part vers une recherche (navigation interne de YouTube) pendant que la vidéo joue : continue-t-elle, et où est son lecteur ?
+                    const string Ou = "JSON.stringify({ chemin: location.pathname + location.search, mini: !!document.querySelector('ytd-miniplayer[active], ytd-app[miniplayer-is-active]'), dansMini: !!(document.getElementById('movie_player') && document.getElementById('movie_player').closest('ytd-miniplayer')), video: !!document.querySelector('video'), lecteurs: document.querySelectorAll('#movie_player').length })";
+                    Host.Log("sonde mini : avant : " + await page.ScriptAsync(Ou) + " ; " + await page.EtatLecteurAsync());
+                    // la touche « i » de YouTube (son mini-lecteur), en vraie frappe (CDP), la page ayant le focus
+                    await page.ScriptAsync("document.activeElement && document.activeElement.blur && document.activeElement.blur()");
+                    await page.CdpAsync("Input.dispatchKeyEvent", new { type = "keyDown", key = "i", code = "KeyI", windowsVirtualKeyCode = 73, nativeVirtualKeyCode = 73, text = "i" });
+                    await page.CdpAsync("Input.dispatchKeyEvent", new { type = "keyUp", key = "i", code = "KeyI", windowsVirtualKeyCode = 73, nativeVirtualKeyCode = 73 });
+                    await Task.Delay(1500);
+                    Host.Log("sonde mini : après « i » : " + await page.ScriptAsync(Ou) + " ; " + await page.EtatLecteurAsync());
+                    var lr = await page.RechercheAsync("musique classique");
+                    Host.Log($"sonde mini : recherche faite ({lr?.Videos.Count} vidéos)");
+                    for (int k = 0; k < 3; k++) { await Task.Delay(2000); Host.Log($"sonde mini : +{2 * (k + 1)} s : " + await page.ScriptAsync(Ou) + " ; " + await page.EtatLecteurAsync()); }
+                    var la = await page.AccueilAsync();
+                    Host.Log($"sonde mini : accueil fait ({la?.Videos.Count} vidéos)");
+                    await Task.Delay(2000); Host.Log("sonde mini : +2 s : " + await page.ScriptAsync(Ou) + " ; " + await page.EtatLecteurAsync());
+                    Code = 0; ExitThread(); return;
+                }
                 await Capture("3-video");
                 CaptureFenetre("3-video-fenetre");
 
