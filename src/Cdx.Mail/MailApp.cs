@@ -8,8 +8,9 @@ namespace Cdx;
 // Le programme : une fenêtre « Courrier » sur la boîte Gmail du compte Google de la suite (GoogleAuth, portée gmail.modify). La page web/mail/courrier.html
 // dessine les libellés, la liste des fils, le fil ouvert, la fenêtre d'écriture ; le programme parle à l'API Gmail (fils, messages, libellés, envoi, pièces
 // jointes) et garde la dernière liste de la boîte de réception en cache (courrier-cache.json) pour l'afficher hors ligne. Un nouveau courrier est signalé à la barre.
-sealed class MailApp : ApplicationContext, ICdxApp
+sealed class MailApp : ApplicationContext, ICdxApp, IPageApp
 {
+    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     string theme;
     readonly string root;
     readonly IDisposable watch;
@@ -56,11 +57,7 @@ sealed class MailApp : ApplicationContext, ICdxApp
     {
         try
         {
-            if (form != null && !form.IsDisposed)
-            {
-                if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal;
-                form.Activate(); Host.ForceForeground(form.Handle); return;
-            }
+            if (Host.Reveal(form)) return;
             env ??= await WebEnv.Ui();   // l'environnement partagé des programmes « outils » (WebEnv.cs)
             var f = new MailForm(this); form = f;
             f.FormClosed += (s, e) => { if (form == f) form = null; ExitThread(); };
@@ -317,8 +314,6 @@ sealed class MailApp : ApplicationContext, ICdxApp
             case "state": return JsonSerializer.Serialize(new { connected = Ready, email = GoogleAuth.Email, hasClient = GoogleAuth.HasClient, busy, error = lastError, label = curLabel, q = curQuery, unread = lastUnread });
             case "google-url": return GoogleAuth.PendingUrl ?? "";
             case "poll": try { await PollAsync(); return "ok"; } catch (Exception ex) { return "erreur : " + ex.Message; }
-            case "eval": return form == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
-            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";
         }
     }

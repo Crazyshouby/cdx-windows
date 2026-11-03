@@ -7,8 +7,9 @@ namespace Cdx;
 
 // Le programme : une fenêtre sur le coffre de notes. La page demande, le programme lit et écrit les fichiers (Cdx.Vault, les mêmes règles que le serveur MCP de Claude)
 // et prévient la page de tout changement du dossier (ce que fait Claude, ou un autre éditeur, se voit aussitôt).
-sealed class NotesApp : ApplicationContext, ICdxApp
+sealed class NotesApp : ApplicationContext, ICdxApp, IPageApp
 {
+    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     string theme; readonly string root; readonly string openAtStart;
     readonly IDisposable watch;
     NotesForm form;
@@ -91,7 +92,7 @@ sealed class NotesApp : ApplicationContext, ICdxApp
     {
         try
         {
-            if (form != null && !form.IsDisposed) { if (!NotesForm.NoFocus) Host.ForceForeground(form.Handle); return; }
+            if (Host.Reveal(form, !NotesForm.NoFocus)) return;
             if (vault == null) OpenVault();
             env ??= await WebEnv.Ui();   // l'environnement partagé des programmes « outils » (WebEnv.cs)
             var f = new NotesForm(this); form = f;
@@ -119,14 +120,14 @@ sealed class NotesApp : ApplicationContext, ICdxApp
     }
 
     // Canal de test (debug.txt) : state · eval <js>.
-    public async Task<string> HandleControl(string line)
+    public Task<string> HandleControl(string line) => Task.FromResult(ControlLine(line));
+
+    string ControlLine(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
         switch (c)
         {
             case "state": return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", " + (vault?.Count ?? 0) + " note(s), " + known.Count + " ouverte(s)";
-            case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
-            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";
         }
     }

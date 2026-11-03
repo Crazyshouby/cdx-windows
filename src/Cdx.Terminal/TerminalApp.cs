@@ -12,8 +12,9 @@ namespace Cdx;
 //   programme → page   hello {build,cwd?} · out {sid,b64} (octets VT/UTF-8 du shell) · exit {sid,code} · paste {sid,text} · open-tab {cwd} · theme {value}
 //   bus                show · open-path {path} (un onglet dans ce dossier ; la fenêtre passe devant)
 // Le numéro de session (sid) est choisi par la page ; le programme refuse un numéro déjà pris.
-sealed class TerminalApp : ApplicationContext, ICdxApp
+sealed class TerminalApp : ApplicationContext, ICdxApp, IPageApp
 {
+    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     // Une session : un shell dans sa pseudo-console. Les octets lus pendant que l'interface était occupée sont envoyés ensemble : un shell qui crache beaucoup de
     // texte ne fait pas un message par lecture.
     sealed class Session
@@ -57,7 +58,7 @@ sealed class TerminalApp : ApplicationContext, ICdxApp
     {
         try
         {
-            if (form != null && !form.IsDisposed) { Host.ForceForeground(form.Handle); return; }
+            if (Host.Reveal(form)) return;
             env ??= await WebEnv.Ui();   // l'environnement partagé des programmes « outils » (WebEnv.cs)
             var f = new TerminalForm(this); form = f;
             f.FormClosed += (s, e) => ExitThread();
@@ -96,15 +97,15 @@ sealed class TerminalApp : ApplicationContext, ICdxApp
 
     // Canal de test (debug.txt) : state · eval <js> · write <texte> (écrit dans le volet qui a le focus ; \r et \n écrits en toutes lettres deviennent des touches :
     // aucune entrée simulée sur le bureau) · write@<sid> <texte> (dans un volet précis).
-    public async Task<string> HandleControl(string line)
+    public Task<string> HandleControl(string line) => Task.FromResult(ControlLine(line));
+
+    string ControlLine(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
         switch (c)
         {
             case "state":
                 return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", " + (sessions.Count == 0 ? "pas de session" : sessions.Count + " session(s) : " + string.Join(", ", sessions.Values.Select(s => "session " + s.Sid + " (pid " + s.Pty.ProcessId + ")"))) + ", focus " + focusSid;
-            case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
-            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default:
                 if (c == "write" || c.StartsWith("write@"))
                 {

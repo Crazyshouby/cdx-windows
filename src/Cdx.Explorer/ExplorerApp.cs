@@ -5,8 +5,9 @@ using Microsoft.Web.WebView2.Core;
 namespace Cdx;
 
 // Le programme : une ou plusieurs fenêtres de l'Explorateur, qui s'arrête avec la dernière.
-sealed class ExplorerApp : ApplicationContext, ICdxApp
+sealed class ExplorerApp : ApplicationContext, ICdxApp, IPageApp
 {
+    public HostForm ControlTarget => windows.Count == 0 ? null : windows[0];   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     string theme; readonly string root;
     readonly IDisposable watch;
     readonly List<HostForm> windows = new();
@@ -154,15 +155,15 @@ sealed class ExplorerApp : ApplicationContext, ICdxApp
     }
 
     // Canal de test (debug.txt) : state (nombre de fenêtres) · open <dossier> · eval <js> (dans la première fenêtre).
-    public async Task<string> HandleControl(string line)
+    public Task<string> HandleControl(string line) => Task.FromResult(ControlLine(line));
+
+    string ControlLine(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
         switch (c)
         {
             case "state": return windows.Count + " fenêtre(s)";
             case "open": Open(a); return "ok";
-            case "eval": return windows.Count == 0 ? "pas de fenêtre" : await windows[0].Web.CoreWebView2.ExecuteScriptAsync(a);
-            case "cmd": if (windows.Count > 0) OnMessage(windows[0], a); return "ok";
             default: return "commande inconnue";
         }
     }

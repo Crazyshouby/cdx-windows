@@ -9,8 +9,9 @@ namespace Cdx;
 // abonnements, recherche, vidéo…), le programme fait faire le travail à la page cachée et renvoie le modèle de YtLecture. L'interface ne parle jamais à
 // YouTube (seules les miniatures sont chargées directement depuis i.ytimg.com). Pour lire une vidéo, le lecteur de la page cachée vient se poser dans la
 // fenêtre, sur le rectangle que la fiche lui réserve (message « yt.lecteur »).
-sealed class YouTubeApp : ApplicationContext, ICdxApp
+sealed class YouTubeApp : ApplicationContext, ICdxApp, IPageApp
 {
+    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     readonly Options o;
     readonly PageCachee page;
     readonly SemaphoreSlim uneALaFois = new(1, 1);   // la page cachée ne fait qu'une navigation à la fois
@@ -179,7 +180,7 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp
     {
         try
         {
-            if (form != null && !form.IsDisposed) { Host.ForceForeground(form.Handle); return; }
+            if (Host.Reveal(form)) return;
             env ??= await CoreWebView2Environment.CreateAsync(null, YtDonnees.ProfilInterface, new CoreWebView2EnvironmentOptions("--disable-lcd-text"));
             var f = new YouTubeForm(this); form = f;
             f.FormClosed += (s, e) => ExitThread();
@@ -253,10 +254,8 @@ sealed class YouTubeApp : ApplicationContext, ICdxApp
         switch (c)
         {
             case "state": return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", page cachée " + (pret ? "prête" : "en chargement") + ", " + (page.Connecte ? "connecté" : "non connecté") + ", " + (page.Bloqueur ?? "SANS bloqueur") + ", veille " + Veille.Compte;
-            case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
             case "page": return pret ? await page.ScriptAsync(a) : "page cachée en chargement";
             case "sans-connexion": await page.AnnulerConnexionAsync(); return "fenêtre de connexion refermée";
-            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";
         }
     }

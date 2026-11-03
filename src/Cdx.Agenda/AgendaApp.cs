@@ -8,8 +8,9 @@ namespace Cdx;
 // Le programme : une fenêtre « Agenda » sur le compte Google de la suite (GoogleAuth) : les agendas et leurs événements (Google Calendar), les listes de tâches
 // (Google Tasks). La page web/agenda/agenda.html dessine le mois, la semaine, la liste, les tâches ; le programme parle aux API et garde un cache (agenda-cache.json)
 // pour afficher quelque chose hors ligne. Réglages propres : agenda.json (agendas masqués).
-sealed class AgendaApp : ApplicationContext, ICdxApp
+sealed class AgendaApp : ApplicationContext, ICdxApp, IPageApp
 {
+    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     string theme;
     readonly string root;
     readonly IDisposable watch;
@@ -52,11 +53,7 @@ sealed class AgendaApp : ApplicationContext, ICdxApp
     {
         try
         {
-            if (form != null && !form.IsDisposed)
-            {
-                if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal;
-                form.Activate(); Host.ForceForeground(form.Handle); return;
-            }
+            if (Host.Reveal(form)) return;
             env ??= await WebEnv.Ui();   // l'environnement partagé des programmes « outils » (WebEnv.cs)
             var f = new AgendaForm(this); form = f;
             f.FormClosed += (s, e) => { if (form == f) form = null; ExitThread(); };
@@ -262,15 +259,15 @@ sealed class AgendaApp : ApplicationContext, ICdxApp
     }
 
     // Canal de test (debug.txt) : state · eval <js> · cmd <json> · google-url (l'adresse de consentement en attente).
-    public async Task<string> HandleControl(string line)
+    public Task<string> HandleControl(string line) => Task.FromResult(ControlLine(line));
+
+    string ControlLine(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
         switch (c)
         {
             case "state": return JsonSerializer.Serialize(new { connected = GoogleAuth.IsConnected, email = GoogleAuth.Email, hasClient = GoogleAuth.HasClient, busy, error = lastError, hidden, from = lastFrom, to = lastTo });
             case "google-url": return GoogleAuth.PendingUrl ?? "";
-            case "eval": return form == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
-            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";
         }
     }

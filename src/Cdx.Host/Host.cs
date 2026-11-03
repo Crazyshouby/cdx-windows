@@ -71,6 +71,15 @@ static class Host
         throw new DirectoryNotFoundException("web/cdx/cdx-ui.css introuvable au-dessus de " + AppContext.BaseDirectory);
     }
 
+    // La fenêtre unique d'un programme existe déjà : la ramener au premier plan (restaurée si réduite) et rendre true ; false s'il faut la créer.
+    // Avant, sept variantes recopiées dans les Open() des programmes (HostWindow.OpenOrFocus du plan de l'audit, point 4.1).
+    public static bool Reveal(Form f, bool focus = true)
+    {
+        if (f == null || f.IsDisposed) return false;
+        if (focus) ForceForeground(f.Handle);
+        return true;
+    }
+
     // Windows refuse parfois SetForegroundWindow à un processus qui n'a pas le focus (ce qui est notre cas quand la demande vient d'un crochet
     // clavier) : on se rattache alors un instant au fil de la fenêtre qui l'a.
     public static void ForceForeground(IntPtr h)

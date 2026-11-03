@@ -5,8 +5,9 @@ using Microsoft.Web.WebView2.Core;
 namespace Cdx;
 
 // Le programme : une fenêtre qui liste les dépôts git des dossiers choisis. La page demande, le programme lit git (Git.cs) et répond ; rien n'est écrit dans un dépôt.
-sealed class ReposApp : ApplicationContext, ICdxApp
+sealed class ReposApp : ApplicationContext, ICdxApp, IPageApp
 {
+    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     string theme; readonly string root;
     readonly IDisposable watch;
     ReposForm form;
@@ -62,7 +63,7 @@ sealed class ReposApp : ApplicationContext, ICdxApp
     {
         try
         {
-            if (form != null && !form.IsDisposed) { Host.ForceForeground(form.Handle); return; }
+            if (Host.Reveal(form)) return;
             env ??= await WebEnv.Ui();   // l'environnement partagé des programmes « outils » (WebEnv.cs)
             var f = new ReposForm(this); form = f;
             f.FormClosed += (s, e) => ExitThread();
@@ -83,14 +84,14 @@ sealed class ReposApp : ApplicationContext, ICdxApp
     }
 
     // Canal de test (debug.txt) : state · eval <js>.
-    public async Task<string> HandleControl(string line)
+    public Task<string> HandleControl(string line) => Task.FromResult(ControlLine(line));
+
+    string ControlLine(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
         switch (c)
         {
             case "state": return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", " + infos.Count + " dépôt(s), " + roots.Count + " dossier(s)";
-            case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
-            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";
         }
     }

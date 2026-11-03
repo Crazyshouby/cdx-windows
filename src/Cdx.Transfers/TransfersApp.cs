@@ -7,8 +7,9 @@ namespace Cdx;
 
 // Le programme : une fenêtre qui montre tous les transferts de la suite. Il ne fait aucun transfert lui-même : il tient la liste de ce que les autres programmes annoncent (« xfer »), la montre,
 // et leur renvoie les ordres de la page (« xfer-ctl »). Ce qu'il garde sur disque : les derniers transferts terminés (transferts.json).
-sealed class TransfersApp : ApplicationContext, ICdxApp
+sealed class TransfersApp : ApplicationContext, ICdxApp, IPageApp
 {
+    public HostForm ControlTarget => form;   // la page visée par eval et cmd du canal de test (CdxApp.Control)
     sealed class Entry
     {
         public string Key = "", App = "", Kind = "", Title = "", State = "", From = "", To = "", Current = "", Error = "", Path = "";
@@ -96,7 +97,7 @@ sealed class TransfersApp : ApplicationContext, ICdxApp
     {
         try
         {
-            if (form != null && !form.IsDisposed) { if (form.WindowState == FormWindowState.Minimized) form.WindowState = FormWindowState.Normal; Host.ForceForeground(form.Handle); return; }
+            if (Host.Reveal(form)) return;
             env ??= await WebEnv.Ui();   // l'environnement partagé des programmes « outils » (WebEnv.cs)
             var f = new TransfersForm(this); form = f;
             f.FormClosed += (s, e) => ExitThread();
@@ -238,15 +239,15 @@ sealed class TransfersApp : ApplicationContext, ICdxApp
     }
 
     // Canal de test (debug.txt) : state · eval <js>.
-    public async Task<string> HandleControl(string line)
+    public Task<string> HandleControl(string line) => Task.FromResult(ControlLine(line));
+
+    string ControlLine(string line)
     {
         int sp = line.IndexOf(' '); string c = sp < 0 ? line : line[..sp], a = sp < 0 ? "" : line[(sp + 1)..];
         switch (c)
         {
             case "state": return (form == null ? "pas de fenêtre" : "fenêtre ouverte") + ", " + entries.Count + " transfert(s), " + entries.Values.Count(e => e.Live) + " en cours";
             case "entries": return JsonSerializer.Serialize(entries.Values.Select(e => new { e.Key, e.Kind, e.Title, e.State, e.Done, e.Total, e.Hist }));
-            case "eval": return form?.Web.CoreWebView2 == null ? "pas de fenêtre" : await form.Web.CoreWebView2.ExecuteScriptAsync(a);
-            case "cmd": if (form != null) OnMessage(form, a); return "ok";
             default: return "commande inconnue";
         }
     }
