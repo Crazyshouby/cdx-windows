@@ -16,9 +16,9 @@ sealed class AudioLink
     readonly Action<object> toBar;                     // appelé sur n'importe quel fil : l'appelant le ramène sur le fil de l'interface
     readonly SemaphoreSlim writeLock = new(1, 1);
     readonly CancellationTokenSource cts = new();
-    volatile NamedPipeClientStream pipe;
+    volatile NamedPipeClientStream? pipe;   // null : pas connecté
     volatile bool connected;
-    Task loop;
+    Task? loop;   // null avant Start
 
     public AudioLink(Action<object> toBar, string pipeName = DefaultPipe) { this.toBar = toBar; this.pipeName = pipeName; }
 
@@ -48,7 +48,7 @@ sealed class AudioLink
                     Host.Log("Audio Linker connecté");
                     using var rd = new StreamReader(p, new UTF8Encoding(false));
                     await SendAsync("audio.get");
-                    string line;
+                    string? line;
                     while ((line = await rd.ReadLineAsync(cts.Token)) != null) OnLine(line);
                 }
             }
@@ -88,16 +88,16 @@ sealed class AudioLink
     }
 
     static bool Bool(JsonElement r, string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.True;
-    static string Clip(string s) => s == null ? "" : s.Length > 200 ? s[..200] : s;
+    static string Clip(string? s) => s == null ? "" : s.Length > 200 ? s[..200] : s;
 
     // Commandes vers Audio Linker. Sans connexion, elles sont perdues : la barre n'affiche les boutons que connectée.
     public void Refresh() => _ = SendAsync("audio.get");
     public void Toggle() => _ = SendAsync("audio.toggle");
     public void Mute(bool on) => _ = SendAsync("audio.mute", new { on });
     public void Volume(int v, bool commit) => _ = SendAsync("audio.volume", new { v = Math.Clamp(v, 0, 100), commit });
-    public void Setup(string name) { if (!string.IsNullOrEmpty(name) && name.Length <= 200) _ = SendAsync("audio.setup", new { name }); }
+    public void Setup(string? name) { if (!string.IsNullOrEmpty(name) && name.Length <= 200) _ = SendAsync("audio.setup", new { name }); }
 
-    async Task SendAsync(string type, object data = null)
+    async Task SendAsync(string type, object? data = null)
     {
         var p = pipe;
         if (p == null || !p.IsConnected) return;

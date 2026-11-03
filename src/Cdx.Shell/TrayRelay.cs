@@ -11,22 +11,23 @@ namespace Cdx;
 // d'application de SHAppBarMessage, commandes…) est renvoyé tel quel à la vraie barre de Windows, qui reste cachée mais vivante.
 sealed class TrayIcon
 {
-    public string Key, Tip = "", Exe = "", Png;
+    public required string Key; public string Tip = "", Exe = "";
+    public string? Png;   // l'image en base64, null tant qu'elle n'est pas faite (ou icône vide) : l'icône n'est alors pas affichée
     public IntPtr Hwnd, HIcon; public uint Uid, CbMsg, Pid; public int Version;
     public bool Hidden, Dirty = true; public long Seq;
 }
 
 sealed class TrayRelay
 {
-    public static TrayRelay Current;
+    public static TrayRelay? Current;   // null : aucun relais en place
     public IntPtr Handle { get; private set; }
-    public Action<string, string, string> OnBalloon;   // titre, texte, nom du programme
+    public Action<string, string, string>? OnBalloon;   // titre, texte, nom du programme
 
     // Les icônes posées par Windows lui-même (écran, Bluetooth, éjection, micro utilisé) font doublon avec la barre : masquées.
     public readonly HashSet<string> HiddenExes = new(StringComparer.OrdinalIgnoreCase) { "explorer" };
 
     readonly Dictionary<string, TrayIcon> icons = new(); readonly HashSet<long> refused = new(); long seq; bool changed, suspended;
-    WndProcDelegate keep; IntPtr explorerTray;
+    WndProcDelegate? keep; IntPtr explorerTray;   // keep : posé par Create
     const int MaxIcons = 64;
 
     delegate IntPtr WndProcDelegate(IntPtr h, uint msg, IntPtr w, IntPtr l);
@@ -191,7 +192,7 @@ sealed class TrayRelay
     // Pour les tests : « clé programme version/état infobulle » de chaque icône reçue, affichée ou non.
     public List<string> Describe() => icons.Values.OrderBy(i => i.Seq).Select(i => $"{i.Key} {i.Exe} v{i.Version}{(i.Hidden ? " caché" : "")}{(Shown(i) ? "" : " non affiché")} {i.Tip.Replace('\n', ' ')}").ToList();
 
-    static string MakePng(IntPtr h)
+    static string? MakePng(IntPtr h)
     {
         if (h == IntPtr.Zero) return null;
         try

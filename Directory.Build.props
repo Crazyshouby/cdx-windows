@@ -7,7 +7,7 @@
     <Copyright>© Valentin Large</Copyright>
   </PropertyGroup>
   <!-- Filets du compilateur (audit du 03/11/2026, lot 4.5) : une tâche lancée sans await ni « _ = » est une erreur (son exception se perdrait).
-       Nullable s'active projet par projet : Cdx.Host, Transferts, Notes, Agenda, Courrier, Terminal et Dépôts le sont ; restent Shell, Explorateur, navigateur, YouTube, Cdx.Vault et cdx-notes-mcp, puis les analyseurs « recommended ». -->
+       Nullable s'active projet par projet : Cdx.Host, Cdx.Vault, cdx-notes-mcp, Shell, navigateur, Transferts, Notes, Agenda, Courrier, Terminal et Dépôts le sont ; restent l'Explorateur et YouTube, puis les analyseurs « recommended ». -->
   <PropertyGroup>
     <WarningsAsErrors>$(WarningsAsErrors);CS4014</WarningsAsErrors>
   </PropertyGroup>

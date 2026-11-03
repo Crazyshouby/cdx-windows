@@ -107,7 +107,7 @@ partial class Shell
         swItems = ZOrderTasks();
         if (swItems.Count == 0) { switcherOpen = false; return; }
         swSel = swItems.Count > 1 ? (backwards ? swItems.Count - 1 : 1) : 0;
-        var scr = Screen.PrimaryScreen.WorkingArea;
+        var scr = Screen.PrimaryScreen!.WorkingArea;   // « ! » : le shell tourne dans une session ouverte, Windows y a toujours un écran principal
         int cardW = (int)(266 * scale), cardH = (int)(206 * scale);
         int cols = Math.Max(1, Math.Min(Math.Min(swItems.Count, 6), (scr.Width - (int)(120 * scale)) / cardW));
         int rows = (swItems.Count + cols - 1) / cols;

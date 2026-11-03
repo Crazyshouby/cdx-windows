@@ -48,7 +48,7 @@ static class SelfTest
         void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
         string name = "cdx.audio_linker-selftest-" + Guid.NewGuid().ToString("N")[..8];
         var got = new List<JsonElement>(); var gl = new object();
-        AudioLink link = null;
+        AudioLink? link = null;
         bool Until(Func<bool> f, int ms) { var t0 = DateTime.UtcNow; while ((DateTime.UtcNow - t0).TotalMilliseconds < ms) { if (f()) return true; Thread.Sleep(25); } return f(); }
         JsonElement[] Got() { lock (gl) return got.ToArray(); }
         try
@@ -61,8 +61,8 @@ static class SelfTest
             var srv = new System.IO.Pipes.NamedPipeServerStream(name, System.IO.Pipes.PipeDirection.InOut, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
             Check("le serveur reçoit la connexion (nouvelle tentative < 5 s)", srv.WaitForConnectionAsync().Wait(5000));
             var rd = new StreamReader(srv); var wr = new StreamWriter(srv) { AutoFlush = true };
-            string Read() { var t = rd.ReadLineAsync(); return t.Wait(3000) ? t.Result : null; }
-            string l0 = Read();
+            string? Read() { var t = rd.ReadLineAsync(); return t.Wait(3000) ? t.Result : null; }
+            string? l0 = Read();
             Check("à la connexion, le client demande l'état (audio.get)", l0 != null && l0.Contains("\"audio.get\""));
 
             wr.WriteLine("{\"type\":\"audio.state\",\"from\":\"audio_linker\",\"data\":{\"version\":\"1\",\"running\":true,\"starting\":false,\"volume\":42,\"muted\":true,\"playing\":\"B\",\"setups\":[{\"name\":\"A\",\"count\":1},{\"name\":\"B\",\"count\":3}]}}");
@@ -78,10 +78,10 @@ static class SelfTest
             Check("lignes illisibles ou d'un autre type : ignorées ; volume 500 ramené à 100", Until(() => Got().Length == before + 1, 3000) && Got().Last().GetProperty("volume").GetInt32() == 100);
 
             link.Toggle(); link.Mute(true); link.Volume(37, true); link.Volume(150, false); link.Setup("A"); link.Setup("");
-            var cmds = new List<string>(); for (int i = 0; i < 5; i++) cmds.Add(Read());
+            var cmds = new List<string?>(); for (int i = 0; i < 5; i++) cmds.Add(Read());
             Check("commandes : toggle, mute, volume 37 validé, volume 150 ramené à 100, setup A",
-                  cmds[0]?.Contains("audio.toggle") == true && cmds[1]?.Contains("\"audio.mute\"") == true && cmds[1].Contains("\"on\":true")
-                  && cmds[2]?.Contains("\"v\":37") == true && cmds[2].Contains("\"commit\":true") && cmds[3]?.Contains("\"v\":100") == true && cmds[3].Contains("\"commit\":false")
+                  cmds[0]?.Contains("audio.toggle") == true && cmds[1]?.Contains("\"audio.mute\"") == true && cmds[1]?.Contains("\"on\":true") == true
+                  && cmds[2]?.Contains("\"v\":37") == true && cmds[2]?.Contains("\"commit\":true") == true && cmds[3]?.Contains("\"v\":100") == true && cmds[3]?.Contains("\"commit\":false") == true
                   && cmds[4]?.Contains("\"name\":\"A\"") == true);
             var extra = rd.ReadLineAsync();
             Check("un setup sans nom n'est pas envoyé", !extra.Wait(400));
@@ -120,7 +120,7 @@ static class SelfTest
 
             var g2 = TaskGrouping.Build(new[] { W(1, frame, "Paramètres"), W(2, frame, "Calculatrice") });
             Check("applis du Store (ApplicationFrameHost) : jamais regroupées", g2.Count == 2 && g2.All(g => !g.Many));
-            var g3 = TaskGrouping.Build(new[] { W(1, "", "Élevée 1"), W(2, null, "Élevée 2"), W(3, "", "Élevée 3") });
+            var g3 = TaskGrouping.Build(new[] { W(1, "", "Élevée 1"), W(2, null!, "Élevée 2"), W(3, "", "Élevée 3") });   // « null! » : un chemin nul exprès, hors contrat, pour éprouver Groupable
             Check("programme inconnu (processus élevé) : jamais regroupé", g3.Count == 3);
             Check("clé d'un groupe : le chemin en minuscules ; clé d'une fenêtre isolée : sa poignée", TaskGrouping.KeyOf(W(7, chrome, "x")) == chrome.ToLowerInvariant() && TaskGrouping.KeyOf(W(7, "", "x")) == "h7");
 
@@ -149,11 +149,12 @@ static class SelfTest
         try
         {
             string exe = Path.Combine(Environment.SystemDirectory, "notepad.exe");
-            string Make(string name, string target, string icon = null)
+            string Make(string name, string target, string? icon = null)
             {
-                var t = Type.GetTypeFromProgID("WScript.Shell"); var sh = Activator.CreateInstance(t);
+                // absents (ils ne le sont pas sous Windows) : l'exception compte l'essai en échec, comme le faisait la valeur null passée plus loin
+                var t = Type.GetTypeFromProgID("WScript.Shell") ?? throw new InvalidOperationException("WScript.Shell introuvable"); var sh = Activator.CreateInstance(t) ?? throw new InvalidOperationException("WScript.Shell");
                 string p = Path.Combine(dir, name + ".lnk");
-                var sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, sh, new object[] { p });
+                var sc = t.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, sh, new object[] { p }) ?? throw new InvalidOperationException("CreateShortcut");
                 void Set(string n, string v) => sc.GetType().InvokeMember(n, System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { v });
                 Set("TargetPath", target); if (icon != null) Set("IconLocation", icon);
                 sc.GetType().InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, sc, null);
@@ -171,17 +172,17 @@ static class SelfTest
                 return (double)n / tot;
             }
             Host.ResolveShortcuts = false;
-            string withArrow = Host.IconPng(lnk, 32), plain = Host.IconPng(exe, 32);
+            string? withArrow = Host.IconPng(lnk, 32), plain = Host.IconPng(exe, 32);
             double dArrow = withArrow != null && plain != null ? Corner(withArrow, plain) : 0;
             Check($"sans résolution : le coin de l'icône du .lnk diffère de celle du programme ({dArrow:P0} des pixels : la flèche)", dArrow > 0.15);
             Host.ResolveShortcuts = true;
-            string clean = Host.IconPng(lnk, 40), plain40 = Host.IconPng(exe, 40);
-            double dClean = clean != null ? Corner(clean, plain40) : 1;
+            string? clean = Host.IconPng(lnk, 40), plain40 = Host.IconPng(exe, 40);
+            double dClean = clean != null && plain40 != null ? Corner(clean, plain40) : 1;   // plain40 absente : l'essai échoue (avant : exception, comptée en échec)
             Check($"avec résolution : le coin est celui du programme ({dClean:P0} de différence), sans flèche", clean != null && dClean < 0.05);
-            string clean2 = Host.IconPng(lnk2, 40);
-            double dClean2 = clean2 != null ? Corner(clean2, plain40) : 1;
+            string? clean2 = Host.IconPng(lnk2, 40);
+            double dClean2 = clean2 != null && plain40 != null ? Corner(clean2, plain40) : 1;
             Check($"raccourci avec IconLocation explicite (fichier,0) : même icône ({dClean2:P0} de différence)", clean2 != null && dClean2 < 0.05);
-            string miss = Host.IconPng(gone, 20);
+            string? miss = Host.IconPng(gone, 20);
             Check("raccourci vers une cible disparue : une icône quand même (repli)", miss != null && miss.Length > 100);
             Check("fichier .lnk inexistant : null, aucune exception", Host.IconPng(Path.Combine(dir, "rien.lnk"), 20) == null);
             Check("un programme (.exe) n'est pas touché par la résolution", Host.IconPng(exe, 24) != null);
@@ -210,11 +211,11 @@ static class SelfTest
             Check("la barre commence par l'Explorateur et finit par le Navigateur CDX", s.OnBar[0].Target == "cdx:explorer" && s.OnBar[^1].Target == "cdx:navigateur");
 
             Check("ajout d'un fichier existant", s.AddToBar("Essai", exe) && s.OnBar.Count == 6 && s.OnBar[^1].Target == exe);
-            Check("la nouvelle épingle n'est pas une tuile du menu Démarrer", !s.Find(exe).Tile);
+            Check("la nouvelle épingle n'est pas une tuile du menu Démarrer", s.Find(exe) is { Tile: false });
             Check("doublon (autre casse) : pas de seconde épingle", s.AddToBar("Essai bis", exe.ToUpperInvariant()) && s.Items.Count(p => string.Equals(p.Target, exe, StringComparison.OrdinalIgnoreCase)) == 1);
-            Check("ajout d'une tuile existante à la barre : même entrée, Bar vrai", s.AddToBar("Calculatrice", "calc.exe") && s.Items.Count(p => p.Target == "calc.exe") == 1 && s.Find("calc.exe").Bar && s.Find("calc.exe").Tile);
+            Check("ajout d'une tuile existante à la barre : même entrée, Bar vrai", s.AddToBar("Calculatrice", "calc.exe") && s.Items.Count(p => p.Target == "calc.exe") == 1 && s.Find("calc.exe") is { Bar: true, Tile: true });
 
-            Check("écriture atomique : aucun .tmp ne reste", File.Exists(file) && !Directory.GetFiles(Path.GetDirectoryName(file), Path.GetFileName(file) + "*.tmp").Any());
+            Check("écriture atomique : aucun .tmp ne reste", File.Exists(file) && !Directory.GetFiles(Path.GetDirectoryName(file)!, Path.GetFileName(file) + "*.tmp").Any());   // « ! » : file est un fichier du dossier d'essai
             var s2 = new PinStore(file);
             Check("relecture : même ordre, mêmes drapeaux", s2.Items.Select(p => p.Target + p.Bar + p.Tile).SequenceEqual(s.Items.Select(p => p.Target + p.Bar + p.Tile)));
 
@@ -279,7 +280,7 @@ static class SelfTest
             Check("tuile Notes retirée par l'utilisateur (déjà dans « seen ») : elle ne revient pas", new PinStore(legacy).Items.Count == 1);
             File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"ic\":\"dossier\",\"bar\":true,\"tile\":true},{\"name\":\"Notes\",\"target\":\"cdx:notes\",\"ic\":\"carnet\",\"bar\":false,\"tile\":true},{\"name\":\"Chrome\",\"target\":\"chrome.exe\",\"ic\":\"serveur\",\"bar\":true,\"tile\":true}]}");
             var mig = new PinStore(legacy);
-            Check("icônes de la famille (01/11/2026) : une application de la suite enregistrée avec un pictogramme générique prend la sienne, un programme étranger garde le sien", mig.Find("cdx:explorer").Ic == "explorateur" && mig.Find("cdx:notes").Ic == "notes" && mig.Find("chrome.exe").Ic == "serveur");
+            Check("icônes de la famille (01/11/2026) : une application de la suite enregistrée avec un pictogramme générique prend la sienne, un programme étranger garde le sien", mig.Find("cdx:explorer")?.Ic == "explorateur" && mig.Find("cdx:notes")?.Ic == "notes" && mig.Find("chrome.exe")?.Ic == "serveur");
 
             var big = new PinStore(Path.Combine(dir, "grand.json")); big.Items.Clear();
             int added = 0; for (int i = 0; i < PinStore.Max + 5; i++) if (big.AddToBar("App" + i, "cdx:app" + i)) added++;
@@ -301,7 +302,7 @@ static class SelfTest
     {
         var lines = new List<string>(); int bad = 0;
         void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
-        TrayRelay relay = null; NotifyIcon ni = null;
+        TrayRelay? relay = null; NotifyIcon? ni = null;
         try
         {
             Application.EnableVisualStyles();
@@ -326,15 +327,15 @@ static class SelfTest
 
             var balloons = new List<string>();
             relay = new TrayRelay { OnBalloon = (t, x, e) => balloons.Add(t + "|" + x) };
-            var scr = Screen.PrimaryScreen.Bounds;
+            var scr = Screen.PrimaryScreen!.Bounds;   // « ! » : une session ouverte a toujours un écran principal
             Check("relais créé", relay.Create(new Rectangle(scr.Left, scr.Bottom - 36, scr.Width, 36)));
             Check("FindWindow(Shell_TrayWnd) trouve le relais en premier", N.FindWindow("Shell_TrayWnd", null) == relay.Handle);
             Check("la vraie barre de Windows reste trouvable (autre processus)", TrayRelay.ExplorerTray() != IntPtr.Zero && TrayRelay.ExplorerTray() != relay.Handle);
 
             bool Until(Func<bool> f, int ms) { var t0 = DateTime.UtcNow; while ((DateTime.UtcNow - t0).TotalMilliseconds < ms) { Application.DoEvents(); relay.Flush(); if (f()) return true; Thread.Sleep(20); } Application.DoEvents(); relay.Flush(); return f(); }
             string me = System.Diagnostics.Process.GetCurrentProcess().ProcessName, tip1 = "CDX essai " + Environment.ProcessId;
-            string KeyOf(string tip) { foreach (var o in relay.Items()) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(o)); if (d.RootElement.GetProperty("tip").GetString() == tip) return d.RootElement.GetProperty("k").GetString(); } return null; }
-            string PngOf(string tip) { foreach (var o in relay.Items()) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(o)); if (d.RootElement.GetProperty("tip").GetString() == tip) return d.RootElement.GetProperty("png").GetString(); } return null; }
+            string? KeyOf(string tip) { foreach (var o in relay.Items()) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(o)); if (d.RootElement.GetProperty("tip").GetString() == tip) return d.RootElement.GetProperty("k").GetString(); } return null; }
+            string? PngOf(string tip) { foreach (var o in relay.Items()) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(o)); if (d.RootElement.GetProperty("tip").GetString() == tip) return d.RootElement.GetProperty("png").GetString(); } return null; }
 
             var mouse = new List<string>();
             ni = new NotifyIcon { Icon = SystemIcons.Information, Text = tip1, Visible = true };
@@ -345,12 +346,12 @@ static class SelfTest
 
             ni.Text = tip1 + " bis";
             Check("infobulle changée", Until(() => KeyOf(tip1 + " bis") != null, 3000));
-            string key = KeyOf(tip1 + " bis");
+            string? key = KeyOf(tip1 + " bis");
 
             Check("clic gauche renvoyé à l'appli", key != null && relay.Click(key, "l") && Until(() => mouse.Contains("upLeft"), 3000));
-            Check("clic droit renvoyé à l'appli", relay.Click(key, "r") && Until(() => mouse.Contains("upRight"), 3000));
-            Check("double-clic renvoyé à l'appli", relay.Click(key, "d") && Until(() => mouse.Contains("doubleLeft"), 3000));
-            Check("clic sur une icône inconnue : refusé", !relay.Click("0:0", "l") && !relay.Click(key, "x"));
+            Check("clic droit renvoyé à l'appli", key != null && relay.Click(key, "r") && Until(() => mouse.Contains("upRight"), 3000));
+            Check("double-clic renvoyé à l'appli", key != null && relay.Click(key, "d") && Until(() => mouse.Contains("doubleLeft"), 3000));
+            Check("clic sur une icône inconnue : refusé", !relay.Click("0:0", "l") && key != null && !relay.Click(key, "x"));
 
             ni.ShowBalloonTip(1000, "Titre essai", "Texte essai", ToolTipIcon.Info);
             Check("bulle de l'appli : remise comme notification", Until(() => balloons.Contains("Titre essai|Texte essai"), 3000));
@@ -397,7 +398,7 @@ static class SelfTest
         try
         {
             var one = new[] { new Rectangle(500, 100, 300, 200) }; var none = Array.Empty<Rectangle>(); Rectangle? screen = new Rectangle(0, 0, 1920, 1040);
-            Point Mv(int x, int y, int w = 200, int h = 100, Rectangle[] o = null, Rectangle? a = null) => Snap.Move(new Rectangle(x, y, w, h), o ?? one, a, Snap.Dist, Snap.Gap);
+            Point Mv(int x, int y, int w = 200, int h = 100, Rectangle[]? o = null, Rectangle? a = null) => Snap.Move(new Rectangle(x, y, w, h), o ?? one, a, Snap.Dist, Snap.Gap);
             Check("déplacement : notre bord droit colle au bord gauche de B, sans écart", Mv(294, 120) == new Point(300, 120));
             Check("notre bord gauche colle au bord droit de B", Mv(805, 120) == new Point(800, 120));
             Check("sous B, sans écart", Mv(520, 304) == new Point(520, 300));
@@ -409,7 +410,7 @@ static class SelfTest
             Check("le bord le plus proche gagne (une fenêtre à 1 px plutôt que l'écran à 3)", Mv(3, 120, 200, 100, new[] { new Rectangle(204, 100, 300, 200) }, screen) == new Point(4, 120));
             Check("ni voisine ni écran : la position proposée", Mv(3, 3, 200, 100, none, null) == new Point(3, 3));
 
-            Rectangle Sz(int x, int y, int w, int h, int edge = 8, Rectangle[] o = null, Rectangle? a = null) => Snap.Size(new Rectangle(x, y, w, h), edge, o ?? one, a, Snap.Dist, Snap.Gap);
+            Rectangle Sz(int x, int y, int w, int h, int edge = 8, Rectangle[]? o = null, Rectangle? a = null) => Snap.Size(new Rectangle(x, y, w, h), edge, o ?? one, a, Snap.Dist, Snap.Gap);
             Check("redimensionner par le coin bas-droite : le bord droit s'arrête contre B", Sz(100, 120, 396, 100) == new Rectangle(100, 120, 400, 100));
             Check("loin de tout : la taille proposée", Sz(100, 120, 200, 500) == new Rectangle(100, 120, 200, 500));
             Check("bords droits alignés", Sz(100, 120, 697, 100) == new Rectangle(100, 120, 700, 100));
@@ -442,11 +443,11 @@ static class SelfTest
         var anchor = new Control(); _ = anchor.Handle;
         var accepted = new List<string>(); int refused = 0;
         var accents = new List<string>();
-        IDisposable watch = null;
+        IDisposable? watch = null;
         Bus.Listen("shell", (type, from, data) =>
         {
             // la même liste blanche que le shell : notify { title <= 80, text <= 400, level }
-            string title = data.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+            string? title = data.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
             if (type == "notify" && !string.IsNullOrEmpty(title) && title.Length <= 80) { accepted.Add(from + "|" + title); return true; }
             refused++; return false;
         });
@@ -507,7 +508,7 @@ static class SelfTest
                     var rules = System.IO.Pipes.PipesAclExtensions.GetAccessControl(acl).GetAccessRules(true, false, typeof(System.Security.Principal.SecurityIdentifier)).Cast<System.Security.AccessControl.AuthorizationRule>().Select(r => r.IdentityReference.Value).Distinct().ToList();
                     // CurrentUserOnly accorde le tube au propriétaire du jeton : l'utilisateur, ou le groupe Administrateurs quand le processus est élevé (CI).
                     var id = System.Security.Principal.WindowsIdentity.GetCurrent();
-                    string me = id.User.Value, owner = id.Owner?.Value;
+                    string me = id.User!.Value; string? owner = id.Owner?.Value;   // « ! » : le jeton d'un processus porte toujours son utilisateur
                     Check($"droits du tube : l'utilisateur courant seulement ({string.Join(", ", rules)})", rules.Count == 1 && (rules[0] == me || rules[0] == owner));
                 }
 
@@ -538,7 +539,7 @@ static class SelfTest
                     SuiteApps.ByTarget("cdx:explorer")?.Name == "explorer" && SuiteApps.ByTarget("CDX:REPOS")?.Name == "repos" && SuiteApps.ByTarget("cdx:navigateur?https://x.fr")?.Name == "browser"
                     && SuiteApps.ByTarget("cdx:reposXYZ") == null && SuiteApps.ByTarget("cdx:inconnu") == null && SuiteApps.ByTarget(null) == null);
                 Check("SuiteApps : l'argument n'est rendu qu'aux programmes qui en acceptent un",
-                    SuiteApps.ArgumentOf(SuiteApps.ByName("explorer"), "cdx:explorer?C%3A%5CDev") == @"C:\Dev" && SuiteApps.ArgumentOf(SuiteApps.ByName("repos"), "cdx:repos?x") == null);
+                    SuiteApps.ArgumentOf(SuiteApps.ByName("explorer")!, "cdx:explorer?C%3A%5CDev") == @"C:\Dev" && SuiteApps.ArgumentOf(SuiteApps.ByName("repos")!, "cdx:repos?x") == null);   // « ! » : explorer et repos font partie de SuiteApps.All
                 var missing = SuiteApps.All.Where(a => a.DotNet && !File.Exists(Path.Combine(AppContext.BaseDirectory, a.Exe + ".exe"))).Select(a => a.Exe).ToList();
                 Check("SuiteApps : chaque programme .NET de la liste est compilé à côté du shell" + (missing.Count > 0 ? " (manquent : " + string.Join(", ", missing) + ")" : ""), missing.Count == 0);
                 var pinTargets = PinStore.Defaults.Select(p => p.Target).Where(t => t.StartsWith("cdx:")).ToList();
@@ -557,14 +558,14 @@ static class SelfTest
                 Thread.Sleep(3500);   // l'annonce périodique part après 2 s sans changement
                 Xfer.Publish(new XferInfo { Id = 4242, Kind = "copy", Title = "essai", State = "done" });
                 Thread.Sleep(500);
-                var xthread = (Thread)typeof(Xfer).GetField("thread", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.GetValue(null);
+                var xthread = (Thread?)typeof(Xfer).GetField("thread", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)?.GetValue(null);
                 Check("transferts : un transfert annoncé seulement par Active ne fait pas tomber le fil d'envoi", xcalls >= 1 && xthread != null && xthread.IsAlive);
                 Xfer.Active = null;
 
                 // ---- AtomicFile : écritures simultanées, et un lecteur qui tient le fichier
                 string af = Path.Combine(dir, "atomique.json");
                 Parallel.For(0, 40, i => { try { AtomicFile.WriteJson(af, new { i, pad = new string('x', 20000) }); } catch (IOException) { } catch (UnauthorizedAccessException) { } });
-                bool afOk; try { using var d = JsonDocument.Parse(File.ReadAllText(af)); afOk = d.RootElement.GetProperty("pad").GetString().Length == 20000; } catch { afOk = false; }
+                bool afOk; try { using var d = JsonDocument.Parse(File.ReadAllText(af)); afOk = d.RootElement.GetProperty("pad").GetString()?.Length == 20000; } catch { afOk = false; }   // null : faux, comme l'exception rattrapée d'avant
                 Check("AtomicFile : 40 écritures simultanées, le fichier final est entier et aucun .tmp ne reste", afOk && !Directory.GetFiles(dir, "atomique.json*.tmp").Any());
                 bool heldOk;
                 var briefReader = new FileStream(af, FileMode.Open, FileAccess.Read, FileShare.Read);   // un programme qui relit le fichier au même instant
@@ -590,7 +591,8 @@ static class SelfTest
                     foreach (var c in vr.GetProperty("accent").EnumerateArray())
                     {
                         cases++;
-                        string got = Suite.ParseAccent(c.GetProperty("json").GetString(), c.GetProperty("fallback").GetString()), want = c.GetProperty("expect").GetString();
+                        // « ! » : les vecteurs donnent json et fallback en texte
+                        string got = Suite.ParseAccent(c.GetProperty("json").GetString()!, c.GetProperty("fallback").GetString()!); string? want = c.GetProperty("expect").GetString();
                         if (got != want) wrong.Add($"{c.GetProperty("why").GetString()} : {got} (attendu {want})");
                     }
                     Check($"vecteurs du bus : les {cases} cas d'accent de suite.json donnent la réponse attendue" + (wrong.Count > 0 ? " — " + string.Join(" ; ", wrong) : ""), cases >= 10 && wrong.Count == 0);
@@ -641,7 +643,7 @@ static class SelfTest
             Check("ajouté au dictionnaire personnel : connu, avec sa majuscule de début de phrase, et écrit dans le fichier", Spell.Check("cdx") && Spell.Check("Cdx") && File.ReadAllText(perso).Trim() == "cdx");
             Spell.Add("cdx"); Check("ajouté deux fois : une seule ligne", File.ReadAllText(perso).Trim() == "cdx");
             // le contrat des pages
-            string[] Bad(object reply) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(reply)); return d.RootElement.GetProperty("bad").EnumerateArray().Select(x => x.GetString()).ToArray(); }
+            string?[] Bad(object? reply) { using var d = JsonDocument.Parse(JsonSerializer.Serialize(reply)); return d.RootElement.GetProperty("bad").EnumerateArray().Select(x => x.GetString()).ToArray(); }
             var r1 = Spell.Reply("""{"cmd":"sp.check","id":"sp1","words":["bonjour","marchée","cdx","Orthografe","l'école"]}""");
             string j1 = JsonSerializer.Serialize(r1);
             Check("sp.check : seuls les mots inconnus reviennent, avec l'identifiant", j1.Contains("\"type\":\"sp.result\"") && j1.Contains("\"id\":\"sp1\"") && Bad(r1).SequenceEqual(new[] { "marchée", "Orthografe" }));

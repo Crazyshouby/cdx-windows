@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -5,7 +6,7 @@ namespace Cdx;
 
 // Une application épinglée. Bar : affichée dans la barre ; Tile : tuile du menu Démarrer. Ic : icône pixel de la charte (repli quand
 // la cible n'est pas un fichier dont on peut extraire l'icône : cdx:…, ms-settings:…, shell:…, noms nus comme wt.exe).
-sealed record Pin(string Name, string Target, string Ic, bool Bar, bool Tile);
+sealed record Pin(string Name, string Target, string? Ic, bool Bar, bool Tile);   // Ic null : pas d'icône de la charte (écrit « ic: null »)
 
 // Les épingles, dans %LOCALAPPDATA%\CdxShell\epingles.json : { "version": 1, "pins": [ { name, target, ic, bar, tile, barIndex } ] }.
 // L'ordre du fichier est celui des tuiles du menu Démarrer ; barIndex donne l'ordre dans la barre (les deux sont indépendants).
@@ -36,7 +37,7 @@ sealed class PinStore
     static readonly Regex BareExe = new(@"^[A-Za-z0-9_.\-]+\.(exe|msc|cpl)$", RegexOptions.IgnoreCase);
 
     // Ce qu'on accepte d'épingler : un nom court, et une cible que Windows sait lancer (schéma connu, programme nu, ou chemin qui existe).
-    public static bool Valid(string name, string target)
+    public static bool Valid([NotNullWhen(true)] string? name, [NotNullWhen(true)] string? target)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Length > 80 || string.IsNullOrWhiteSpace(target) || target.Length > 520) return false;
         if (name.Any(char.IsControl) || target.Any(char.IsControl)) return false;
@@ -57,7 +58,8 @@ sealed class PinStore
         catch { return false; }
     }
 
-    void SetItems(List<Pin> items, Dictionary<string, int> barIndex = null)
+    [MemberNotNull(nameof(Items))]   // le constructeur passe par ici : Items n'est jamais null
+    void SetItems(List<Pin> items, Dictionary<string, int>? barIndex = null)
     {
         Items = items;
         var bar = items.Where(p => p.Bar).Select((p, i) => (p, i)).OrderBy(x => barIndex != null && barIndex.TryGetValue(x.p.Target, out var k) ? k : int.MaxValue).ThenBy(x => x.i).Select(x => x.p.Target);
@@ -72,17 +74,17 @@ sealed class PinStore
             using var d = JsonDocument.Parse(File.ReadAllText(file));
             var root = d.RootElement;
             if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("version", out var v) || v.GetInt32() != 1 || !root.TryGetProperty("pins", out var arr) || arr.ValueKind != JsonValueKind.Array) { Host.Log("épingles : fichier d'une autre version ou abîmé, valeurs par défaut"); return; }
-            string S(JsonElement e, string k) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(k, out var x) && x.ValueKind == JsonValueKind.String ? x.GetString() : null;
+            string? S(JsonElement e, string k) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(k, out var x) && x.ValueKind == JsonValueKind.String ? x.GetString() : null;
             bool B(JsonElement e, string k) => e.TryGetProperty(k, out var x) && x.ValueKind == JsonValueKind.True;
             var list = new List<Pin>(); var idx = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var e in arr.EnumerateArray())
             {
-                string n = S(e, "name"), t = S(e, "target");
+                string? n = S(e, "name"), t = S(e, "target");
                 if (t != null && t.StartsWith("kdx:", StringComparison.OrdinalIgnoreCase)) t = "cdx:" + t[4..];   // épingles écrites quand la suite s'appelait KDX
                 if (!Valid(n, t) || list.Any(p => Same(p.Target, t)) || Retired.Any(x => Same(x, t))) continue;
                 bool bar = B(e, "bar"), tile = B(e, "tile");
                 if (!bar && !tile) continue;
-                string ic = S(e, "ic"); if (ic != null && !Regex.IsMatch(ic, "^[a-z0-9_-]{1,30}$")) ic = null;
+                string? ic = S(e, "ic"); if (ic != null && !Regex.IsMatch(ic, "^[a-z0-9_-]{1,30}$")) ic = null;
                 var suite = Defaults.FirstOrDefault(x => Same(x.Target, t) && x.Target.StartsWith("cdx:", StringComparison.OrdinalIgnoreCase));
                 if (suite != null) ic = suite.Ic;   // une application de la suite porte son icône de la famille (01/11/2026), même dans un fichier écrit avec un pictogramme générique
                 list.Add(new Pin(n, t, ic, bar, tile));
@@ -93,7 +95,7 @@ sealed class PinStore
             // une application ajoutée à la suite depuis la dernière écriture du fichier : sa tuile est proposée une fois
             bool hasSeen = root.TryGetProperty("seen", out var sv) && sv.ValueKind == JsonValueKind.Array;
             seen.Clear();
-            if (hasSeen) { foreach (var x in sv.EnumerateArray()) if (x.ValueKind == JsonValueKind.String) seen.Add(x.GetString()); }
+            if (hasSeen) { foreach (var x in sv.EnumerateArray()) if (x.ValueKind == JsonValueKind.String) seen.Add(x.GetString()!); }   // « ! » : une valeur JSON de type texte ne se lit jamais null
             else foreach (var t in Legacy) seen.Add(t);
             bool added = false;
             foreach (var dflt in Defaults) if (!seen.Contains(dflt.Target)) { seen.Add(dflt.Target); if (Find(dflt.Target) == null && Items.Count < Max) { Items.Add(dflt with { Bar = false }); added = true; } }
@@ -112,13 +114,13 @@ sealed class PinStore
         catch (Exception ex) { Host.Log("épingles : écriture échouée : " + ex.Message); }
     }
 
-    static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-    public Pin Find(string target) => Items.FirstOrDefault(p => Same(p.Target, target));
-    public List<Pin> OnBar => barOrder.Select(Find).Where(p => p != null).ToList();
+    static bool Same(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+    public Pin? Find(string? target) => Items.FirstOrDefault(p => Same(p.Target, target));
+    public List<Pin> OnBar => barOrder.Select(Find).OfType<Pin>().ToList();   // OfType écarte les null, comme le Where d'avant
     public int BarIndex(string target) => barOrder.FindIndex(t => Same(t, target));   // rang dans la barre, −1 si absente
 
     // Place une cible dans l'ordre de la barre : devant `before` (une autre épingle de la barre), sinon à la fin.
-    void Place(string target, string before)
+    void Place(string target, string? before)
     {
         barOrder.RemoveAll(t => Same(t, target));
         int at = string.IsNullOrEmpty(before) ? -1 : barOrder.FindIndex(t => Same(t, before));
@@ -127,18 +129,18 @@ sealed class PinStore
 
     // Épingler à la barre : une tuile déjà connue passe à Bar ; sinon une nouvelle épingle, réservée à la barre.
     // `before` : la cible devant laquelle l'insérer (glisser-déposer) ; vide = à droite des autres.
-    public bool AddToBar(string name, string target, string ic = null, string before = null)
+    public bool AddToBar(string? name, string? target, string? ic = null, string? before = null)
     {
         if (!Valid(name, target)) return false;
         int i = Items.FindIndex(p => Same(p.Target, target));
         if (i >= 0) { if (!Items[i].Bar) Items[i] = Items[i] with { Bar = true }; }
         else { if (Items.Count >= Max) return false; Items.Add(new Pin(name.Trim(), target, ic, true, false)); }
-        Place(Find(target).Target, before);
+        Place(Find(target)!.Target, before);   // « ! » : la cible vient d'être trouvée ou ajoutée juste au-dessus
         Save(); return true;
     }
 
     // Retirer de la barre : la tuile du menu Démarrer reste ; une épingle qui n'était que dans la barre disparaît.
-    public bool RemoveFromBar(string target)
+    public bool RemoveFromBar(string? target)
     {
         int i = Items.FindIndex(p => Same(p.Target, target) && p.Bar);
         if (i < 0) return false;
@@ -157,12 +159,12 @@ sealed class PinStore
     }
 
     // Glisser une épingle de la barre devant une autre (ou à la fin si `before` est vide).
-    public bool MoveTo(string target, string before)
+    public bool MoveTo(string target, string? before)
     {
         if (!barOrder.Any(t => Same(t, target)) || Same(target, before ?? "")) return false;
         if (!string.IsNullOrEmpty(before) && !barOrder.Any(t => Same(t, before))) return false;
         var old = barOrder.ToList();
-        Place(Find(target).Target, before);
+        Place(Find(target)!.Target, before);   // « ! » : la cible est dans barOrder, donc parmi les épingles
         if (old.SequenceEqual(barOrder)) return false;
         Save(); return true;
     }

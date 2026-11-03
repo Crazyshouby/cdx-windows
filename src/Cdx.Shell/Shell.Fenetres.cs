@@ -44,7 +44,7 @@ partial class Shell
             return new
             {
                 h = r.H.ToInt64().ToString(), title = g.Many ? AppNameOf(r.Exe) : r.Title, exe = r.Exe,
-                active = g.Many ? g.Active : r.Active, min = g.Many ? g.Min : r.Min, count = g.Windows.Count, g = g.Many ? g.Key : (string)null
+                active = g.Many ? g.Active : r.Active, min = g.Many ? g.Min : r.Min, count = g.Windows.Count, g = g.Many ? g.Key : (string?)null
             };
         }).ToList();
         // La liste n'est envoyée à la page que si elle a changé (ou toutes les 5 s, au cas où la page aurait été rechargée) : avant, sérialisation et
@@ -53,7 +53,7 @@ partial class Shell
         if (json != lastTasks || tick % 10 == 0) { lastTasks = json; Bar.Web.CoreWebView2.PostWebMessageAsJson(json); }
         if (++tick % 4 == 0) SendStats();
     }
-    string lastTasks;
+    string? lastTasks;   // null : rien encore envoyé à la barre
 
     // Les fenêtres de la barre des tâches, dans l'ordre où elles sont apparues. Le chemin de l'exécutable d'une fenêtre ne change pas : il est lu une fois
     // (OpenProcess + QueryFullProcessImageName à chaque tour, pour chaque fenêtre, coûtaient le plus cher de ce minuteur).

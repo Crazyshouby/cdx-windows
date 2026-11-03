@@ -33,7 +33,7 @@ partial class Shell
     }
 
     // Des fichiers déposés sur la barre (depuis l'Explorateur CDX ou celui de Windows) : seuls les programmes, raccourcis, scripts et dossiers sont épinglés.
-    void PinDropped(string[] paths, string before)
+    void PinDropped(string[]? paths, string? before)
     {
         if (paths == null || paths.Length == 0) return;
         int n = 0, skipped = 0;
@@ -47,17 +47,17 @@ partial class Shell
     }
 
     // Une fenêtre de la barre glissée parmi les épingles : on épingle son programme.
-    void PinTask(string h, string before)
+    void PinTask(string? h, string? before)
     {
         if (!long.TryParse(h, out long hv)) return;
         var hw = new IntPtr(hv); if (!N.IsWindow(hw)) return;
-        string exe = N.ExePathOf(hw);
+        string? exe = N.ExePathOf(hw);
         if (string.IsNullOrEmpty(exe) || exe.EndsWith("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(exe)) return;
         if (pinStore.AddToBar(PinNameOf(exe), exe, null, before)) { Host.Log("fenêtre épinglée par glisser : " + exe); PushPins(); }
     }
 
     // Le menu d'un bouton de la barre : « pin » (clé = cible de l'épingle) ou « task » (clé = poignée de la fenêtre).
-    void OpenBarMenu(string kind, string key, int x)
+    void OpenBarMenu(string? kind, string key, int x)
     {
         var items = new List<(string id, string label)>(); Action<string> act; string title;
         var marks = new Dictionary<string, (string mark, bool faint)>();   // repère « ▶ » de la fenêtre active, texte pâle des fenêtres réduites
@@ -83,7 +83,7 @@ partial class Shell
         else if (kind == "task" && long.TryParse(key, out long hv))
         {
             var h = new IntPtr(hv); if (!N.IsWindow(h)) return;
-            string exe = N.ExePathOf(h);
+            string? exe = N.ExePathOf(h);   // null : programme illisible (processus élevé) ; « pin » et « unpin » ne sont alors pas proposés
             bool pinnable = !string.IsNullOrEmpty(exe) && !exe.EndsWith("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase) && File.Exists(exe);
             var existing = pinnable ? pinStore.Find(exe) : null;
             title = N.TitleOf(h); if (title.Length > 40) title = title[..40] + "…";
@@ -94,6 +94,7 @@ partial class Shell
                 switch (id)
                 {
                     case "pin":
+                        if (exe == null) break;   // « pin » demandé quand même (canal de test, message forgé) : PinNameOf(null) levait une NullReferenceException
                         string name = PinNameOf(exe);
                         if (pinStore.AddToBar(name, exe)) { Host.Log("épinglée à la barre : " + name); PushPins(); }
                         break;

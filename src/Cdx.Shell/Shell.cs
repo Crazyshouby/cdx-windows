@@ -21,23 +21,23 @@ partial class Shell : IHostApp
     public readonly PopupForm BarMenu;   // le menu contextuel d'un bouton de la barre (épingles, fenêtres), ouvert au-dessus de la barre
     public uint CallbackMsg;
     readonly PinStore pinStore;
-    bool barMenuOpen; Action<string> barMenuAct;
+    bool barMenuOpen; Action<string>? barMenuAct;   // null : aucun menu de la barre ouvert
 
     string theme; readonly string root;
     readonly bool pinnedTheme;   // un thème donné en argument : la suite ne le change pas
-    IDisposable suiteWatch;
-    CoreWebView2Environment env;
+    IDisposable? suiteWatch;   // null : thème imposé en argument, ou pas encore initialisé
+    CoreWebView2Environment? env;
     double scale = 1; int barH = 36;
     IntPtr lastFg;
     readonly Dictionary<IntPtr, int> order = new(); int seq;
-    LowLevelHook kbdHook;   // sur un fil à lui : la barre occupée ne doit jamais faire ramer le clavier de tout Windows
+    LowLevelHook? kbdHook;   // sur un fil à lui : la barre occupée ne doit jamais faire ramer le clavier de tout Windows
     bool startOpen, centerOpen, cleaned; DateTime startHiddenAt = DateTime.MinValue, centerHiddenAt = DateTime.MinValue;
     long pIdle, pKernel, pUser; int tick;
-    bool audioMenuOpen; DateTime audioMenuHiddenAt = DateTime.MinValue; volatile object lastAudio;
-    AudioLink audio;   // la liaison avec Audio Linker (tube « cdx.audio_linker »), si ce programme tourne
-    TrayRelay tray;    // la zone de notification : les icônes des applis, reçues à la place de la barre de Windows
+    bool audioMenuOpen; DateTime audioMenuHiddenAt = DateTime.MinValue; volatile object? lastAudio;
+    AudioLink? audio;   // la liaison avec Audio Linker (tube « cdx.audio_linker »), si ce programme tourne
+    TrayRelay? tray;    // la zone de notification : les icônes des applis, reçues à la place de la barre de Windows
 
-    public Shell(string theme)
+    public Shell(string? theme)
     {
         pinnedTheme = theme != null; this.theme = theme ?? Suite.ReadAccent(); root = Host.FindWebRoot();
         Bar = new BarForm(this); Start = new PopupForm(this, "start", OnStartDeactivated); Switch = new SwitcherForm(this); Center = new PopupForm(this, "center", OnCenterDeactivated); AudioMenu = new PopupForm(this, "audiomenu", OnAudioMenuDeactivated); BarMenu = new PopupForm(this, "barmenu", OnBarMenuDeactivated);
@@ -75,7 +75,7 @@ partial class Shell : IHostApp
         timer.Tick += (s, e) => Tick();
         timer.Start();
         Bus.Listen("shell", OnBus);
-        Suite.RegisterApp("shell", Environment.ProcessPath);
+        if (Environment.ProcessPath is { } self) Suite.RegisterApp("shell", self);   // ProcessPath peut manquer (rare) : rien n'est alors inscrit, plutôt qu'un chemin null écrit par-dessus le bon dans apps.json
         // Les deux autres programmes sont posés à côté du shell : leur chemin est enregistré même s'ils n'ont pas encore tourné (ou si apps.json garde un ancien dossier).
         foreach (var other in SuiteApps.All.Where(a => a.Name != "shell")) { var exe = Path.Combine(AppContext.BaseDirectory, other.Exe + ".exe"); if (File.Exists(exe)) Suite.RegisterApp(other.Name, exe); }   // les voisins posés à côté du shell (SuiteApps.cs)
         if (!pinnedTheme) suiteWatch = Suite.Watch(theme, a => { theme = a; foreach (var f in new HostForm[] { Bar, Start, Center, Switch, AudioMenu, BarMenu }) f.Send(new { type = "theme", value = a }); Host.Log("accent de la suite : " + a); });
@@ -104,7 +104,7 @@ partial class Shell : IHostApp
 
     void PlaceBar(ref APPBARDATA abd)
     {
-        var scr = Screen.PrimaryScreen.Bounds;
+        var scr = Screen.PrimaryScreen!.Bounds;   // « ! » : le shell tourne dans une session ouverte, Windows y a toujours un écran principal
         abd.uEdge = N.ABE_BOTTOM;
         abd.rc = new RECT { Left = scr.Left, Right = scr.Right, Top = scr.Bottom - barH, Bottom = scr.Bottom };
         tray?.Suspend();   // les messages de barre d'application doivent atteindre la barre de Windows, pas le relais de la zone de notification
@@ -145,8 +145,9 @@ partial class Shell : IHostApp
         {
             using var doc = JsonDocument.Parse(json);
             var r = doc.RootElement;
-            string cmd = r.GetProperty("cmd").GetString();
-            string Str(string k) => r.TryGetProperty(k, out var v) ? v.GetString() : null;
+            string cmd = r.GetProperty("cmd").GetString() ?? throw new FormatException("cmd null");   // rattrapé plus bas, comme l'était le déréférencement
+            string? Str(string k) => r.TryGetProperty(k, out var v) ? v.GetString() : null;
+            string Req(string k) => Str(k) ?? throw new FormatException(k + " manquant");   // rattrapé plus bas, comme l'était l'ArgumentNullException de long.Parse ou du lancement
             if (Host.CommonMessage(from, cmd, r)) return;
             switch (cmd)
             {
@@ -165,10 +166,10 @@ partial class Shell : IHostApp
                 case "bar.menu": OpenBarMenu(Str("kind"), Str("key") ?? "", r.TryGetProperty("x", out var bx) && bx.TryGetInt32(out var bxi) ? bxi : 0); break;
                 case "barmenu.pick": { var act = barMenuAct; HideBarMenu(); act?.Invoke(Str("id") ?? ""); break; }
                 case "hideBarMenu": HideBarMenu(); break;
-                case "alttab.pick": CommitSwitcher(new IntPtr(long.Parse(Str("h")))); break;
-                case "launch": Launch(Str("target")); break;
-                case "activate": Activate(new IntPtr(long.Parse(Str("h")))); break;
-                case "close": N.PostMessage(new IntPtr(long.Parse(Str("h"))), 0x0010 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero); break;
+                case "alttab.pick": CommitSwitcher(new IntPtr(long.Parse(Req("h")))); break;
+                case "launch": Launch(Req("target")); break;
+                case "activate": Activate(new IntPtr(long.Parse(Req("h")))); break;
+                case "close": N.PostMessage(new IntPtr(long.Parse(Req("h"))), 0x0010 /* WM_CLOSE */, IntPtr.Zero, IntPtr.Zero); break;
                 case "toggleStart": if (startOpen) HideStart(); else if ((DateTime.UtcNow - startHiddenAt).TotalMilliseconds > 250) ShowStart(); break;
                 case "hideStart": HideStart(); break;
                 case "toggleCenter": if (centerOpen) HideCenter(); else if ((DateTime.UtcNow - centerHiddenAt).TotalMilliseconds > 250) ShowCenter(); break;
@@ -201,9 +202,10 @@ partial class Shell : IHostApp
     bool OnBus(string type, string from, JsonElement data)
     {
         if (type != "notify") return false;
-        string title = data.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
-        string text = data.TryGetProperty("text", out var x) && x.ValueKind == JsonValueKind.String ? x.GetString() : "";
-        string level = data.TryGetProperty("level", out var l) && l.ValueKind == JsonValueKind.String ? l.GetString() : "info";
+        // « ! » : une valeur JSON de type texte ne se lit jamais null
+        string? title = data.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+        string text = data.TryGetProperty("text", out var x) && x.ValueKind == JsonValueKind.String ? x.GetString()! : "";
+        string level = data.TryGetProperty("level", out var l) && l.ValueKind == JsonValueKind.String ? l.GetString()! : "info";
         if (string.IsNullOrEmpty(title) || title.Length > 80 || text.Length > 400 || level is not ("info" or "warn" or "error")) return false;
         AddNotification(title, text, level, from);
         return true;
@@ -307,7 +309,7 @@ partial class Shell : IHostApp
 
     // L'Explorateur, le navigateur et Dépôts sont des programmes à part (cdx-explorer.exe, cdx-browser.exe, cdx-repos.exe, posés à côté de celui-ci) : un plantage de l'un
     // n'emporte ni la barre ni l'autre. Déjà lancés, ils reçoivent l'argument et ouvrent une fenêtre ou un onglet.
-    void StartApp(string exe, string arg)
+    void StartApp(string exe, string? arg)
     {
         try
         {

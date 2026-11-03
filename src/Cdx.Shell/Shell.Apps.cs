@@ -18,7 +18,7 @@ partial class Shell
     // Le menu Démarrer suit les installations : un raccourci ajouté, retiré ou renommé dans les dossiers « Programmes » (utilisateur, commun) renvoie la liste à la page,
     // 1,5 s après le dernier changement (un installeur en écrit plusieurs d'affilée).
     readonly List<FileSystemWatcher> appWatchers = new();
-    System.Windows.Forms.Timer appsTimer;
+    System.Windows.Forms.Timer? appsTimer;   // créé au premier changement du menu Démarrer
     void WatchStartMenu()
     {
         if (appWatchers.Count > 0) return;

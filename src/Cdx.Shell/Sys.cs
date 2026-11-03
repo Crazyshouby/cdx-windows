@@ -55,7 +55,7 @@ static class SysInfo
     }
 
     // Veille, redémarrage, arrêt : la confirmation est demandée par la page avant d'arriver ici.
-    public static void Power(string action)
+    public static void Power(string? action)
     {
         Host.Log("alimentation : " + action);
         switch (action)
