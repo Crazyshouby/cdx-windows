@@ -2,6 +2,7 @@
 #include "ComUtil.h"
 #include "Resampler.h"
 #include "Eq.h"
+#include "RenderDsp.h"
 #include "Log.h"
 #include "WasapiStream.h"
 
@@ -23,29 +24,14 @@ using Microsoft::WRL::ComPtr;
 
 namespace {
 
-// Linear fade-in applied to the first few ms of audio played right after a
-// hard drift-correction drop, so the jump to a different point in the stream
-// isn't an audible click.
-constexpr int kDeclickFadeMs = 5;
-
 // Process-loopback capture: how long to wait for the app's next packet
 // before topping the rings up with silence (see runCaptureSession). Must
 // stay well under the smallest cushion (kMinBaseCushionMs) or the render
 // side drains the ring before the pad lands.
 constexpr DWORD kProcessIdleWaitMs = 40;
 
-// Soft clip above this level: the render thread hands float samples to the
-// Windows mixer unclamped, so an EQ boost on a loud passage used to clip
-// hard there. Gentle knee, reaches exactly 1.0 only asymptotically.
-constexpr float kSoftClipKnee = 0.95f;
-inline float SoftClip(float x) {
-    float a = x < 0.0f ? -x : x;
-    if (a <= kSoftClipKnee) return x;
-    float e = a - kSoftClipKnee;
-    float y = kSoftClipKnee + e / (1.0f + e * 8.0f);
-    if (y > 1.0f) y = 1.0f;
-    return x < 0.0f ? -y : y;
-}
+// Le fondu anti-clic (kDeclickFadeMs), l'écrêtage doux, la rampe de gain, le spectre et la correction de dérive
+// du fil de rendu sont dans RenderDsp.h, testés seuls (tests/test_render_dsp.cpp).
 
 // Without this, Sleep(10) in the capture loop is bound by the default system
 // timer granularity (commonly ~15ms on modern Windows when nothing has
@@ -1159,23 +1145,17 @@ AudioEngine::RenderSessionEnd AudioEngine::runRenderSession(OutputState* state, 
     // of the actual post-EQ/post-volume signal -- a real spectrum for the
     // UI, without touching what's actually sent to the device. Reconfigured
     // only when the format actually changes, not every callback.
-    BiquadFilter meterFilters[kSpectrumBandCount];
-    int meterConfiguredChannels = -1, meterConfiguredRate = -1;
-    std::vector<float> meterScratch;
+    render::SpectrumMeter<kSpectrumBandCount> meter;
 
     // Set after a buffer underrun or a hard "buffer too full" drop; ramps the
     // next kDeclickFadeMs of playback in from silence instead of jump-cutting
-    // straight to it. Local to this thread, touched only here and further down.
-    int fadeInFramesRemaining = 0;
-    int fadeInFramesTotal = 0;
+    // straight to it. Local to this thread.
+    render::Declicker declick;
 
     // Gain actually applied to the previous sample, carried across callbacks
-    // so a volume/mute change (this output's own slider, or the Windows
-    // volume control) is ramped in per-sample instead of stepped instantly at
-    // a callback boundary -- an instant step is a classic "zipper" click.
-    // Starts at 0 so playback also fades in cleanly instead of popping in at
-    // full volume on the very first buffer.
-    float currentGain = 0.0f;
+    // so a volume/mute change is ramped in per-sample (no "zipper" click);
+    // starts at 0 so playback also fades in on the very first buffer.
+    render::GainRamp gain;
 
     RenderSessionEnd end = RenderSessionEnd::Stopped;
     while (running_.load()) {
@@ -1224,15 +1204,7 @@ AudioEngine::RenderSessionEnd AudioEngine::runRenderSession(OutputState* state, 
                 // Ramp in any fade-in requested by a *previous* iteration's
                 // underrun/drop (see below) before this iteration can request
                 // a new one -- must not act on the same buffer that requests it.
-                if (fadeInFramesRemaining > 0) {
-                    int framesToFade = std::min(fadeInFramesRemaining, static_cast<int>(framesAvailable));
-                    for (int f = 0; f < framesToFade; ++f) {
-                        int doneBefore = fadeInFramesTotal - fadeInFramesRemaining;
-                        float g = static_cast<float>(doneBefore + f + 1) / fadeInFramesTotal;
-                        for (int c = 0; c < channels; ++c) scratch[f * channels + c] *= g;
-                    }
-                    fadeInFramesRemaining -= framesToFade;
-                }
+                declick.fadeIn(scratch.data(), static_cast<int>(framesAvailable), channels);
 
                 if (got < scratch.size()) {
                     // Expected silence while the source is gone, a glitch otherwise.
@@ -1240,16 +1212,7 @@ AudioEngine::RenderSessionEnd AudioEngine::runRenderSession(OutputState* state, 
                     // Fade the tail of the real audio we did get down to zero
                     // instead of cutting it off mid-waveform, and ramp the
                     // next callback's audio back in once real data resumes.
-                    int gotFrames = static_cast<int>(got / channels);
-                    int fadeOutFrames = std::min(gotFrames, std::max(1, sampleRate * kDeclickFadeMs / 1000));
-                    for (int f = 0; f < fadeOutFrames; ++f) {
-                        int frameIdx = gotFrames - fadeOutFrames + f;
-                        float g = 1.0f - static_cast<float>(f + 1) / fadeOutFrames;
-                        for (int c = 0; c < channels; ++c) scratch[frameIdx * channels + c] *= g;
-                    }
-                    std::fill(scratch.begin() + got, scratch.end(), 0.0f);
-                    fadeInFramesTotal = std::max(1, sampleRate * kDeclickFadeMs / 1000);
-                    fadeInFramesRemaining = fadeInFramesTotal;
+                    declick.underrun(scratch.data(), scratch.size(), got, channels, sampleRate);
                 }
 
                 // EQ before the gain stage: a band boost on a loud passage is
@@ -1287,77 +1250,20 @@ AudioEngine::RenderSessionEnd AudioEngine::runRenderSession(OutputState* state, 
                 // applied linearly -- squaring it too made the group play
                 // at a quarter of native level with Windows at 50%.
                 float own = state->muted.load() ? 0.0f : volPct / 100.0f;
-                float targetGain = own * own * masterGain;
-                size_t frameCount = channels > 0 ? scratch.size() / channels : 0;
-                if (frameCount > 0) {
-                    if (currentGain == targetGain) {
-                        // Steady state (the common case: volume 100%, no
-                        // master attenuation) -- skip the per-sample ramp
-                        // loop entirely instead of paying for it on every
-                        // single callback just to multiply by an unchanging
-                        // value, most of the time 1.0.
-                        if (targetGain != 1.0f) {
-                            for (float& s : scratch) s *= targetGain;
-                        }
-                    } else {
-                        float step = (targetGain - currentGain) / static_cast<float>(frameCount);
-                        for (size_t f = 0; f < frameCount; ++f) {
-                            currentGain += step;
-                            for (int c = 0; c < channels; ++c) scratch[f * channels + c] *= currentGain;
-                        }
-                        currentGain = targetGain; // land exactly on target, don't drift from rounding
-                    }
-                }
+                gain.apply(scratch, channels, own * own * masterGain);
 
                 // Peak for the VU, then clip protection: whatever went past
                 // the knee (EQ boost on a hot passage) is soft-clipped here
                 // instead of handed to the Windows mixer to clip hard.
-                float pk = 0.0f;
-                for (float s : scratch) {
-                    float a = s < 0 ? -s : s;
-                    if (a > pk) pk = a;
-                }
-                if (pk > kSoftClipKnee) {
-                    for (float& s : scratch) s = SoftClip(s);
-                    if (pk > 1.0f) pk = 1.0f;
-                }
-                int pkMilli = static_cast<int>(pk * 1000.0f);
+                int pkMilli = static_cast<int>(render::PeakAndSoftClip(scratch) * 1000.0f);
 
                 // 10-band spectrum, only for the output whose EQ panel is on
                 // screen (see setSpectrumTarget): ten biquad passes over a
                 // copy of every callback is not worth paying for in the tray.
                 if (state->spectrumEnabled.load()) {
-                    if (channels != meterConfiguredChannels || sampleRate != meterConfiguredRate) {
-                        for (int b = 0; b < kSpectrumBandCount; ++b) {
-                            meterFilters[b].configure(channels, sampleRate, BiquadFilter::Type::BandPass,
-                                                       kSpectrumBandFreqs[b], 0.0);
-                        }
-                        meterConfiguredChannels = channels;
-                        meterConfiguredRate = sampleRate;
-                    }
-                    for (int b = 0; b < kSpectrumBandCount; ++b) {
-                        meterScratch.assign(scratch.begin(), scratch.end());
-                        meterFilters[b].process(meterScratch.data(), framesAvailable);
-                        float bpk = 0.0f;
-                        for (float s : meterScratch) {
-                            float a = s < 0 ? -s : s;
-                            if (a > bpk) bpk = a;
-                        }
-                        int bMilli = static_cast<int>((bpk > 1.0f ? 1.0f : bpk) * 1000.0f);
-                        int prevB = state->spectrumMilli[b].load();
-                        while (bMilli > prevB &&
-                               !state->spectrumMilli[b].compare_exchange_weak(prevB, bMilli)) {
-                        }
-                    }
+                    meter.process(scratch, framesAvailable, channels, sampleRate, kSpectrumBandFreqs, state->spectrumMilli);
                 }
-                // Atomic compare-exchange instead of load-then-store: the
-                // separate load/store raced with getStatus()'s exchange(0),
-                // letting a reset land in between and get clobbered by a
-                // stale comparison.
-                int prevPeak = state->peakMilli.load();
-                while (pkMilli > prevPeak &&
-                       !state->peakMilli.compare_exchange_weak(prevPeak, pkMilli)) {
-                }
+                render::RaiseMax(state->peakMilli, pkMilli);
 
                 FromFloat(scratch.data(), scratch.size(), dstFmt, buf);
                 renderClient->ReleaseBuffer(framesAvailable, 0);
@@ -1404,65 +1310,33 @@ AudioEngine::RenderSessionEnd AudioEngine::runRenderSession(OutputState* state, 
             // ±0.15% -- a 200ms move would otherwise take over two minutes.
             if (state->forceResync.exchange(false)) {
                 state->ringOverflow = false; // next overflow episode counts again
-                if (avail > targetSamples) {
-                    size_t drop = avail - targetSamples;
-                    drop -= drop % channels;
-                    if (drop > 0) {
-                        state->ring->drop(drop);
-                        // Jumping forward in the stream: ramp back in.
-                        fadeInFramesTotal = std::max(1, sampleRate * kDeclickFadeMs / 1000);
-                        fadeInFramesRemaining = fadeInFramesTotal;
-                    }
-                } else if (avail < targetSamples) {
-                    size_t add = targetSamples - avail;
-                    add -= add % channels;
-                    if (add > 0) state->silencePadFrames.fetch_add(add);
+                render::DriftStep rs = render::Resync(avail, targetSamples, channels);
+                if (rs.drop > 0) {
+                    state->ring->drop(rs.drop);
+                    declick.request(sampleRate); // jumping forward in the stream: ramp back in
                 }
+                if (rs.pad > 0) state->silencePadFrames.fetch_add(rs.pad);
                 state->speedAdjustment.store(1.0);
                 continue; // fresh P-controller measurement next tick
             }
 
-            // P-controller for smooth clock drift correction:
-            // Calculate buffer error in milliseconds.
-            double errorMs = (static_cast<double>(avail) - static_cast<double>(targetSamples)) / 
-                             (static_cast<double>(sampleRate * channels) / 1000.0);
-
-            // Kp proportional gain: 20ms error -> 0.05% (0.0005) speed adjustment.
-            // Positive error: buffer is too full, speed up resampler (decrease outputs samples rate -> steps input faster)
-            // Negative error: buffer is too empty, slow down resampler (increase outputs samples rate -> steps input slower)
-            constexpr double Kp = 0.000025; 
-            double adj = 1.0 + errorMs * Kp;
-
-            // Clamp to +/- 0.15% to ensure it's completely inaudible
-            if (adj < 0.9985) adj = 0.9985;
-            if (adj > 1.0015) adj = 1.0015;
-
-            state->speedAdjustment.store(adj);
-
-            // Hard safety net fallback for extreme desynchronization (e.g. system sleep/resume)
-            if (avail > targetSamples * 3) {
-                size_t drop = (avail - targetSamples);
-                drop -= drop % channels;
-                if (drop > 0) {
-                    state->ring->drop(drop);
-                    state->ringOverflow = false;
-                    state->driftCorrections.fetch_add(1);
-                    state->speedAdjustment.store(1.0);
-                    // The very next read() jumps to a different point in the
-                    // stream; ramp it in instead of cutting straight to it.
-                    fadeInFramesTotal = std::max(1, sampleRate * kDeclickFadeMs / 1000);
-                    fadeInFramesRemaining = fadeInFramesTotal;
-                }
-            } else if (avail < targetSamples / 4) {
-                size_t add = targetSamples - avail;
-                add -= add % channels;
-                if (add > 0) {
-                    // This thread only reads from the ring; only the capture
-                    // thread (the ring's sole writer) may call writeSilence.
-                    state->silencePadFrames.fetch_add(add);
-                    state->driftCorrections.fetch_add(1);
-                    state->speedAdjustment.store(1.0);
-                }
+            // P-controller for smooth clock drift correction, and the hard
+            // safety net for extreme desynchronization (sleep/resume): see
+            // render::DriftCheck.
+            render::DriftStep ds = render::DriftCheck(avail, targetSamples, sampleRate, channels);
+            state->speedAdjustment.store(ds.speed);
+            if (ds.drop > 0) {
+                state->ring->drop(ds.drop);
+                state->ringOverflow = false;
+                state->driftCorrections.fetch_add(1);
+                // The very next read() jumps to a different point in the
+                // stream; ramp it in instead of cutting straight to it.
+                declick.request(sampleRate);
+            } else if (ds.pad > 0) {
+                // This thread only reads from the ring; only the capture
+                // thread (the ring's sole writer) may call writeSilence.
+                state->silencePadFrames.fetch_add(ds.pad);
+                state->driftCorrections.fetch_add(1);
             }
         }
     }
