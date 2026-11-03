@@ -8,13 +8,20 @@ namespace Cdx.NotesMcp;
 // Les essais du moteur du coffre : un dossier jetable sous %TEMP%, jamais le vrai coffre. Résultat dans selftest-notes.txt (dossier des données, ou CDX_DATA_DIR).
 static class SelfTest
 {
+    // Le nœud au bout d'un chemin de clés et d'indices, dans une réponse du serveur. S'il manque, l'exception compte l'essai en échec (EXCEPTION), comme le faisait le déréférencement direct.
+    static JsonNode At(JsonNode? n, params object[] path)
+    {
+        foreach (var k in path) n = k is int i ? n?[i] : n?[(string)k];
+        return n ?? throw new InvalidOperationException("réponse incomplète : " + string.Join("/", path));
+    }
+
     public static int Run()
     {
         var lines = new List<string>(); int bad = 0;
         void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
-        bool Throws(Action a, string code = null) { try { a(); return false; } catch (VaultException e) { return code == null || e.Code == code; } }
+        bool Throws(Action a, string? code = null) { try { a(); return false; } catch (VaultException e) { return code == null || e.Code == code; } }
         string dir = Path.Combine(Path.GetTempPath(), "cdx-notes-test-" + Environment.ProcessId); Directory.CreateDirectory(dir);
-        string W(string rel, string text) { string f = Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar)); Directory.CreateDirectory(Path.GetDirectoryName(f)); File.WriteAllText(f, text, new UTF8Encoding(false)); return f; }
+        string W(string rel, string text) { string f = Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar)); Directory.CreateDirectory(Path.GetDirectoryName(f)!); File.WriteAllText(f, text, new UTF8Encoding(false)); return f; }   // « ! » : f est un fichier sous dir
         try
         {
             // ---------- analyse d'un fichier ----------
@@ -49,9 +56,10 @@ static class SelfTest
             W(".obsidian/config.md", "# caché\n");
             W("Accentué.md", "# Réseau\nLe café est prêt : élément de la liste.\n");
             var v = new Vault(dir);
+            NoteInfo Note(string path) => v.Get(path) ?? throw new InvalidOperationException("note absente de l'index : " + path);   // absente : l'essai échoue (EXCEPTION), comme avec le déréférencement d'avant
             Check("index : 6 notes (le dossier caché est ignoré)", v.Count == 6 && v.Get(".obsidian/config.md") == null);
-            Check("lien par nom : [[Beta]] désigne la note la moins profonde (Beta.md, pas Archives/Beta.md)", v.Get("Alpha").Links[0].Resolved == "Beta.md");
-            Check("lien par chemin : [[Projets/Zeta|le projet]] ; lien sans note : Introuvable", v.Get("Beta").Links.Any(l => l.Resolved == "Projets/Zeta.md") && v.Get("Alpha").Links.Any(l => l.Target == "Introuvable" && l.Resolved == null));
+            Check("lien par nom : [[Beta]] désigne la note la moins profonde (Beta.md, pas Archives/Beta.md)", Note("Alpha").Links[0].Resolved == "Beta.md");
+            Check("lien par chemin : [[Projets/Zeta|le projet]] ; lien sans note : Introuvable", Note("Beta").Links.Any(l => l.Resolved == "Projets/Zeta.md") && Note("Alpha").Links.Any(l => l.Target == "Introuvable" && l.Resolved == null));
             Check("résolution : casse et extension ignorées, chemin partiel accepté", v.Resolve("alpha") == "Alpha.md" && v.Resolve("ALPHA.md") == "Alpha.md" && v.Resolve("Zeta") == "Projets/Zeta.md" && v.Resolve("Projets/zeta") == "Projets/Zeta.md" && v.Resolve("rien") == null);
             var bl = v.Backlinks("Alpha");
             Check("liens entrants d'Alpha : Beta et Zeta, avec la ligne qui contient le lien", bl.Select(b => b.Path).SequenceEqual(new[] { "Beta.md", "Projets/Zeta.md" }) && bl[0].Context.Contains("[[Alpha]]"));
@@ -92,11 +100,11 @@ static class SelfTest
             // ---------- propriétés ----------
             v.SetProperty("Beta", "statut", "à relire");
             string bt = v.Read("Beta", out _);
-            Check("propriété sur une note sans en-tête : l'en-tête est créé, le corps intact", bt.StartsWith("---\nstatut: à relire\n---\n# Beta\n") && v.Get("Beta").Prop("statut") == "à relire");
+            Check("propriété sur une note sans en-tête : l'en-tête est créé, le corps intact", bt.StartsWith("---\nstatut: à relire\n---\n# Beta\n") && Note("Beta").Prop("statut") == "à relire");
             v.SetProperty("Beta", "statut", "fait"); v.SetProperty("Beta", "tags", new[] { "x", "y z" });
-            Check("propriété déjà là : remplacée, pas dupliquée ; liste écrite entre crochets", v.Read("Beta", out _).Split("statut:").Length == 2 && v.Get("Beta").Prop("statut") == "fait" && v.Get("Beta").Tags.Contains("x") && v.Get("Beta").Tags.Contains("y z"));
+            Check("propriété déjà là : remplacée, pas dupliquée ; liste écrite entre crochets", v.Read("Beta", out _).Split("statut:").Length == 2 && Note("Beta").Prop("statut") == "fait" && Note("Beta").Tags.Contains("x") && Note("Beta").Tags.Contains("y z"));
             v.SetProperty("Projets/Zeta", "depot", @"C:\Dev\autre");
-            Check("propriété : un chemin Windows est mis entre apostrophes (lisible par Obsidian), le reste de l'en-tête est intact", v.Read("Projets/Zeta", out _).Contains("depot: 'C:\\Dev\\autre'") && v.Get("Projets/Zeta").Prop("priorite") == "haute" && v.Get("Projets/Zeta").Prop("depot") == @"C:\Dev\autre");
+            Check("propriété : un chemin Windows est mis entre apostrophes (lisible par Obsidian), le reste de l'en-tête est intact", v.Read("Projets/Zeta", out _).Contains("depot: 'C:\\Dev\\autre'") && Note("Projets/Zeta").Prop("priorite") == "haute" && Note("Projets/Zeta").Prop("depot") == @"C:\Dev\autre");
             W("Crlf.md", "---\r\ntype: x\r\n---\r\nCorps\r\n"); v.Refresh(); v.SetProperty("Crlf", "a", "b");
             Check("propriété : les fins de ligne Windows sont gardées", v.Read("Crlf", out _) == "---\r\ntype: x\r\na: b\r\n---\r\nCorps\r\n");
             Check("propriété : nom invalide refusé", Throws(() => v.SetProperty("Crlf", "a:b\nc", "x"), "propriété"));
@@ -125,7 +133,7 @@ static class SelfTest
             Check("la corbeille n'est pas accessible comme une note", Throws(() => v.Read(".trash/Nouveau/Dossier/Créée.md", out _), "chemin"));
 
             // ---------- images, dossiers ----------
-            void Bin(string rel) { string f = Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar)); Directory.CreateDirectory(Path.GetDirectoryName(f)); File.WriteAllBytes(f, new byte[] { 1, 2, 3 }); }
+            void Bin(string rel) { string f = Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar)); Directory.CreateDirectory(Path.GetDirectoryName(f)!); File.WriteAllBytes(f, new byte[] { 1, 2, 3 }); }   // « ! » : f est un fichier sous dir
             Bin("Images/photo.png"); Bin("Images/sous/Autre.JPG"); Bin(".obsidian/cache.png"); Bin("Images/lisez-moi.txt"); Bin("Images/note.md.png");
             var att = v.Attachments();
             Check("images : png, jpg (majuscules) et png à double extension ; pas le dossier caché, pas le .txt", att.SequenceEqual(new[] { "Images/note.md.png", "Images/photo.png", "Images/sous/Autre.JPG" }));
@@ -137,7 +145,7 @@ static class SelfTest
             var fmv = v.MoveFolder("Dossier A", "Archives/Dossier A");
             Check("déplacer un dossier : les notes, l'image et le sous-dossier vide suivent ; l'ancien dossier a disparu", File.Exists(Path.Combine(dir, "Archives", "Dossier A", "N1.md")) && File.Exists(Path.Combine(dir, "Archives", "Dossier A", "Sous", "N2.md")) && File.Exists(Path.Combine(dir, "Archives", "Dossier A", "pj.png")) && Directory.Exists(Path.Combine(dir, "Archives", "Dossier A", "Vide")) && !Directory.Exists(Path.Combine(dir, "Dossier A")));
             Check("déplacer un dossier : la correspondance ancien -> nouveau chemin de chaque note", fmv.Moves.Count == 2 && fmv.Moves["Dossier A/N1.md"] == "Archives/Dossier A/N1.md" && fmv.Moves["Dossier A/Sous/N2.md"] == "Archives/Dossier A/Sous/N2.md");
-            Check("déplacer un dossier : les liens par chemin sont réécrits, les liens par nom restent justes", v.Read("Pointe", out _) == "Lien par chemin : [[Archives/Dossier A/N1]] et par nom : [[N2]].\n" && v.Backlinks("Archives/Dossier A/N1").Count == 1 && v.Backlinks("Archives/Dossier A/Sous/N2").Count >= 2 && v.Get("Archives/Dossier A/N1").Links.All(l => l.Resolved != null) && fmv.Updated >= 1);
+            Check("déplacer un dossier : les liens par chemin sont réécrits, les liens par nom restent justes", v.Read("Pointe", out _) == "Lien par chemin : [[Archives/Dossier A/N1]] et par nom : [[N2]].\n" && v.Backlinks("Archives/Dossier A/N1").Count == 1 && v.Backlinks("Archives/Dossier A/Sous/N2").Count >= 2 && Note("Archives/Dossier A/N1").Links.All(l => l.Resolved != null) && fmv.Updated >= 1);
             Check("déplacer un dossier : refus dans lui-même, vers une destination non vide, source absente, même nom", Throws(() => v.MoveFolder("Archives", "Archives/Dedans"), "chemin") && Throws(() => v.MoveFolder("Archives", "Images"), "existe") && Throws(() => v.MoveFolder("Fantôme", "X"), "introuvable") && Throws(() => v.MoveFolder("Archives", "archives"), "chemin") && Throws(() => v.MoveFolder("../x", "Y"), "chemin"));
             var tgone = v.TrashFolder("Archives/Dossier A");
             Check("retirer un dossier : ses notes vont dans .trash, l'image reste (donc le dossier aussi)", tgone.Count == 2 && File.Exists(Path.Combine(dir, ".trash", "Archives", "Dossier A", "N1.md")) && File.Exists(Path.Combine(dir, "Archives", "Dossier A", "pj.png")) && v.Get("Archives/Dossier A/N1") == null);
@@ -164,30 +172,30 @@ static class SelfTest
             File.AppendAllText(Path.Combine(dir, "Projets", "Eta.md"), "- [ ] ajoutée à la main\n");
             W("Venue de dehors.md", "# dehors\n[[Eta]]\n"); File.Delete(Path.Combine(dir, "Crlf.md"));
             bool ch = v.Refresh();
-            Check("changements faits hors du programme : relus (note modifiée, ajoutée, supprimée)", ch && v.Get("Projets/Eta").Tasks.Count == 1 && v.Get("Venue de dehors") != null && v.Get("Crlf") == null && v.Backlinks("Projets/Eta").Any(b => b.Path == "Venue de dehors.md"));
+            Check("changements faits hors du programme : relus (note modifiée, ajoutée, supprimée)", ch && Note("Projets/Eta").Tasks.Count == 1 && v.Get("Venue de dehors") != null && v.Get("Crlf") == null && v.Backlinks("Projets/Eta").Any(b => b.Path == "Venue de dehors.md"));
             Check("relecture sans changement : rien à signaler", !v.Refresh());
 
             // ---------- le serveur MCP, en mémoire ----------
             var srv = new Server(() => v);
-            JsonNode Rpc(string json) { var r = srv.Handle(json); return r == null ? null : JsonNode.Parse(r); }
+            JsonNode? Rpc(string json) { var r = srv.Handle(json); return r == null ? null : JsonNode.Parse(r); }
             string Call(string tool, string args, out bool isErr, string id = "1")
             {
                 var r = Rpc($"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"tools/call\",\"params\":{{\"name\":\"{tool}\",\"arguments\":{args}}}}}");
-                var res = r["result"]; isErr = res["isError"].GetValue<bool>(); return res["content"][0]["text"].GetValue<string>();
+                var res = At(r, "result"); isErr = At(res, "isError").GetValue<bool>(); return At(res, "content", 0, "text").GetValue<string>();
             }
             var init = Rpc("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"essai\",\"version\":\"0\"}}}");
-            Check("initialize : la version demandée connue est reprise, outils annoncés, nom du serveur", init["result"]["protocolVersion"].GetValue<string>() == "2024-11-05" && init["result"]["capabilities"]["tools"] != null && init["result"]["serverInfo"]["name"].GetValue<string>() == "cdx-notes" && init["result"]["instructions"].GetValue<string>().Contains("notes_trash"));
-            Check("initialize : une version inconnue reçoit la plus récente du serveur", Rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"1999-01-01\"}}")["result"]["protocolVersion"].GetValue<string>() == Server.Protocols[0]);
+            Check("initialize : la version demandée connue est reprise, outils annoncés, nom du serveur", At(init, "result", "protocolVersion").GetValue<string>() == "2024-11-05" && At(init, "result", "capabilities")["tools"] != null && At(init, "result", "serverInfo", "name").GetValue<string>() == "cdx-notes" && At(init, "result", "instructions").GetValue<string>().Contains("notes_trash"));
+            Check("initialize : une version inconnue reçoit la plus récente du serveur", At(Rpc("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"1999-01-01\"}}"), "result", "protocolVersion").GetValue<string>() == Server.Protocols[0]);
             Check("notification (sans id) : aucune réponse", Rpc("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}") == null && Rpc("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{}}") == null);
-            Check("ping : réponse vide, l'identifiant (texte ou nombre) est rendu tel quel", Rpc("{\"jsonrpc\":\"2.0\",\"id\":\"abc\",\"method\":\"ping\"}")["id"].GetValue<string>() == "abc" && Rpc("{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"ping\"}")["id"].GetValue<int>() == 42);
-            var tl = Rpc("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]["tools"].AsArray();
-            var names = tl.Select(t => t["name"].GetValue<string>()).ToList();
-            Check($"tools/list : {names.Count} outils, noms uniques, chacun avec un schéma d'entrée objet", names.Count == 17 && names.Distinct().Count() == 17 && tl.All(t => t["inputSchema"]["type"].GetValue<string>() == "object" && t["description"].GetValue<string>().Length > 20));
-            Check("tools/list : lecture seule déclarée pour la lecture, pas pour l'écriture ; aucun outil destructif", tl.Single(t => t["name"].GetValue<string>() == "notes_read")["annotations"]["readOnlyHint"].GetValue<bool>() && !tl.Single(t => t["name"].GetValue<string>() == "notes_create")["annotations"]["readOnlyHint"].GetValue<bool>() && tl.All(t => !t["annotations"]["destructiveHint"].GetValue<bool>()));
+            Check("ping : réponse vide, l'identifiant (texte ou nombre) est rendu tel quel", At(Rpc("{\"jsonrpc\":\"2.0\",\"id\":\"abc\",\"method\":\"ping\"}"), "id").GetValue<string>() == "abc" && At(Rpc("{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"ping\"}"), "id").GetValue<int>() == 42);
+            var tl = At(Rpc("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}"), "result", "tools").AsArray();
+            var names = tl.Select(t => At(t, "name").GetValue<string>()).ToList();
+            Check($"tools/list : {names.Count} outils, noms uniques, chacun avec un schéma d'entrée objet", names.Count == 17 && names.Distinct().Count() == 17 && tl.All(t => At(t, "inputSchema", "type").GetValue<string>() == "object" && At(t, "description").GetValue<string>().Length > 20));
+            Check("tools/list : lecture seule déclarée pour la lecture, pas pour l'écriture ; aucun outil destructif", At(tl.Single(t => At(t, "name").GetValue<string>() == "notes_read"), "annotations", "readOnlyHint").GetValue<bool>() && !At(tl.Single(t => At(t, "name").GetValue<string>() == "notes_create"), "annotations", "readOnlyHint").GetValue<bool>() && tl.All(t => !At(t, "annotations", "destructiveHint").GetValue<bool>()));
             Check("aucun outil de suppression définitive (seul notes_trash retire)", !names.Any(x => x.Contains("delete") || x.Contains("remove") || x.Contains("rm")) && names.Contains("notes_trash"));
             Check("méthode inconnue : erreur -32601 ; JSON illisible : -32700 (id nul) ; tableau : -32600 ; sans méthode : -32600",
-                  Rpc("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"nimporte/quoi\"}")["error"]["code"].GetValue<int>() == -32601 && Rpc("{pas du json")["error"]["code"].GetValue<int>() == -32700 && Rpc("{pas du json")["id"] == null
-                  && Rpc("[1,2]")["error"]["code"].GetValue<int>() == -32600 && Rpc("{\"jsonrpc\":\"2.0\",\"id\":6}")["error"]["code"].GetValue<int>() == -32600);
+                  At(Rpc("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"nimporte/quoi\"}"), "error", "code").GetValue<int>() == -32601 && At(Rpc("{pas du json"), "error", "code").GetValue<int>() == -32700 && At(Rpc("{pas du json"))["id"] == null
+                  && At(Rpc("[1,2]"), "error", "code").GetValue<int>() == -32600 && At(Rpc("{\"jsonrpc\":\"2.0\",\"id\":6}"), "error", "code").GetValue<int>() == -32600);
 
             string info = Call("vault_info", "{}", out bool e1);
             Check("vault_info : nombre de notes, dossiers, conventions d'écriture", !e1 && info.Contains("notes,") && info.Contains("Conventions") && info.Contains("notes_trash"));
@@ -211,7 +219,7 @@ static class SelfTest
             Check("notes_edit : l'empreinte d'avant la modification est maintenant périmée (refus)", e9);
             string ap = Call("notes_append", "{\"path\":\"Idées/Piste\",\"text\":\"- [ ] relire 📅 2026-11-20\"}", out bool e10);
             string sp = Call("notes_set_property", "{\"path\":\"Idées/Piste\",\"key\":\"tags\",\"value\":[\"idée\",\"test\"]}", out bool e11);
-            Check("notes_append et notes_set_property (liste) : écrits", !e10 && !e11 && v.Get("Idées/Piste").Tasks.Count == 1 && v.Get("Idées/Piste").Tags.Contains("test"));
+            Check("notes_append et notes_set_property (liste) : écrits", !e10 && !e11 && Note("Idées/Piste").Tasks.Count == 1 && Note("Idées/Piste").Tags.Contains("test"));
             string mv = Call("notes_move", "{\"from\":\"Idées/Piste\",\"to\":\"Projets/Piste retenue\"}", out bool e12);
             Check("notes_move : déplacée, les liens entrants réécrits (rien ici, mais aucun lien cassé)", !e12 && mv.Contains("Projets/Piste retenue.md") && v.Get("Idées/Piste") == null && v.Get("Projets/Piste retenue") != null);
             string lk = Call("notes_links", "{\"path\":\"Projets/Zeta\"}", out bool e13);
@@ -234,7 +242,7 @@ static class SelfTest
             Check("folders_create : dossier créé", !e21 && Directory.Exists(Path.Combine(dir, "Archives", "2026")));
 
             // erreurs : jamais d'exception, jamais de chemin du disque dans le message, rien d'écrit hors du coffre
-            string parent = Path.GetDirectoryName(dir);
+            string parent = Path.GetDirectoryName(dir)!;   // « ! » : dir est un dossier sous %TEMP%
             int before = Directory.GetFiles(parent, "dehors*").Length;
             foreach (var bad2 in new[] { "../dehors", "..\\dehors", "C:/Windows/dehors", "a/../../dehors", ".git/x", "Projets/../../dehors" })
             {
@@ -251,9 +259,9 @@ static class SelfTest
 
             // ---------- le vrai programme, sur l'entrée et la sortie standard ----------
             string dir2 = Path.Combine(Path.GetTempPath(), "cdx-notes-stdio-" + Environment.ProcessId);
-            var psi = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath) { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true, StandardOutputEncoding = Encoding.UTF8 };
+            var psi = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath ?? throw new InvalidOperationException("chemin du programme inconnu")) { RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true, StandardOutputEncoding = Encoding.UTF8 };
             psi.Environment["CDX_NOTES_DIR"] = dir2; psi.Environment["CDX_DATA_DIR"] = Path.Combine(dir2, "données");
-            using (var proc = System.Diagnostics.Process.Start(psi))
+            using (var proc = System.Diagnostics.Process.Start(psi)!)   // « ! » : sans UseShellExecute, Start lance le processus ou lève, il ne rend jamais null
             {
                 proc.StandardInput.NewLine = "\n";
                 proc.StandardInput.WriteLine("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\"}}");
@@ -267,9 +275,9 @@ static class SelfTest
                 proc.StandardInput.Close();
                 bool exited = proc.WaitForExit(8000);
                 var parsed = outs.Select(o => { try { return JsonNode.Parse(o); } catch { return null; } }).ToList();
-                Check("programme réel (stdio) : trois réponses, ni plus ni moins (la notification et la ligne vide n'en ont pas), toutes du JSON valide", outs.Count == 3 && parsed.All(x => x != null && x["jsonrpc"].GetValue<string>() == "2.0"));
-                Check("programme réel : identifiants 1, 2, 3 dans l'ordre ; version 2025-06-18 ; 17 outils", parsed.Count == 3 && parsed[0]["id"].GetValue<int>() == 1 && parsed[1]["id"].GetValue<int>() == 2 && parsed[2]["id"].GetValue<int>() == 3 && parsed[0]["result"]["protocolVersion"].GetValue<string>() == "2025-06-18" && parsed[1]["result"]["tools"].AsArray().Count == 17);
-                Check("programme réel : un coffre neuf est créé avec ses notes d'exemple (un projet)", parsed.Count == 3 && parsed[2]["result"]["content"][0]["text"].GetValue<string>().Contains("Exemple de projet") && Directory.Exists(dir2));
+                Check("programme réel (stdio) : trois réponses, ni plus ni moins (la notification et la ligne vide n'en ont pas), toutes du JSON valide", outs.Count == 3 && parsed.All(x => x != null && At(x, "jsonrpc").GetValue<string>() == "2.0"));
+                Check("programme réel : identifiants 1, 2, 3 dans l'ordre ; version 2025-06-18 ; 17 outils", parsed.Count == 3 && At(parsed[0], "id").GetValue<int>() == 1 && At(parsed[1], "id").GetValue<int>() == 2 && At(parsed[2], "id").GetValue<int>() == 3 && At(parsed[0], "result", "protocolVersion").GetValue<string>() == "2025-06-18" && At(parsed[1], "result", "tools").AsArray().Count == 17);
+                Check("programme réel : un coffre neuf est créé avec ses notes d'exemple (un projet)", parsed.Count == 3 && At(parsed[2], "result", "content", 0, "text").GetValue<string>().Contains("Exemple de projet") && Directory.Exists(dir2));
                 Check("programme réel : s'arrête proprement à la fermeture de l'entrée", exited && proc.ExitCode == 0);
             }
             try { Directory.Delete(dir2, true); } catch { }

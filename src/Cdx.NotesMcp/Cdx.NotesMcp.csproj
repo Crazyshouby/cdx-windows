@@ -5,7 +5,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>disable</Nullable>
+    <Nullable>enable</Nullable>
     <AssemblyName>cdx-notes-mcp</AssemblyName>
     <RootNamespace>Cdx.NotesMcp</RootNamespace>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

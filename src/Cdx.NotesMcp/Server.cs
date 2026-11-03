@@ -14,20 +14,22 @@ sealed class Server
 {
     public static readonly string[] Protocols = { "2025-06-18", "2025-03-26", "2024-11-05" };
     const int MaxArgChars = 2_100_000;
-    readonly Func<Vault> open; Vault vault;
+    readonly Func<Vault> open; Vault? vault;   // null jusqu'au premier appel d'outil (ouvert par Call)
+    // Le coffre, pour les outils : Call l'ouvre avant d'en lancer un, il est donc là (sinon l'exception est rattrapée par Call comme l'était le déréférencement).
+    Vault Opened => vault ?? throw new InvalidOperationException("coffre pas encore ouvert");
 
     public Server(Func<Vault> open) { this.open = open; }
 
     // Rend la réponse à envoyer (une ligne de JSON), ou null s'il n'y en a pas (notification).
-    public string Handle(string line)
+    public string? Handle(string line)
     {
-        JsonNode msg;
+        JsonNode? msg;
         try { msg = JsonNode.Parse(line); }
         catch { return Error(null, -32700, "JSON illisible"); }
         if (msg is not JsonObject o) return Error(null, -32600, "Requête invalide (un objet JSON est attendu)");
-        string method = o["method"] is JsonValue mv && mv.TryGetValue<string>(out var ms) ? ms : null;
+        string? method = o["method"] is JsonValue mv && mv.TryGetValue<string>(out var ms) ? ms : null;
         bool isNotification = !o.ContainsKey("id");
-        JsonNode id = isNotification ? null : o["id"]?.DeepClone();
+        JsonNode? id = isNotification ? null : o["id"]?.DeepClone();
         if (method == null) return isNotification ? null : Error(id, -32600, "Requête invalide (méthode absente)");
         try
         {
@@ -45,12 +47,12 @@ sealed class Server
         catch (Exception ex) { Console.Error.WriteLine("cdx-notes : " + ex); return isNotification ? null : Error(id, -32603, "Erreur interne du serveur"); }
     }
 
-    static string Result(JsonNode id, JsonNode result) => new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["result"] = result }.ToJsonString();
-    static string Error(JsonNode id, int code, string message) => new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["error"] = new JsonObject { ["code"] = code, ["message"] = message } }.ToJsonString();
+    static string Result(JsonNode? id, JsonNode result) => new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["result"] = result }.ToJsonString();
+    static string Error(JsonNode? id, int code, string message) => new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["error"] = new JsonObject { ["code"] = code, ["message"] = message } }.ToJsonString();
 
-    JsonNode Initialize(JsonObject p)
+    JsonNode Initialize(JsonObject? p)
     {
-        string want = p?["protocolVersion"] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+        string? want = p?["protocolVersion"] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
         string use = want != null && Protocols.Contains(want) ? want : Protocols[0];
         return new JsonObject
         {
@@ -65,7 +67,7 @@ sealed class Server
 
     // ---------- outils ----------
     sealed record Tool(string Name, string Description, JsonObject Schema, bool ReadOnly, Func<JsonObject, string> Run);
-    List<Tool> tools;
+    List<Tool>? tools;   // construite au premier usage (Tools)
 
     static JsonObject Obj(params (string name, string type, string desc)[] props) => Obj(props, props.Where(p => !p.desc.StartsWith("(facultatif)")).Select(p => p.name).ToArray());
     static JsonObject Obj((string name, string type, string desc)[] props, string[] required)
@@ -109,12 +111,12 @@ sealed class Server
         return a;
     }
 
-    JsonNode Call(JsonObject p)
+    JsonNode Call(JsonObject? p)
     {
-        string name = p?["name"] is JsonValue nv && nv.TryGetValue<string>(out var n) ? n : null;
+        string? name = p?["name"] is JsonValue nv && nv.TryGetValue<string>(out var n) ? n : null;
         var tool = Tools().FirstOrDefault(t => t.Name == name);
         if (tool == null) return Fail("Outil inconnu : " + name);
-        var args = p["arguments"] as JsonObject ?? new JsonObject();
+        var args = p?["arguments"] as JsonObject ?? new JsonObject();   // p n'est pas null ici (sans params, aucun outil n'est trouvé) : « ?. » ne change rien
         foreach (var kv in args) if (kv.Value is JsonValue sv && sv.TryGetValue<string>(out var s) && s.Length > MaxArgChars) return Fail($"L'argument « {kv.Key} » est trop long.");
         try
         {
@@ -131,9 +133,11 @@ sealed class Server
 
     // ---------- arguments ----------
     sealed class ArgException : Exception { public ArgException(string m) : base(m) { } }
-    static string S(JsonObject a, string k, bool required = true)
+    static string S(JsonObject a, string k) => SOpt(a, k) ?? throw new ArgException($"Argument manquant : « {k} ».");
+    // Un argument facultatif : null s'il est absent (ou nul).
+    static string? SOpt(JsonObject a, string k)
     {
-        if (!a.TryGetPropertyValue(k, out var v) || v == null) { if (required) throw new ArgException($"Argument manquant : « {k} »."); return null; }
+        if (!a.TryGetPropertyValue(k, out var v) || v == null) return null;
         if (v is JsonValue jv && jv.TryGetValue<string>(out var s)) return s;
         throw new ArgException($"L'argument « {k} » doit être un texte.");
     }
@@ -153,19 +157,19 @@ sealed class Server
     // ---------- mise en forme ----------
     static string Line(NoteInfo n)
     {
-        string t = n.Prop("type"), st = n.Prop("statut");
+        string? t = n.Prop("type"), st = n.Prop("statut");
         return $"{n.Path}" + (t != null ? $"  [{t}{(st != null ? ", " + st : "")}]" : "") + (n.Tags.Count > 0 ? "  #" + string.Join(" #", n.Tags) : "");
     }
     static string Day(DateTime d) => d.ToString("yyyy-MM-dd");
 
     string Info()
     {
-        var tags = vault.Tags().Take(15).Select(kv => $"#{kv.Key} ({kv.Value})");
+        var tags = Opened.Tags().Take(15).Select(kv => $"#{kv.Key} ({kv.Value})");
         var sb = new StringBuilder();
-        sb.AppendLn($"Coffre : {vault.Root}");
-        sb.AppendLn($"{vault.Count} notes, {vault.Folders().Count} dossiers, {vault.Projects().Count} projets, {vault.Tasks().Count} tâches ouvertes, {vault.Unresolved().Count} liens sans cible.");
-        sb.AppendLn("Dossiers : " + (vault.Folders().Count == 0 ? "(aucun)" : string.Join(", ", vault.Folders().Take(40))));
-        sb.AppendLn("Étiquettes : " + (vault.Tags().Count == 0 ? "(aucune)" : string.Join("  ", tags)));
+        sb.AppendLn($"Coffre : {Opened.Root}");
+        sb.AppendLn($"{Opened.Count} notes, {Opened.Folders().Count} dossiers, {Opened.Projects().Count} projets, {Opened.Tasks().Count} tâches ouvertes, {Opened.Unresolved().Count} liens sans cible.");
+        sb.AppendLn("Dossiers : " + (Opened.Folders().Count == 0 ? "(aucun)" : string.Join(", ", Opened.Folders().Take(40))));
+        sb.AppendLn("Étiquettes : " + (Opened.Tags().Count == 0 ? "(aucune)" : string.Join("  ", tags)));
         sb.AppendLn("");
         sb.AppendLn("Conventions : des fichiers Markdown ; un lien s'écrit [[Nom de la note]] (ou [[Dossier/Note|texte]]) ; une étiquette #exemple ; une tâche « - [ ] à faire 📅 2026-12-01 ».");
         sb.AppendLn("Une fiche de projet est dans Projets/ avec l'en-tête « type: projet », « statut: actif | en pause | terminé », « depot: chemin du dépôt », « priorite: haute | normale | basse », « resume: … ».");
@@ -175,8 +179,8 @@ sealed class Server
 
     string ListNotes(JsonObject a)
     {
-        string folder = S(a, "folder", false)?.Replace('\\', '/').Trim('/'); bool rec = B(a, "recursive", true); int limit = I(a, "limit", 200, 1, 500);
-        var l = vault.Notes.Where(n => folder == null || folder.Length == 0 || n.Folder.Equals(folder, StringComparison.OrdinalIgnoreCase) || (rec && n.Folder.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase))).ToList();
+        string? folder = SOpt(a, "folder")?.Replace('\\', '/').Trim('/'); bool rec = B(a, "recursive", true); int limit = I(a, "limit", 200, 1, 500);
+        var l = Opened.Notes.Where(n => folder == null || folder.Length == 0 || n.Folder.Equals(folder, StringComparison.OrdinalIgnoreCase) || (rec && n.Folder.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase))).ToList();
         if (l.Count == 0) return folder == null ? "Le coffre est vide." : $"Aucune note dans « {folder} ».";
         return $"{l.Count} note(s)" + (l.Count > limit ? $" (les {limit} premières)" : "") + " :\n" + string.Join("\n", l.Take(limit).Select(Line));
     }
@@ -184,7 +188,7 @@ sealed class Server
     string Search(JsonObject a)
     {
         string q = S(a, "query"); if (q.Length > 500) throw new ArgException("La requête est trop longue (500 caractères au plus).");
-        var hits = vault.Search(q, I(a, "limit", 20, 1, 50));
+        var hits = Opened.Search(q, I(a, "limit", 20, 1, 50));
         if (hits.Count == 0) return "Aucun résultat.";
         return $"{hits.Count} résultat(s) :\n" + string.Join("\n", hits.Select((h, i) => $"{i + 1}. {h.Path}" + (h.Tags.Count > 0 ? "  #" + string.Join(" #", h.Tags) : "") + (h.Snippet.Length > 0 ? $"\n   ligne {h.Line} : {h.Snippet}" : "")));
     }
@@ -192,12 +196,13 @@ sealed class Server
     string Read(JsonObject a)
     {
         string path = S(a, "path"); int max = I(a, "max_chars", 60000, 500, 500000);
-        string text = vault.Read(path, out string hash); var n = vault.Get(path);
+        // Get ne manque la note que si l'index n'a pas pu la lire (tenue par un autre programme au moment de Refresh, ou apparue juste après) : avant, NullReferenceException et « Erreur interne »
+        string text = Opened.Read(path, out string hash); var n = Opened.Get(path) ?? throw new VaultException("occupé", "La note est utilisée par un autre programme : réessayer dans un instant.");
         bool cut = text.Length > max;
         var sb = new StringBuilder();
         sb.AppendLn($"Note : {n.Path}"); sb.AppendLn($"Empreinte (hash) : {hash}"); sb.AppendLn($"Modifiée le : {Day(n.Modified)}");
         foreach (var kv in n.Props) sb.AppendLn($"Propriété {kv.Key} : {(kv.Value is List<string> l ? string.Join(", ", l) : kv.Value)}");
-        var back = vault.Backlinks(path);
+        var back = Opened.Backlinks(path);
         if (n.Links.Count > 0) sb.AppendLn("Liens : " + string.Join(", ", n.Links.Select(l => (l.Resolved != null ? l.Resolved : l.Target + " (sans note)")).Distinct()));
         if (back.Count > 0) sb.AppendLn("Liens entrants : " + string.Join(", ", back.Select(b => b.Path).Distinct()));
         if (cut) sb.AppendLn($"ATTENTION : contenu coupé à {max} caractères sur {text.Length}.");
@@ -206,45 +211,45 @@ sealed class Server
     }
 
     // Après une écriture : le chemin et la nouvelle empreinte, pour enchaîner sans relire.
-    string Done(NoteInfo n, string what) { vault.Read(n.Path, out string h); return $"{what} : {n.Path} (empreinte {h})"; }
+    string Done(NoteInfo n, string what) { Opened.Read(n.Path, out string h); return $"{what} : {n.Path} (empreinte {h})"; }
 
-    string Create(JsonObject a) => Done(vault.Create(S(a, "path"), S(a, "content")), "Note créée");
-    string Write(JsonObject a) => Done(vault.Overwrite(S(a, "path"), S(a, "content"), S(a, "hash")), "Note remplacée");
-    string Append(JsonObject a) => Done(vault.Append(S(a, "path"), S(a, "text")), "Texte ajouté");
-    string Edit(JsonObject a) => Done(vault.ReplaceText(S(a, "path"), S(a, "old_text"), S(a, "new_text"), S(a, "hash", false)), "Note modifiée");
+    string Create(JsonObject a) => Done(Opened.Create(S(a, "path"), S(a, "content")), "Note créée");
+    string Write(JsonObject a) => Done(Opened.Overwrite(S(a, "path"), S(a, "content"), S(a, "hash")), "Note remplacée");
+    string Append(JsonObject a) => Done(Opened.Append(S(a, "path"), S(a, "text")), "Texte ajouté");
+    string Edit(JsonObject a) => Done(Opened.ReplaceText(S(a, "path"), S(a, "old_text"), S(a, "new_text"), SOpt(a, "hash")), "Note modifiée");
 
     string SetProp(JsonObject a)
     {
         object value;
         if (a["value"] is JsonArray arr) value = arr.Select(x => x?.GetValue<string>() ?? "").ToList();
         else value = S(a, "value");
-        return Done(vault.SetProperty(S(a, "path"), S(a, "key"), value), "Propriété fixée");
+        return Done(Opened.SetProperty(S(a, "path"), S(a, "key"), value), "Propriété fixée");
     }
 
     string Move(JsonObject a)
     {
-        string from = S(a, "from"), to = S(a, "to"); int n = vault.Move(from, to, B(a, "update_links", true));
+        string from = S(a, "from"), to = S(a, "to"); int n = Opened.Move(from, to, B(a, "update_links", true));
         return $"Déplacée : {Vault.NormalizePath(from)} → {Vault.NormalizePath(to)}" + (n > 0 ? $" ; {n} note(s) dont les liens ont été réécrits." : ".");
     }
 
-    string Trash(JsonObject a) => "Retirée : déplacée dans " + vault.Trash(S(a, "path")) + " (récupérable en la remettant à sa place).";
+    string Trash(JsonObject a) => "Retirée : déplacée dans " + Opened.Trash(S(a, "path")) + " (récupérable en la remettant à sa place).";
 
-    string Folder(JsonObject a) { string p = S(a, "path"); vault.CreateFolder(p); return "Dossier prêt : " + Vault.NormalizePath(p, false); }
+    string Folder(JsonObject a) { string p = S(a, "path"); Opened.CreateFolder(p); return "Dossier prêt : " + Vault.NormalizePath(p, false); }
 
     string Links(JsonObject a)
     {
-        string path = S(a, "path", false);
+        string? path = SOpt(a, "path");
         if (path == null)
         {
-            var u = vault.Unresolved();
+            var u = Opened.Unresolved();
             return u.Count == 0 ? "Aucun lien sans cible." : $"{u.Count} lien(s) sans note :\n" + string.Join("\n", u.Select(x => $"[[{x.Target}]] ×{x.Count} (par exemple dans {x.From})"));
         }
-        var n = vault.Get(path) ?? throw new VaultException("introuvable", $"La note « {path} » n'existe pas.");
+        var n = Opened.Get(path) ?? throw new VaultException("introuvable", $"La note « {path} » n'existe pas.");
         var sb = new StringBuilder();
         sb.AppendLn("Liens sortants :");
         foreach (var g in n.Links.GroupBy(l => l.Resolved ?? ("?" + l.Target))) sb.AppendLn("  " + (g.Key.StartsWith("?") ? $"[[{g.Key[1..]}]] — pas de note" : g.Key) + (g.Count() > 1 ? $" ×{g.Count()}" : ""));
         if (n.Links.Count == 0) sb.AppendLn("  (aucun)");
-        var back = vault.Backlinks(path);
+        var back = Opened.Backlinks(path);
         sb.AppendLn("Liens entrants :");
         foreach (var b in back) sb.AppendLn($"  {b.Path} (ligne {b.Line}) : {b.Context}");
         if (back.Count == 0) sb.AppendLn("  (aucun)");
@@ -253,23 +258,23 @@ sealed class Server
 
     string Tags(JsonObject a)
     {
-        string tag = S(a, "tag", false)?.TrimStart('#');
-        if (tag != null) { var h = vault.Search("tag:" + tag, 100); return h.Count == 0 ? $"Aucune note avec #{tag}." : $"{h.Count} note(s) avec #{tag} :\n" + string.Join("\n", h.Select(x => x.Path)); }
-        var t = vault.Tags(); return t.Count == 0 ? "Aucune étiquette." : string.Join("\n", t.Select(kv => $"#{kv.Key} ({kv.Value})"));
+        string? tag = SOpt(a, "tag")?.TrimStart('#');
+        if (tag != null) { var h = Opened.Search("tag:" + tag, 100); return h.Count == 0 ? $"Aucune note avec #{tag}." : $"{h.Count} note(s) avec #{tag} :\n" + string.Join("\n", h.Select(x => x.Path)); }
+        var t = Opened.Tags(); return t.Count == 0 ? "Aucune étiquette." : string.Join("\n", t.Select(kv => $"#{kv.Key} ({kv.Value})"));
     }
 
     string Projects(JsonObject a)
     {
-        var l = vault.Projects(S(a, "status", false));
+        var l = Opened.Projects(SOpt(a, "status"));
         if (l.Count == 0) return "Aucun projet.";
         return $"{l.Count} projet(s) :\n" + string.Join("\n", l.Select(p => $"- {p.Name} [{(p.Status.Length > 0 ? p.Status : "sans statut")}" + (p.Priority != null ? $", priorité {p.Priority}" : "") + $"] {p.Path} — {p.OpenTasks} tâche(s) ouverte(s)" + (p.NextDue != null ? $", prochaine échéance {p.NextDue}" : "") + (!string.IsNullOrWhiteSpace(p.Repo) ? $", dépôt {p.Repo}" : "") + (!string.IsNullOrWhiteSpace(p.Summary) ? $"\n    {p.Summary}" : "")));
     }
 
-    string ProjectCreate(JsonObject a) => Done(vault.CreateProject(S(a, "name"), S(a, "repo", false), S(a, "summary", false)), "Projet créé");
+    string ProjectCreate(JsonObject a) => Done(Opened.CreateProject(S(a, "name"), SOpt(a, "repo"), SOpt(a, "summary")), "Projet créé");
 
     string TaskList(JsonObject a)
     {
-        var l = vault.Tasks(S(a, "under", false), B(a, "include_done", false));
+        var l = Opened.Tasks(SOpt(a, "under"), B(a, "include_done", false));
         if (l.Count == 0) return "Aucune tâche.";
         return $"{l.Count} tâche(s) :\n" + string.Join("\n", l.Take(300).Select(t => $"- [{(t.Done ? "x" : " ")}] {t.Text}   ({t.Path}:{t.Line})")) + (l.Count > 300 ? "\n… (300 premières)" : "");
     }
@@ -279,11 +284,11 @@ sealed class Server
     {
         var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
         var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-        string line;
+        string? line;
         while ((line = input.ReadLine()) != null)
         {
             if (line.Trim().Length == 0) continue;
-            string r = s.Handle(line);
+            string? r = s.Handle(line);
             if (r != null) output.WriteLine(r);
         }
         return 0;
