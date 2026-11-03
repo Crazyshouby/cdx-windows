@@ -91,6 +91,15 @@ static class Recycle
     // Met un fichier ou un dossier à la corbeille (sans autre boîte que celles d'erreur) et rend son entrée ; null si Windows l'a supprimé pour de bon (disque réseau, élément trop gros...).
     public static BinEntry DeleteToBin(string path)
     {
+        // Le Shell (SHFileOperation, sous FileSystem) veut un fil STA : celui de la file de tâches ne l'est pas, on lui en prête un le temps de l'opération.
+        if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
+        {
+            BinEntry res = null; Exception err = null;
+            var t = new Thread(() => { try { res = DeleteToBin(path); } catch (Exception ex) { err = ex; } }) { IsBackground = true, Name = "corbeille" };
+            t.SetApartmentState(ApartmentState.STA); t.Start(); t.Join();
+            if (err != null) throw err;
+            return res;
+        }
         DateTime since = DateTime.Now.AddSeconds(-5);
         bool dir = Directory.Exists(path);
         if (dir) FileSystem.DeleteDirectory(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);

@@ -30,7 +30,7 @@ class Shell : IHostApp
     double scale = 1; int barH = 36;
     IntPtr lastFg;
     readonly Dictionary<IntPtr, int> order = new(); int seq;
-    N.HookProc kbdProc; IntPtr kbdHook;   // le délégué est gardé en champ : le ramasse-miettes ne doit pas le libérer
+    LowLevelHook kbdHook;   // sur un fil à lui : la barre occupée ne doit jamais faire ramer le clavier de tout Windows
     bool startOpen, centerOpen, cleaned; DateTime startHiddenAt = DateTime.MinValue, centerHiddenAt = DateTime.MinValue;
     long pIdle, pKernel, pUser; int tick;
     bool audioMenuOpen; DateTime audioMenuHiddenAt = DateTime.MinValue; volatile object lastAudio;
@@ -132,9 +132,7 @@ class Shell : IHostApp
     void InstallKeyboardHook()
     {
         if (File.Exists(Path.Combine(Host.DataDir, "sans-clavier.txt"))) { Host.Log("crochet clavier désactivé par sans-clavier.txt"); return; }
-        kbdProc = KeyHook;
-        kbdHook = N.SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, kbdProc, N.GetModuleHandle(null), 0);
-        Host.Log(kbdHook == IntPtr.Zero ? $"crochet clavier refusé (erreur {Marshal.GetLastWin32Error()})" : "crochet clavier installé");
+        kbdHook = new LowLevelHook(13 /* WH_KEYBOARD_LL */, KeyHook, "crochet clavier");   // KeyHook tourne sur ce fil : il ne touche aux fenêtres que par Bar.BeginInvoke
     }
 
     static void MaskKey()
@@ -205,7 +203,7 @@ class Shell : IHostApp
             }
         }
         catch (Exception ex) { Host.Log("crochet clavier : " + ex.Message); }
-        return N.CallNextHookEx(kbdHook, code, wParam, lParam);
+        return N.CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
     }
 
     // Les fenêtres dans l'ordre où Alt+Tab les présente : l'ordre d'empilement de Windows (la plus récemment utilisée d'abord).
@@ -261,7 +259,7 @@ class Shell : IHostApp
         try { audio?.Stop(); suiteWatch?.Dispose(); } catch { }
         try { tray?.Shutdown(); } catch { }   // avant les appels de barre d'application, qui doivent atteindre la barre de Windows
         try { var abd = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = Bar.Handle }; N.SHAppBarMessage(N.ABM_REMOVE, ref abd); } catch { }
-        if (kbdHook != IntPtr.Zero) { N.UnhookWindowsHookEx(kbdHook); kbdHook = IntPtr.Zero; }
+        kbdHook?.Dispose(); kbdHook = null;
         TaskbarState.Restore();
     }
 

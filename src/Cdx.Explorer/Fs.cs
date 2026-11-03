@@ -426,6 +426,14 @@ static class Fs
     }
 
     // owner : fenêtre parente des boîtes de Windows ; send : où renvoyer les réponses (la page, ou l'auto-test).
+    // Un travail long (effacer, vider la corbeille) fait sur un fil à part ; la réponse revient sur le fil de l'interface, si la fenêtre existe encore.
+    static void OffUi(IntPtr owner, Action<object> send, Func<string> work, Func<string, object> reply)
+    {
+        var ctx = SynchronizationContext.Current;
+        if (ctx == null) { string e; try { e = work(); } catch (Exception ex) { e = ex.Message; } send(reply(e)); return; }
+        Task.Run(() => { string e; try { e = work(); } catch (Exception ex) { e = ex.Message; } ctx.Post(_ => { if (WindowAlive == null || WindowAlive(owner)) send(reply(e)); }, null); });
+    }
+
     public static void Handle(IntPtr owner, Action<object> send, string cmd, JsonElement r)
     {
         string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
@@ -491,14 +499,33 @@ static class Fs
                     }
                 case "fs.delete":   // vers la corbeille : on garde l'entrée de chacun pour pouvoir le restaurer (Annuler)
                     {
+                        // Hors du fil de l'interface : Windows parcourt tout l'arbre avant de le déplacer (un dossier de développement de 1 Go = des dizaines de secondes) ;
+                        // sur le fil de l'interface, la fenêtre se figeait et la suppression semblait ne jamais se faire.
+                        var ps = Paths().Where(p => !string.IsNullOrEmpty(p) && Path.IsPathRooted(p) && Path.GetFileName(p.TrimEnd('\\')).Length > 0 && Path.Exists(p)).ToArray();
+                        if (ps.Length == 0) { send(new { type = "fs.done", tab }); break; }
                         var gone = new List<BinEntry>(); int noBin = 0;
-                        foreach (string p in Paths())
+                        void Finish(string error)
                         {
-                            if (string.IsNullOrEmpty(p) || !Path.IsPathRooted(p) || Path.GetFileName(p.TrimEnd('\\')).Length == 0 || !Path.Exists(p)) continue;
-                            var e = Recycle.DeleteToBin(p); if (e != null) gone.Add(e); else noBin++;
+                            if (gone.Count > 0) { Undo.For(owner).Push(Undo.Deleted(gone.Count == 1 ? "Supprimer" : "Supprimer " + gone.Count + " éléments", gone)); send(Undo.State(owner)); }
+                            send(new { type = "fs.done", tab, error = error ?? (noBin > 0 ? noBin + " élément" + (noBin > 1 ? "s ont" : " a") + " été supprimé" + (noBin > 1 ? "s" : "") + " définitivement (ce disque n'a pas de corbeille)." : null) });
                         }
-                        if (gone.Count > 0) { Undo.For(owner).Push(Undo.Deleted(gone.Count == 1 ? "Supprimer" : "Supprimer " + gone.Count + " éléments", gone)); send(Undo.State(owner)); }
-                        send(new { type = "fs.done", tab, error = noBin > 0 ? noBin + " élément" + (noBin > 1 ? "s ont" : " a") + " été supprimé" + (noBin > 1 ? "s" : "") + " définitivement (ce disque n'a pas de corbeille)." : null });
+                        void Recycle1(string p) { var e = Recycle.DeleteToBin(p); lock (gone) { if (e != null) gone.Add(e); else noBin++; } }
+                        if (Queue == null) { string err = null; foreach (var p in ps) try { Recycle1(p); } catch (Exception ex) { err ??= ex.Message; } Finish(err); break; }
+                        var ctx = SynchronizationContext.Current; string first = ps[0], from = Path.GetDirectoryName(first.TrimEnd('\\'));
+                        Queue.Enqueue("delete", (ps.Length == 1 ? Path.GetFileName(first.TrimEnd('\\')) : ps.Length + " éléments") + " → corbeille", job =>
+                        {
+                            job.Report(0, ps.Length);
+                            for (int i = 0; i < ps.Length; i++)
+                            {
+                                job.WaitIfPaused();   // entre deux éléments : Windows ne sait pas interrompre une mise à la corbeille commencée
+                                Recycle1(ps[i]);
+                                job.Report(i + 1, ps.Length, Path.GetFileName(ps[i].TrimEnd('\\')));
+                            }
+                        }, j =>
+                        {
+                            void Back() { if (WindowAlive(owner)) Finish(j.State == JobState.Failed ? j.Error : null); }
+                            if (ctx != null) ctx.Post(_ => Back(), null); else Back();
+                        }, j => { j.Items = ps.Length; j.From = FolderLabel(from ?? first); j.To = "Corbeille"; j.Path = from; });
                         break;
                     }
                 case "fs.deleteperm":   // Maj+Suppr, après confirmation dans la page : pas de corbeille, pas d'annulation
@@ -526,8 +553,13 @@ static class Fs
                         send(new { type = "fs.done", tab, error = errs.Count == 0 ? null : errs[0] + (errs.Count > 1 ? " (et " + (errs.Count - 1) + " autre" + (errs.Count > 2 ? "s" : "") + ")" : "") });
                         break;
                     }
-                case "fs.purge": send(new { type = "fs.done", tab, error = Recycle.Purge(Ids().Where(Recycle.IsEntryId)) }); break;   // effacer pour de bon des éléments de la corbeille (après confirmation)
-                case "fs.emptybin": send(new { type = "fs.done", tab, error = Recycle.EmptyAll() ? null : "La corbeille n'a pas pu être vidée." }); break;
+                case "fs.purge":   // effacer pour de bon des éléments de la corbeille (après confirmation) ; hors du fil de l'interface, comme la mise à la corbeille
+                    {
+                        var ids = Ids().Where(Recycle.IsEntryId).ToArray();
+                        OffUi(owner, send, () => Recycle.Purge(ids), err => new { type = "fs.done", tab, error = err });
+                        break;
+                    }
+                case "fs.emptybin": OffUi(owner, send, () => Recycle.EmptyAll() ? null : "La corbeille n'a pas pu être vidée.", err => new { type = "fs.done", tab, error = err }); break;
                 case "fs.undo":
                 case "fs.redo":
                     {
