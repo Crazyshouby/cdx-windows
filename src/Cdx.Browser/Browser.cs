@@ -9,11 +9,11 @@ namespace Cdx;
 
 class BrowserTab
 {
-    public int Id; public WebView2 Web; public string Title = "Nouvel onglet", Url = "", Favicon = "", Status = "";
+    public int Id; public required WebView2 Web; public string Title = "Nouvel onglet", Url = "", Favicon = "", Status = "";
     public bool Loading; public int Group;   // 0 : hors groupe
-    public CoreWebView2Controller Ctl;
-    public string Filled;                    // adresse où nos identifiants ont été posés (une seule fois par page)
-    public BrowserForm Owner;                // la fenêtre qui tient l'onglet (change quand il est déplacé : Attach)
+    public CoreWebView2Controller? Ctl;      // null si le contrôleur n'a pas pu être lu (Wire)
+    public string? Filled;                   // adresse où nos identifiants ont été posés (une seule fois par page)
+    public required BrowserForm Owner;       // la fenêtre qui tient l'onglet (change quand il est déplacé : Attach)
     public bool InternalOk;                  // la prochaine navigation vient du navigateur lui-même (barre d'adresse, cdx://, précédente…) : une page interne y est permise
 }
 class TabGroup { public int Id; public string Name = ""; public string Color = "accent"; public bool Collapsed; }
@@ -30,8 +30,8 @@ class BrowserForm : HostForm
     protected override bool ToolWindow => false;
     public readonly List<BrowserTab> Tabs = new();
     public readonly List<TabGroup> Groups = new();
-    BrowserTab active; int nextTab = 1, nextGroup = 1;
-    BrowserTab pane1, pane2;                 // pages scindées : les deux onglets affichés (pane2 null : une seule page) ; active est l'un des deux
+    BrowserTab? active; int nextTab = 1, nextGroup = 1;   // active null : pas encore d'onglet
+    BrowserTab? pane1, pane2;                // pages scindées : les deux onglets affichés (pane2 null : une seule page) ; active est l'un des deux
     Rectangle view = new Rectangle(8, 120, 800, 400), view2 = Rectangle.Empty;
     bool fullscreen; Rectangle savedBounds; FormWindowState savedState;
     bool findOpen;
@@ -45,16 +45,16 @@ class BrowserForm : HostForm
     }
 
     // ---------- adresses ----------
-    static string Internal(string p) => Ui + "interne.html?p=" + p;
-    static bool IsInternalUrl(string u) => u != null && u.StartsWith(Ui + "interne.html");
-    static string InternalName(string u) { var m = Regex.Match(u ?? "", @"[?&]p=([a-z]+)"); return m.Success ? m.Groups[1].Value : "newtab"; }
-    static string DisplayUrl(string u) => IsInternalUrl(u) ? (InternalName(u) == "newtab" ? "" : "cdx://" + InternalName(u)) : (u == "about:blank" ? "" : u ?? "");
+    static string Internal(string? p) => Ui + "interne.html?p=" + p;
+    static bool IsInternalUrl(string? u) => u != null && u.StartsWith(Ui + "interne.html");
+    static string InternalName(string? u) { var m = Regex.Match(u ?? "", @"[?&]p=([a-z]+)"); return m.Success ? m.Groups[1].Value : "newtab"; }
+    static string DisplayUrl(string? u) => IsInternalUrl(u) ? (InternalName(u) == "newtab" ? "" : "cdx://" + InternalName(u)) : (u == "about:blank" ? "" : u ?? "");
 
     static readonly HashSet<string> Schemes = new() { "http", "https", "file", "chrome-extension" };   // chrome-extension : les pages de réglages des extensions installées
     // Une navigation voulue par le navigateur lui-même (barre d'adresse, cdx://, nouvel onglet) : seule celle-ci peut mener à une page interne.
     static void Go(BrowserTab t, string url) { t.InternalOk = true; t.Web.CoreWebView2.Navigate(url); }
     // Ce qu'on tape dans la barre d'adresse : une adresse complète, un nom de domaine, une page interne, ou une recherche (moteur des réglages).
-    public static string Resolve(string input)
+    public static string Resolve(string? input)
     {
         input = (input ?? "").Trim();
         if (input.Length == 0) return Internal("newtab");
@@ -77,7 +77,7 @@ class BrowserForm : HostForm
             if (IsInternalUrl(t.Url) && t.Web.CoreWebView2 != null) t.Web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(msg));
     }
 
-    public async Task<BrowserTab> NewTabAsync(string url, bool activate = true, int group = 0, int after = -1)
+    public async Task<BrowserTab> NewTabAsync(string? url, bool activate = true, int group = 0, int after = -1)
     {
         var t = new BrowserTab { Owner = this, Id = nextTab++, Web = new WebView2 { DefaultBackgroundColor = Color.FromArgb(0x22, 0x22, 0x22), Visible = false, Bounds = view }, Group = group };
         if (after >= 0 && after < Tabs.Count) Tabs.Insert(after + 1, t); else Tabs.Add(t);
@@ -104,7 +104,7 @@ class BrowserForm : HostForm
         if (pane2 != null) { pane2.Web.Bounds = fullscreen ? ClientRectangle : view2; pane2.Web.BringToFront(); if (fullscreen) pane2.Web.Visible = false; }
     }
 
-    public void Select(BrowserTab t)
+    public void Select(BrowserTab? t)
     {
         if (t == null || !Tabs.Contains(t)) return;
         var g = GroupOf(t); if (g != null && g.Collapsed) g.Collapsed = false;   // choisir un onglet d'un groupe replié le déplie
@@ -113,7 +113,7 @@ class BrowserForm : HostForm
         active = t; Apply(); Push();
         if (IsBlank(t)) Send(new { type = "focusAddr" });
     }
-    public BrowserTab Active => active;
+    public BrowserTab? Active => active;
 
     static bool IsBlank(BrowserTab t) => string.IsNullOrEmpty(t.Url) || t.Url == "about:blank" || (IsInternalUrl(t.Url) && InternalName(t.Url) == "newtab");
 
@@ -136,7 +136,7 @@ class BrowserForm : HostForm
     public void ReopenClosed() { if (closed.Count == 0) return; var c = closed[^1]; closed.RemoveAt(closed.Count - 1); _ = NewTabAsync(c.Url, true, Groups.Any(g => g.Id == c.Group) ? c.Group : 0); }
 
     // Un onglet retiré de cette fenêtre (il part dans une autre) : la vue n'est pas détruite.
-    public BrowserTab Detach(BrowserTab t)
+    public BrowserTab? Detach(BrowserTab t)
     {
         int i = Tabs.IndexOf(t); if (i < 0) return null;
         Tabs.RemoveAt(i); Controls.Remove(t.Web); t.Group = 0; PruneGroups();
@@ -154,7 +154,7 @@ class BrowserForm : HostForm
     }
 
     // ---------- groupes d'onglets ----------
-    public TabGroup GroupOf(BrowserTab t) => t.Group == 0 ? null : Groups.FirstOrDefault(g => g.Id == t.Group);
+    public TabGroup? GroupOf(BrowserTab t) => t.Group == 0 ? null : Groups.FirstOrDefault(g => g.Id == t.Group);
     void PruneGroups() { Groups.RemoveAll(g => !Tabs.Any(t => t.Group == g.Id)); }
     // Les onglets d'un groupe restent côte à côte : l'onglet est déplacé juste après le dernier du groupe.
     void PlaceInGroup(BrowserTab t)
@@ -162,22 +162,22 @@ class BrowserForm : HostForm
         var last = Tabs.LastOrDefault(x => x != t && x.Group == t.Group); if (last == null) return;
         Tabs.Remove(t); Tabs.Insert(Tabs.IndexOf(last) + 1, t);
     }
-    public TabGroup NewGroup(string name, string color, IEnumerable<BrowserTab> members)
+    public TabGroup NewGroup(string? name, string? color, IEnumerable<BrowserTab> members)
     {
-        var g = new TabGroup { Id = nextGroup++, Name = name ?? "", Color = GroupColors.Contains(color) ? color : "accent" };
+        var g = new TabGroup { Id = nextGroup++, Name = name ?? "", Color = color != null && GroupColors.Contains(color) ? color : "accent" };
         Groups.Add(g);
         foreach (var t in members.ToList()) { t.Group = g.Id; PlaceInGroup(t); }
         PruneGroups(); Push(); return g;
     }
     public void AddToGroup(BrowserTab t, int gid) { if (!Groups.Any(g => g.Id == gid)) return; t.Group = gid; PlaceInGroup(t); PruneGroups(); Push(); }
     public void Ungroup(BrowserTab t) { t.Group = 0; PruneGroups(); Push(); }
-    public void GroupCommand(int gid, string what, string name, string color, bool on)
+    public void GroupCommand(int gid, string? what, string? name, string? color, bool on)
     {
         var g = Groups.FirstOrDefault(x => x.Id == gid); if (g == null) return;
         switch (what)
         {
             case "rename": g.Name = name ?? ""; break;
-            case "color": if (GroupColors.Contains(color)) g.Color = color; break;
+            case "color": if (color != null && GroupColors.Contains(color)) g.Color = color; break;
             case "collapse":
                 g.Collapsed = on;
                 if (on && active != null && active.Group == gid) { var other = Tabs.FirstOrDefault(t => t.Group != gid); if (other != null) Select(other); else g.Collapsed = false; }
@@ -189,7 +189,7 @@ class BrowserForm : HostForm
     }
 
     // ---------- pages scindées ----------
-    public void Split(BrowserTab second)
+    public void Split(BrowserTab? second)
     {
         if (active == null) return;
         if (second == null) { second = Tabs.FirstOrDefault(t => t != active && GroupOf(t)?.Collapsed != true); if (second == null) { _ = SplitNewAsync(); return; } }
@@ -206,17 +206,17 @@ class BrowserForm : HostForm
         var b = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
         return new SessionWindow
         {
-            X = b.X, Y = b.Y, W = b.Width, H = b.Height, Max = WindowState == FormWindowState.Maximized, Active = Math.Max(0, Tabs.IndexOf(active)),
+            X = b.X, Y = b.Y, W = b.Width, H = b.Height, Max = WindowState == FormWindowState.Maximized, Active = Math.Max(0, active == null ? -1 : Tabs.IndexOf(active)),   // IndexOf(null) rendait déjà -1
             Tabs = Tabs.Where(t => !IsBlank(t) || Tabs.Count == 1).Select(t => new SessionTab { Url = t.Url ?? "", Title = t.Title, Group = t.Group }).ToList(),
             Groups = Groups.Select(g => new SessionGroup { Id = g.Id, Name = g.Name, Color = g.Color, Collapsed = g.Collapsed }).ToList(),
         };
     }
-    public async Task RestoreAsync(SessionWindow w, string url)
+    public async Task RestoreAsync(SessionWindow w, string? url)
     {
         foreach (var g in w.Groups) { Groups.Add(new TabGroup { Id = g.Id, Name = g.Name, Color = g.Color, Collapsed = g.Collapsed }); nextGroup = Math.Max(nextGroup, g.Id + 1); }
         var urls = w.Tabs.Where(t => !string.IsNullOrEmpty(t.Url)).ToList();
         if (urls.Count == 0 && url == null) { await NewTabAsync(Internal("newtab"), true); return; }
-        BrowserTab act = null;
+        BrowserTab? act = null;
         for (int i = 0; i < urls.Count; i++) { var t = await NewTabAsync(urls[i].Url, i == 0, Groups.Any(g => g.Id == urls[i].Group) ? urls[i].Group : 0); if (i == w.Active) act = t; }
         if (url != null) await NewTabAsync(url, true); else if (act != null) Select(act);
         PruneGroups(); Push();
@@ -315,7 +315,8 @@ class BrowserForm : HostForm
 
     CoreWebView2FindOptions MakeFind(string term)
     {
-        var o = sh.BrowserEnv.CreateFindOptions(); o.FindTerm = term; o.ShouldHighlightAllMatches = true; o.SuppressDefaultFindDialog = true; return o;
+        // « ! » : on cherche dans un onglet, qui n'existe qu'après EnvAsync (qui pose BrowserEnv)
+        var o = sh.BrowserEnv!.CreateFindOptions(); o.FindTerm = term; o.ShouldHighlightAllMatches = true; o.SuppressDefaultFindDialog = true; return o;
     }
 
     void SendFind(CoreWebView2 c) { if (active != null && active.Web.CoreWebView2 == c) Send(new { type = "find", index = c.Find.ActiveMatchIndex, count = c.Find.MatchCount }); }
@@ -359,7 +360,8 @@ class BrowserForm : HostForm
     void CycleTab(int d)
     {
         var vis = Tabs.Where(t => GroupOf(t)?.Collapsed != true).ToList(); if (vis.Count < 2) return;
-        int i = vis.IndexOf(active); Select(vis[((i < 0 ? 0 : i) + d + vis.Count) % vis.Count]);
+        // sans onglet actif : -1, ce que rendait déjà IndexOf(null)
+        int i = active == null ? -1 : vis.IndexOf(active); Select(vis[((i < 0 ? 0 : i) + d + vis.Count) % vis.Count]);
     }
 
     void Zoom(int dir)
@@ -375,7 +377,7 @@ class BrowserForm : HostForm
 
     void ToggleStar() { if (active == null || IsBlank(active)) return; BrowserData.ToggleStar(active.Url, active.Title); sh.PushAll(); }
 
-    public void OpenInternal(string page)
+    public void OpenInternal(string? page)
     {
         var existing = Tabs.FirstOrDefault(x => IsInternalUrl(x.Url) && InternalName(x.Url) == page);
         if (existing != null) { Select(existing); return; }
@@ -475,8 +477,8 @@ class BrowserForm : HostForm
         try
         {
             using var doc = JsonDocument.Parse(e.WebMessageAsJson); var r = doc.RootElement;
-            string cmd = r.GetProperty("cmd").GetString();
-            string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+            string? cmd = r.GetProperty("cmd").GetString();   // null : aucun cas du switch
+            string? Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
             void Reply(object o) { if (t.Web.CoreWebView2 != null) t.Web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(o)); }
             async Task ReplyExt() => Reply(new { type = "extensions", items = await Extensions.ListAsync() });
             switch (cmd)
@@ -511,7 +513,7 @@ class BrowserForm : HostForm
                 // import
                 case "in.import.bookmarks":
                 {
-                    string p = Str("path");
+                    string? p = Str("path");
                     if (p == null) { using var dlg = new OpenFileDialog { Title = "Favoris à importer", Filter = "Favoris de Chrome ou Edge (Bookmarks)|Bookmarks|Export HTML de favoris|*.html;*.htm|Tous|*.*" }; if (dlg.ShowDialog(this) != DialogResult.OK) break; p = dlg.FileName; }
                     try { var (a, sk) = BrowserData.ImportBookmarks(p); Reply(new { type = "done", what = "bookmarks", added = a, skipped = sk }); Host.Log($"favoris importés de {p} : {a} ajoutés, {sk} déjà là"); }
                     catch (Exception ex) { Reply(new { type = "done", what = "bookmarks", error = ex.Message }); }
@@ -519,7 +521,7 @@ class BrowserForm : HostForm
                 }
                 case "in.import.passwords":
                 {
-                    string p = Str("path"); bool picked = false;
+                    string? p = Str("path"); bool picked = false;
                     if (p == null) { using var dlg = new OpenFileDialog { Title = "Mots de passe exportés (CSV)", Filter = "Export CSV|*.csv|Tous|*.*" }; if (dlg.ShowDialog(this) != DialogResult.OK) break; p = dlg.FileName; picked = true; }
                     try
                     {
@@ -546,12 +548,12 @@ class BrowserForm : HostForm
                 {
                     using var dlg = new FolderBrowserDialog { Description = "Dossier d'une extension non empaquetée (avec son manifest.json)", UseDescriptionForTitle = true, ShowNewFolderButton = false };
                     if (dlg.ShowDialog(this) != DialogResult.OK) break;
-                    string err = await Extensions.AddFolderAsync(dlg.SelectedPath);
+                    string? err = await Extensions.AddFolderAsync(dlg.SelectedPath);
                     Reply(new { type = "done", what = "ext", error = err }); await ReplyExt(); break;
                 }
                 case "in.ext.install":
                 {
-                    string err = await Extensions.InstallZipAsync(Str("url"), Str("name") ?? "uBOLite", txt => Reply(new { type = "progress", text = txt }));
+                    string? err = await Extensions.InstallZipAsync(Str("url"), Str("name") ?? "uBOLite", txt => Reply(new { type = "progress", text = txt }));
                     Reply(new { type = "done", what = "ext", error = err }); await ReplyExt(); break;
                 }
             }
@@ -562,10 +564,10 @@ class BrowserForm : HostForm
     // ---------- commandes venues de la page ui/navigateur.html ----------
     public void Command(string cmd, JsonElement r)
     {
-        string Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        string? Str(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         int Int(string k) => r.TryGetProperty(k, out var v) && v.TryGetInt32(out var i) ? i : 0;
         bool Bool(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.True;
-        BrowserTab Tab() => Tabs.FirstOrDefault(x => x.Id == Int("id"));
+        BrowserTab? Tab() => Tabs.FirstOrDefault(x => x.Id == Int("id"));
         var c = active?.Web.CoreWebView2;
         switch (cmd)
         {
@@ -581,10 +583,11 @@ class BrowserForm : HostForm
             case "br.select": { var t = Tab(); if (t != null) Select(t); break; }
             case "br.duplicate": { var t = Tab(); if (t != null) _ = NewTabAsync(t.Url, true, t.Group, Tabs.IndexOf(t)); break; }
             case "br.reopen": ReopenClosed(); break;
-            case "br.go": if (c != null) { Go(active, Resolve(Str("url"))); active.Web.Focus(); } break;
-            case "br.back": if (c?.CanGoBack == true) { active.InternalOk = true; c.GoBack(); } break;
-            case "br.fwd": if (c?.CanGoForward == true) { active.InternalOk = true; c.GoForward(); } break;
-            case "br.reload": if (c != null) { active.InternalOk = true; c.Reload(); } break;
+            // c non null implique active non null : les tests de active ne changent rien
+            case "br.go": if (active != null && c != null) { Go(active, Resolve(Str("url"))); active.Web.Focus(); } break;
+            case "br.back": if (active != null && c?.CanGoBack == true) { active.InternalOk = true; c.GoBack(); } break;
+            case "br.fwd": if (active != null && c?.CanGoForward == true) { active.InternalOk = true; c.GoForward(); } break;
+            case "br.reload": if (active != null && c != null) { active.InternalOk = true; c.Reload(); } break;
             case "br.stop": c?.Stop(); break;
             case "br.star": ToggleStar(); break;
             case "br.zoom": Zoom(Int("d")); break;
@@ -627,7 +630,8 @@ class BrowserForm : HostForm
         groups = Groups.Select(g => new { g.Id, g.Name, g.Color, g.Collapsed }), closed = closed.Count,
         bounds = new[] { Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height },
     };
-    public async Task<string> EvalAsync(string js, bool ui) => await (ui ? Web.CoreWebView2 : active.Web.CoreWebView2).ExecuteScriptAsync(js);
+    // Sans onglet (fenêtre qui s'ouvre), eval lève une exception claire au lieu d'une NullReferenceException : même chemin d'erreur pour le canal de test.
+    public async Task<string> EvalAsync(string js, bool ui) => await (ui ? Web.CoreWebView2 : (active ?? throw new InvalidOperationException("aucun onglet actif")).Web.CoreWebView2).ExecuteScriptAsync(js);
 
     public void Push()
     {

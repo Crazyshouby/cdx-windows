@@ -30,7 +30,7 @@ static class SelfTest
             Passwords.All.Add(new Credential { Url = "https://compte.exemple.net/", User = "b", Password = "p" });
             Passwords.All.Add(new Credential { Url = "http://exemple.org/", User = "c", Password = "p" });
             Passwords.All.Add(new Credential { Url = "http://127.0.0.1:8767/login.html", User = "d", Password = "p" });
-            int N(string url) => Passwords.For(url).Count;
+            int N(string? url) => Passwords.For(url).Count;
             Check("mots de passe : même origine https, autre chemin : proposé", N("https://exemple.fr/autre/page") == 1 && N("https://EXEMPLE.fr/") == 1);
             Check("mots de passe : sous-domaine, domaine parent, autre port : jamais", N("https://www.exemple.fr/") == 0 && N("https://exemple.net/") == 0 && N("https://exemple.fr:8443/") == 0);
             Check("mots de passe : jamais sur http (ni une entrée http sur sa page http), sauf la boucle locale", N("http://exemple.fr/") == 0 && N("http://exemple.org/") == 0 && N("http://127.0.0.1:8767/x") == 1 && N("http://localhost:8767/x") == 0);

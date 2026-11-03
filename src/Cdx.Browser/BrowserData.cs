@@ -18,7 +18,7 @@ class DownloadItem
 {
     public bool Announced;   // la fin du téléchargement a déjà été annoncée au shell
     public int Id; public string Name = "", Path = "", Url = "", State = "progress"; public long Received, Total;
-    public CoreWebView2DownloadOperation Op;
+    public required CoreWebView2DownloadOperation Op;
     public bool Paused, Canceled;            // pour la fenêtre des transferts (la page interne du navigateur ne connaît que progress · done · error)
     public double Speed; public DateTime Tick = DateTime.UtcNow; public long TickBytes;
     public DateTime Started = DateTime.UtcNow;
@@ -60,7 +60,7 @@ static class BrowserData
 
     // L'historique (jusqu'à 5 000 entrées) n'est plus réécrit à chaque page : au plus une fois toutes les 2 s, et à la sortie.
     // Minuteur WinForms : il tourne sur le fil de l'interface, comme AddHistory, donc la liste n'est jamais lue pendant qu'on la modifie.
-    static System.Windows.Forms.Timer historyTimer;
+    static System.Windows.Forms.Timer? historyTimer;   // créé au premier ajout à l'historique
     static void ScheduleHistorySave()
     {
         if (historyTimer == null)
@@ -104,7 +104,7 @@ static class BrowserData
     // Les ordres de la fenêtre : pause, reprise, annulation (sur le fil d'interface).
     public static bool Control(int id, string action)
     {
-        var d = Downloads.FirstOrDefault(x => x.Id == id); var op = d?.Op; if (op == null) return false;
+        var d = Downloads.FirstOrDefault(x => x.Id == id); var op = d?.Op; if (d == null || op == null) return false;   // op non null implique d non null : le test de d ne change rien
         try
         {
             switch (action)
@@ -127,7 +127,7 @@ static class BrowserData
         foreach (var (name, dir) in new[] { ("Chrome", System.IO.Path.Combine(local, "Google", "Chrome", "User Data")), ("Edge", System.IO.Path.Combine(local, "Microsoft", "Edge", "User Data")) })
         {
             if (!Directory.Exists(dir)) continue;
-            var names = new Dictionary<string, string>();
+            var names = new Dictionary<string, string?>();   // un nom null dans « Local State » reste null (profile: null), comme avant
             try
             {
                 using var doc = JsonDocument.Parse(File.ReadAllText(System.IO.Path.Combine(dir, "Local State")));
@@ -206,9 +206,9 @@ class BrowserSettings
     public object Payload() => new { search = Search, downloadDir = DownloadDir, downloadsFolder = DownloadsFolder, askWhere = AskWhere, restoreSession = RestoreSession, savePasswords = SavePasswords, autofill = Autofill, engines = Engines.Select(e => new { id = e.id, name = e.name }) };
 
     // Un réglage changé depuis la page cdx://reglages. Vrai si connu.
-    public bool Set(string key, JsonElement v)
+    public bool Set(string? key, JsonElement v)
     {
-        bool B() => v.ValueKind == JsonValueKind.True; string S() => v.ValueKind == JsonValueKind.String ? v.GetString() : "";
+        bool B() => v.ValueKind == JsonValueKind.True; string S() => v.ValueKind == JsonValueKind.String ? v.GetString()! : "";   // « ! » : une valeur JSON de type texte ne se lit jamais null
         switch (key)
         {
             case "search": if (Engines.Any(e => e.id == S())) Search = S(); break;
@@ -249,9 +249,9 @@ static class Passwords
         catch (Exception ex) { Host.Log("mots de passe : " + ex.Message); }
     }
 
-    // L'origine d'une adresse (schéma, hôte, port), ou null. Seules comptent https, et http sur la boucle locale (rien ne passe sur le réseau) :
+    // L'origine d'une adresse (schéma, hôte, port), ou null (adresse absente comprise). Seules comptent https, et http sur la boucle locale (rien ne passe sur le réseau) :
     // sur un http ordinaire, n'importe quel intermédiaire lirait le mot de passe posé dans la page.
-    static string OriginOf(string url)
+    static string? OriginOf(string? url)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return null;
         if (u.Scheme != Uri.UriSchemeHttps && !(u.Scheme == Uri.UriSchemeHttp && u.IsLoopback)) return null;
@@ -259,12 +259,12 @@ static class Passwords
     }
     // Les identifiants valables pour une page : exactement la même origine. Plus de domaine parent ni de sous-domaine (un identifiant de x.github.io
     // ne part pas sur github.io, ni l'inverse), plus de http.
-    public static List<Credential> For(string url)
+    public static List<Credential> For(string? url)
     {
-        string o = OriginOf(url); if (o == null) return new();
+        string? o = OriginOf(url); if (o == null) return new();
         return All.Where(c => OriginOf(c.Url) == o).ToList();
     }
-    public static bool Remove(string url, string user) { int n = All.RemoveAll(c => c.Url == url && c.User == user); if (n > 0) Save(); return n > 0; }
+    public static bool Remove(string? url, string? user) { int n = All.RemoveAll(c => c.Url == url && c.User == user); if (n > 0) Save(); return n > 0; }
 
     // Un export CSV (en-tête name,url,username,password[,note] : Chrome, Edge ; Firefox : url,username,password,...). Doublons (même adresse, même nom) ignorés.
     public static (int added, int skipped) ImportCsv(string path)
@@ -350,7 +350,9 @@ static class Session
 static class Extensions
 {
     public static string Dir => Path.Combine(Host.DataDir, "extensions");
-    public static CoreWebView2Profile Profile;
+    public static CoreWebView2Profile? Profile;   // posé par LoadAllAsync au premier onglet
+    // Le profil, pour ce que demandent les pages internes : elles vivent dans un onglet, donc après LoadAllAsync (sinon l'exception est rattrapée comme l'était le déréférencement).
+    static CoreWebView2Profile Loaded => Profile ?? throw new InvalidOperationException("profil du navigateur pas encore chargé");
     static readonly Dictionary<string, string> folderOf = new();   // id → dossier (pour la page de réglages de l'extension, et la suppression)
     public const string UbolApi = "https://api.github.com/repos/uBlockOrigin/uBOL-home/releases/latest";
     static readonly HttpClient http = new() { Timeout = TimeSpan.FromMinutes(5) };
@@ -367,11 +369,11 @@ static class Extensions
     }
     static IEnumerable<string> Folders() => Directory.Exists(Dir) ? Directory.GetDirectories(Dir).Where(x => !Path.GetFileName(x).StartsWith("_") && File.Exists(Path.Combine(x, "manifest.json"))) : Array.Empty<string>();
 
-    static async Task<CoreWebView2BrowserExtension> AddAsync(string folder)
+    static async Task<CoreWebView2BrowserExtension?> AddAsync(string folder)
     {
         try
         {
-            var x = await Profile.AddBrowserExtensionAsync(folder);
+            var x = await Loaded.AddBrowserExtensionAsync(folder);
             folderOf[x.Id] = folder; SaveIndex();
             Host.Log($"extension chargée : {Path.GetFileName(folder)} ({x.Id})"); return x;
         }
@@ -389,36 +391,38 @@ static class Extensions
         }
         return o;
     }
-    static string Version(string folder) { try { using var d = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json"))); return d.RootElement.TryGetProperty("version", out var v) ? v.GetString() : ""; } catch { return ""; } }
+    // folder null : extension intégrée (Path.Combine levait, rattrapé en « ») ; une version null dans le manifeste est rendue telle quelle
+    static string? Version(string? folder) { if (folder == null) return ""; try { using var d = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json"))); return d.RootElement.TryGetProperty("version", out var v) ? v.GetString() : ""; } catch { return ""; } }
 
     // La page de réglages de l'extension (options_page ou options_ui.page du manifeste), ouverte dans un onglet.
-    public static string OptionsUrl(string id)
+    public static string? OptionsUrl(string? id)
     {
-        if (!folderOf.TryGetValue(id, out var folder)) return null;
+        if (id == null || !folderOf.TryGetValue(id, out var folder)) return null;
         try
         {
             using var d = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json"))); var r = d.RootElement;
-            string p = r.TryGetProperty("options_page", out var op) ? op.GetString() : r.TryGetProperty("options_ui", out var ou) && ou.TryGetProperty("page", out var pg) ? pg.GetString() : null;
+            string? p = r.TryGetProperty("options_page", out var op) ? op.GetString() : r.TryGetProperty("options_ui", out var ou) && ou.TryGetProperty("page", out var pg) ? pg.GetString() : null;
             return p == null ? null : "chrome-extension://" + id + "/" + p.TrimStart('/');
         }
         catch { return null; }
     }
 
-    public static async Task<bool> EnableAsync(string id, bool on)
+    public static async Task<bool> EnableAsync(string? id, bool on)
     {
-        var x = (await Profile.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id); if (x == null) return false;
+        var x = (await Loaded.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id); if (x == null) return false;
         await x.EnableAsync(on); Host.Log($"extension {x.Name} : {(on ? "activée" : "désactivée")}"); return true;
     }
-    public static async Task<bool> RemoveAsync(string id)
+    public static async Task<bool> RemoveAsync(string? id)
     {
-        var x = (await Profile.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id); if (x == null) return false;
+        var x = (await Loaded.GetBrowserExtensionsAsync()).FirstOrDefault(e => e.Id == id); if (x == null) return false;
         await x.RemoveAsync();
-        if (folderOf.Remove(id, out var folder)) { SaveIndex(); try { if (folder.StartsWith(Dir, StringComparison.OrdinalIgnoreCase)) Directory.Delete(folder, true); } catch (Exception ex) { Host.Log("dossier de l'extension : " + ex.Message); } }
+        // x.Id plutôt que id : c'est la même chaîne (x a été trouvé par e.Id == id), et elle n'est jamais null
+        if (folderOf.Remove(x.Id, out var folder)) { SaveIndex(); try { if (folder.StartsWith(Dir, StringComparison.OrdinalIgnoreCase)) Directory.Delete(folder, true); } catch (Exception ex) { Host.Log("dossier de l'extension : " + ex.Message); } }
         Host.Log("extension retirée : " + x.Name); return true;
     }
 
     // Un dossier d'extension choisi par l'utilisateur : copié sous extensions\<nom>, puis chargé.
-    public static async Task<string> AddFolderAsync(string src)
+    public static async Task<string?> AddFolderAsync(string src)   // null : chargée
     {
         if (!File.Exists(Path.Combine(src, "manifest.json"))) return "Ce dossier n'a pas de manifest.json.";
         string name = Path.GetFileName(src.TrimEnd('\\', '/')); string dst = Path.Combine(Dir, name);
@@ -433,7 +437,7 @@ static class Extensions
     }
 
     // L'antipub uBlock Origin Lite : la dernière version publiée (GitHub), ou l'archive zip donnée ; téléchargée, dépliée sous extensions\uBOLite, chargée.
-    public static async Task<string> InstallZipAsync(string url, string name, Action<string> progress)
+    public static async Task<string?> InstallZipAsync(string? url, string? name, Action<string> progress)   // null : installée
     {
         try
         {
@@ -471,7 +475,7 @@ static class Extensions
                     if (!e.FullName.StartsWith(top) || e.FullName.EndsWith("/")) continue;
                     string rel = e.FullName[top.Length..]; string full = Path.GetFullPath(Path.Combine(dst, rel));
                     if (!full.StartsWith(dst + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;   // chemin qui sort du dossier : ignoré
-                    Directory.CreateDirectory(Path.GetDirectoryName(full)); e.ExtractToFile(full, true);
+                    Directory.CreateDirectory(Path.GetDirectoryName(full)!); e.ExtractToFile(full, true);   // « ! » : full est un fichier sous dst
                 }
             }
             File.Delete(zip);
