@@ -19,6 +19,8 @@ sealed class PinStore
     // Les épingles par défaut déjà proposées : une nouvelle application de la suite (Notes…) est ajoutée une fois aux tuiles, puis plus jamais (on peut la retirer).
     readonly HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
     static readonly string[] Legacy = { "cdx:explorer", "ms-settings:", "wt.exe", "chrome.exe", "cdx:navigateur", "cdx:repos", "calc.exe", "notepad.exe", "shell:My Pictures" };   // les neuf d'origine
+    // Les programmes retirés de la suite : leur tuile, encore écrite dans un ancien fichier, ne lancerait plus rien (Pilote, retiré le 03/11/2026).
+    static readonly string[] Retired = { "cdx:pilote" };
 
     // Les icônes des applications de la suite sont celles de la famille pixel (cdx-ui, pixel_icons.py APPS, 01/11/2026) ; les autres, des pictogrammes génériques.
     public static readonly Pin[] Defaults =
@@ -26,7 +28,7 @@ sealed class PinStore
         new("Explorateur", "cdx:explorer", "explorateur", true, true), new("Paramètres", "ms-settings:", "reglages", true, true), new("Terminal", "wt.exe", "console", true, true),
         new("Chrome", "chrome.exe", "serveur", true, true), new("Navigateur CDX", "cdx:navigateur", "navigateur", true, true), new("Dépôts", "cdx:repos", "depots", false, true),
         new("Calculatrice", "calc.exe", "apps", false, true), new("Bloc-notes", "notepad.exe", "journal", false, true), new("Images", "shell:My Pictures", "image", false, true),
-        new("Notes", "cdx:notes", "notes", false, true), new("Terminal CDX", "cdx:terminal", "terminal", false, true), new("Agenda", "cdx:agenda", "agenda", false, true), new("Courrier", "cdx:courrier", "courrier", false, true), new("Pilote", "cdx:pilote", "pilote", false, true), new("YouTube", "cdx:youtube", "video", false, true), new("Audio Linker", "cdx:audio_linker", "volume", false, true),
+        new("Notes", "cdx:notes", "notes", false, true), new("Terminal CDX", "cdx:terminal", "terminal", false, true), new("Agenda", "cdx:agenda", "agenda", false, true), new("Courrier", "cdx:courrier", "courrier", false, true), new("YouTube", "cdx:youtube", "video", false, true), new("Audio Linker", "cdx:audio_linker", "volume", false, true),
     };
 
     public PinStore(string file) { this.file = file; SetItems(Defaults.ToList()); foreach (var d in Defaults) seen.Add(d.Target); Load(); }
@@ -77,7 +79,7 @@ sealed class PinStore
             {
                 string n = S(e, "name"), t = S(e, "target");
                 if (t != null && t.StartsWith("kdx:", StringComparison.OrdinalIgnoreCase)) t = "cdx:" + t[4..];   // épingles écrites quand la suite s'appelait KDX
-                if (!Valid(n, t) || list.Any(p => Same(p.Target, t))) continue;
+                if (!Valid(n, t) || list.Any(p => Same(p.Target, t)) || Retired.Any(x => Same(x, t))) continue;
                 bool bar = B(e, "bar"), tile = B(e, "tile");
                 if (!bar && !tile) continue;
                 string ic = S(e, "ic"); if (ic != null && !Regex.IsMatch(ic, "^[a-z0-9_-]{1,30}$")) ic = null;

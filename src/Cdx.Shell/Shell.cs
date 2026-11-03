@@ -592,7 +592,6 @@ class Shell : IHostApp
         if (target.StartsWith("cdx:repos")) { StartApp("cdx-repos.exe", null); return; }
         if (target.StartsWith("cdx:agenda")) { StartApp("cdx-agenda.exe", null); return; }
         if (target.StartsWith("cdx:courrier")) { StartApp("cdx-mail.exe", null); return; }
-        if (target.StartsWith("cdx:pilote")) { StartApp("cdx-pilote.exe", null); return; }
         if (target.StartsWith("cdx:youtube")) { StartApp("cdx-youtube.exe", null); return; }
         // Audio Linker (C++, src/cdx-audio_linker) : posé dans bin\ par build.ps1 ; déjà lancé, il passe devant (son instance unique)
         if (target.StartsWith("cdx:audio_linker")) { StartApp(File.Exists(Path.Combine(AppContext.BaseDirectory, "cdx-audio_linker.exe")) ? "cdx-audio_linker.exe" : Suite.AppPath("audio_linker") ?? "cdx-audio_linker.exe", null); return; }

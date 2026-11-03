@@ -23,7 +23,6 @@
     <InternalsVisibleTo Include="cdx-terminal" />
     <InternalsVisibleTo Include="cdx-agenda" />
     <InternalsVisibleTo Include="cdx-mail" />
-    <InternalsVisibleTo Include="cdx-pilote" />
     <InternalsVisibleTo Include="cdx-youtube" />
     <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
   </ItemGroup>

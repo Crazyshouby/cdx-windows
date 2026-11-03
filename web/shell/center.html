@@ -84,7 +84,7 @@
 
   // ---- notifications : envoyées par les autres applications de la suite (cdx.shell, message « notify ») ----
   // l'icône de chaque programme de la suite (famille pixel de la charte, 01/11/2026) ; les autres : le pictogramme générique
-  const APP_ICON = { shell: 'cdx', explorer: 'explorateur', browser: 'navigateur', repos: 'depots', transfers: 'transferts', notes: 'notes', terminal: 'terminal', agenda: 'agenda', mail: 'courrier', pilote: 'pilote', messages: 'messages' };
+  const APP_ICON = { shell: 'cdx', explorer: 'explorateur', browser: 'navigateur', repos: 'depots', transfers: 'transferts', notes: 'notes', terminal: 'terminal', agenda: 'agenda', mail: 'courrier', messages: 'messages' };
   handlers.notify = m => {
     const box = $('notifs'); box.textContent = '';
     const items = (m.items || []).slice().reverse();
