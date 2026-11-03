@@ -24,7 +24,7 @@ class NotesForm : HostForm
             try
             {
                 string rel = Uri.UnescapeDataString(new Uri(e.Request.Uri).AbsolutePath.TrimStart('/'));
-                string full = notes.ImageFile(rel);
+                string? full = notes.ImageFile(rel);
                 if (full == null) { e.Response = c.Environment.CreateWebResourceResponse(null, 404, "Not Found", "Content-Type: text/plain"); return; }
                 string ext = Path.GetExtension(full).ToLowerInvariant();
                 string mime = ext switch { ".png" => "image/png", ".jpg" or ".jpeg" => "image/jpeg", ".gif" => "image/gif", ".webp" => "image/webp", ".svg" => "image/svg+xml", _ => "image/bmp" };
