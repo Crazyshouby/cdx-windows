@@ -1,0 +1,14 @@
+<Project>
+  <!-- La version de la suite vit ici, à un seul endroit : les huit exécutables la portent (propriétés du fichier) et installer\build.ps1 la lit pour nommer l'installeur. -->
+  <PropertyGroup>
+    <Version>0.1.0</Version>
+    <Company>Valentin Large</Company>
+    <Product>CDX</Product>
+    <Copyright>© Valentin Large</Copyright>
+  </PropertyGroup>
+  <!-- Filets du compilateur (audit du 03/11/2026, lot 4.5) : une tâche lancée sans await ni « _ = » est une erreur (son exception se perdrait).
+       Nullable, activé projet par projet, l'est maintenant partout (l'Explorateur et YouTube en dernier) ; restent les analyseurs « recommended ». -->
+  <PropertyGroup>
+    <WarningsAsErrors>$(WarningsAsErrors);CS4014</WarningsAsErrors>
+  </PropertyGroup>
+</Project>

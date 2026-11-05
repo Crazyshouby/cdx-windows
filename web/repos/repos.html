@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'none'">
+<title>CDX — Dépôts</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/host/page.css">
+<style>
+  /* « Dépôts » : tous les projets git du PC, ce qui reste à enregistrer ou à envoyer sur GitHub. Lecture seule : la page ne demande jamais de modifier un dépôt. */
+  .nav { display: flex; gap: 5px; flex: none; align-items: center; }
+  .nav .btn { padding: 0 10px; }
+  .mbar { display: flex; flex: none; flex-wrap: wrap; }
+  .mb { height: 22px; padding: 0 12px; margin-right: -1px; font: inherit; color: var(--text); cursor: default; background: var(--btn); border: 1px solid #000; box-shadow: var(--bevel); display: flex; align-items: center; gap: 6px; }
+  .mb:hover { background: #3b3b3b; }
+  .mb.on { background: #2a2a2a; box-shadow: var(--bevel-down); }
+  .mb .n { color: var(--faint); }
+  .split { flex: 1; min-height: 0; display: flex; gap: 5px; }
+  .col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 3px; }
+  .lhead.o4 { padding: 0 16px 0 7px; }   /* 1 px de bordure de la liste + 6 px de la bordure des lignes à gauche ; 15 px de barre de défilement + 1 px à droite */   /* les colonnes : --cdx-cols, posé par cdx-columns.js */
+  .fr { display: grid; grid-template-columns: var(--cdx-cols, minmax(80px, 1fr) 250px 110px 150px); align-items: center; min-height: 40px; border-left: 6px solid transparent; border-bottom: 1px solid var(--line); cursor: default; }
+  .fr:hover { background: var(--row-hover); }
+  .fr.sel { background: var(--row-sel); box-shadow: inset 0 0 0 1px var(--row-sel-ring); }
+  .fr > * { padding: 0 8px; min-width: 0; }
+  .fr .nm { display: block; }
+  .fr .nm b, .fr .nm i { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: normal; }
+  .fr .nm i { color: var(--faint); }
+  .fr .br, .fr .dt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  .fr .stt { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+  .st { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .st .orb { width: 9px; height: 9px; }
+  .empty { padding: 30px; text-align: center; color: var(--faint); line-height: 1.6; }
+  #rows { outline: none; scrollbar-gutter: stable; }   /* la place de la barre de défilement est toujours réservée : les colonnes restent sous leurs en-têtes */
+  .lh.rev::after { border-top: 0; border-bottom: 5px solid #fff; }
+  /* volet de détail */
+  .pv { flex: none; width: 380px; }
+  .pvbox { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; overflow-y: auto; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  .pvbox h2 { margin: 0; font: inherit; color: var(--text); font-size: 14px; word-break: break-all; }
+  .pvbox .path { color: var(--faint); word-break: break-all; }
+  .pvbox .sec { color: var(--faint); margin-top: 4px; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+  .pvbox .why { display: flex; gap: 8px; line-height: 1.5; }
+  .pvbox .why .orb { margin-top: 3px; }
+  .pvbox .acts { display: flex; gap: 5px; flex-wrap: wrap; }
+  .pvbox .file { display: flex; gap: 8px; white-space: nowrap; }
+  .pvbox .file .c { flex: none; width: 14px; text-align: center; color: var(--warn); }
+  .pvbox .file .p { overflow: hidden; text-overflow: ellipsis; }
+  .pvbox .cm { display: grid; grid-template-columns: 78px 1fr; gap: 0 8px; line-height: 1.4; }
+  .pvbox .cm .d { color: var(--faint); white-space: nowrap; }
+  .pvbox .cm .s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pvbox .cm .a { grid-column: 2; color: var(--faint); }
+  .pvbox .more { color: var(--faint); }
+  .dlg-text { white-space: pre-wrap; line-height: 1.5; }
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .45); }
+  .veil .win { position: relative; inset: auto; width: 520px; }
+  .rootrow { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  .rootrow span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/cdx-frame.js"></script>
+<script src="/cdx/cdx-columns.js"></script>
+<script src="/cdx/cdx-split.js"></script>
+<script src="/host/host.js"></script>
+</head>
+<body>
+<div class="win active" id="win">
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Dépôts</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="cb">
+    <div class="nav">
+      <input id="find" class="text-input" type="text" placeholder="Rechercher un projet…" spellcheck="false" autocomplete="off" style="flex:1">
+      <button class="btn" id="bScan" title="Relire tous les projets"><span class="pix" data-ic="maj"></span> Actualiser</button>
+    </div>
+    <div class="mbar" id="chips"></div>
+    <div class="split">
+      <div class="col" style="flex:1">
+        <div class="lhead o4" id="lhead"><button class="lh" data-k="n">Projet</button><button class="lh" data-k="e">État</button><button class="lh" data-k="b">Branche</button><button class="lh" data-k="d">Dernière activité</button></div>
+        <div class="list" id="rows" tabindex="0"></div>
+      </div>
+      <div class="col pv"><div class="lhead" style="padding-right:0"><button class="lh">Détail</button></div><div class="pvbox" id="pv"></div></div>
+    </div>
+    <div class="status"><span class="orb" id="orb"></span><span id="st1"></span></div>
+  </div>
+</div>
+<i class="rz l" data-e="10"></i><i class="rz r" data-e="11"></i><i class="rz t" data-e="12"></i><i class="rz tl" data-e="13"></i><i class="rz tr" data-e="14"></i><i class="rz b" data-e="15"></i><i class="rz bl" data-e="16"></i><i class="rz br" data-e="17"></i>
+<script src="/repos/repos.js"></script>
+</body>
+</html>

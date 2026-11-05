@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'none'">
+<title>CDX — menu Démarrer</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/host/page.css">
+<style>
+  /* Le menu Démarrer de windows-ui.html : une fenêtre CDX active, remplie par la page. */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .tile { display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 84px; cursor: default; }
+  .blk { display: block !important; }
+  .apps { flex: 1; min-height: 0; }
+  .apps .row-item { cursor: default; }
+  .apps img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; -webkit-user-drag: none; }
+  .tile img { -webkit-user-drag: none; }
+  .ph { color: var(--faint) !important; }
+  #q { flex: none; height: 28px; }
+  .grp.fill { flex: 1; min-height: 0; display: flex !important; flex-direction: column; align-items: stretch; padding-bottom: 8px; }
+  .btn.row { display: flex; align-items: center; gap: 8px; }
+  .btns { gap: 6px; }
+  .btns .btn { padding: 0 10px; }
+  .ctxm { position: fixed; z-index: 80; min-width: 190px; padding: 4px; background: var(--panel); border: 1px solid #000; box-shadow: var(--bevel); }
+  .ctxm .row-item { cursor: default; }
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .5); }
+  .veil .win { position: relative; inset: auto; width: 420px; }
+</style>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/host/host.js"></script>
+<script src="/shell/shell.js"></script>
+</head>
+<body>
+<div class="win active">
+  <div class="tb"><button class="tb-btn tb-l" id="x"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><span class="tb-title">Démarrer</span></div>
+  <div class="cb">
+    <input id="q" class="text-input" type="text" placeholder="Tapez pour chercher une application…" autocomplete="off" spellcheck="false">
+    <fieldset class="grp blk"><legend>Épinglées</legend><div class="tiles" id="tiles"></div></fieldset>
+    <fieldset class="grp fill"><legend id="appsTitle">Toutes les applications</legend><div class="list apps" id="apps"></div></fieldset>
+    <div class="btns">
+      <div class="row push"><span class="pix" data-ic="utilisateur" data-size="32"></span><span id="user">Valentin</span></div>
+      <button class="btn row" id="lock"><span class="pix" data-ic="cadenas"></span>Verrouiller</button>
+      <button class="btn row" id="sleep"><span class="pix" data-ic="absent"></span>Veille</button>
+      <button class="btn row" id="restart"><span class="pix" data-ic="maj"></span>Redémarrer</button>
+      <button class="btn row" id="shutdown"><span class="pix" data-ic="quitter"></span>Éteindre</button>
+    </div>
+  </div>
+</div>
+<script src="/shell/start.js"></script>
+</body>
+</html>

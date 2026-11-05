@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'none'">
+<title>Navigateur CDX</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<style>
+  /* Les pages internes du navigateur (cdx://) : nouvel onglet, favoris, historique, téléchargements, extensions, mots de passe, réglages. Pleine page, charte CDX. */
+  html, body { margin: 0; width: 100%; height: 100%; overflow: auto; user-select: text; }
+  body { background: var(--frame); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px 40px; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-weight: 400; margin: 0 0 4px; letter-spacing: 3px; }
+  .blk { display: block !important; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .tile { display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 84px; padding: 0 8px; cursor: default; overflow: hidden; }
+  .tile span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .list { flex: none; max-height: none; overflow: visible; }
+  .ri { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border-left: 6px solid transparent; border-bottom: 1px solid var(--line); cursor: default; }
+  .ri:hover { background: var(--row-hover); }
+  .ri .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .ri .u { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ri .d { color: var(--faint); white-space: nowrap; }
+  .ri .acts { display: flex; gap: 6px; }
+  .ri.off .t { color: var(--faint); }
+  .search { flex: none; height: 34px; padding: 0 12px; }
+  .gauge { height: 14px; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); margin-top: 4px; }
+  .gauge > i { display: block; height: 100%; background: var(--bar); }
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .5); }
+  .veil .win { position: relative; inset: auto; width: 420px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row .text-input { flex: 1; }
+  .grp .row { padding: 4px 0; }
+  .grp label.row { cursor: default; }
+  .grp .hint { color: var(--faint); margin: 0 0 6px; }
+  .msg { color: var(--text); padding: 6px 10px; border-left: 6px solid var(--green); background: var(--card-2); }
+  .msg.err { border-color: var(--red); }
+  .msg[hidden] { display: none; }
+  input[type=checkbox] { margin: 0; accent-color: var(--a-edge); }
+</style>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/host/host.js"></script>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script src="/browser/interne.js"></script>
+</body>
+</html>

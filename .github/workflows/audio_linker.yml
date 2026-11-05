@@ -1,0 +1,288 @@
+# Audio Linker (src/cdx-audio_linker, ex-dépôt AudioLinker) : compilation, essais, installeur, et publication sur une étiquette audio_linker-v*.
+# Reprise telle quelle de l'ancien dépôt, avec ses chemins dans cdx-windows ; les étiquettes v* restent celles de la suite.
+name: audio_linker
+
+on:
+  push:
+    branches: [main]
+    tags: ["audio_linker-v*"]
+    paths: ["src/cdx-audio_linker/**", ".github/workflows/audio_linker.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["src/cdx-audio_linker/**", ".github/workflows/audio_linker.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Pinned (not windows-latest): the "Visual Studio 17 2022" generator needs
+    # a VS 2022 instance on the image, which windows-latest no longer
+    # guarantees since it moved to the 2025 image.
+    runs-on: windows-2022
+    defaults:
+      run:
+        working-directory: src/cdx-audio_linker
+    env:
+      # Optional code signing: add the repository secrets SIGN_PFX_BASE64
+      # (the .pfx, base64) and SIGN_PFX_PASSWORD, nothing else to change.
+      HAS_CERT: ${{ secrets.SIGN_PFX_BASE64 != '' }}
+      # Signing through SignPath (see RELEASING.md): active only on a release
+      # tag, once the repository variable SIGNPATH_ORGANIZATION_ID and the
+      # secret SIGNPATH_API_TOKEN exist. Takes precedence over the .pfx above.
+      HAS_SIGNPATH: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' && secrets.SIGNPATH_API_TOKEN != '' && startsWith(github.ref, 'refs/tags/audio_linker-v') }}
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      signed: ${{ env.HAS_SIGNPATH == 'true' || env.HAS_CERT == 'true' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # The version lives in CMakeLists.txt only. A release tag must match it
+      # (audio_linker-v1.4.0, or audio_linker-v1.4.0-rc1 for a pre-release of 1.4.0).
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $cmake = Get-Content CMakeLists.txt -Raw
+          if ($cmake -notmatch 'project\(cdx-audio_linker VERSION (\d+\.\d+\.\d+)') { throw 'Version introuvable dans CMakeLists.txt' }
+          $v = $Matches[1]
+          "version=$v" >> $env:GITHUB_OUTPUT
+          if ($env:GITHUB_REF -like 'refs/tags/audio_linker-v*') {
+            $base = ($env:GITHUB_REF_NAME -replace '^audio_linker-v', '') -replace '-.*$', ''
+            if ($base -ne $v) { throw "Le tag $env:GITHUB_REF_NAME ne correspond pas à la version de CMakeLists.txt ($v)" }
+          }
+
+      # The CDX-UI charter (cdx/) is copied from the cdx-ui repository (node tools/charte-sync.mjs --write audio_linker there): a copy edited by hand fails here.
+      - name: Charter copies are untouched
+        shell: pwsh
+        run: node tools/cdx-verify.mjs cdx/cdx-sync.json
+
+      # The pages follow the charter rules (CHARTE.md section 8); the copies in cdx/ are checked at the source.
+      - name: Pages follow the charter
+        shell: pwsh
+        run: node tools/charte-lint.mjs assets --manifest cdx/cdx-sync.json
+
+      # Generated files are committed: regenerating them must change nothing.
+      - name: Generated assets are up to date
+        shell: pwsh
+        run: |
+          python tools/gen_assets.py
+          python tools/make_notices.py
+          git diff --exit-code --ignore-cr-at-eol -- assets THIRD-PARTY-NOTICES.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Fichiers générés périmés : relancer tools/gen_assets.py et tools/make_notices.py' }
+
+      # The vendored WebView2 (headers + x64 static loader) is committed, so
+      # there's no NuGet restore step -- the tree builds as-is.
+      - name: Configure
+        run: cmake -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      # Every window of the UI side by side in headless Chrome (installed on the
+      # runner), with a stubbed WebView2 bridge; fails on a script error.
+      - name: UI smoke test
+        run: python tools/ui_smoke.py build/gen/ui.gen.html
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --version=6.7.1 --no-progress -y   # version fixée : un installeur se reconstruit à l'identique
+
+      - name: Prepare code signing
+        if: env.HAS_CERT == 'true' && env.HAS_SIGNPATH != 'true'
+        shell: pwsh
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+          $tool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+                  Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
+          if (-not $tool) { throw 'signtool.exe introuvable' }
+          # sans le mot de passe : GITHUB_ENV est lu par toutes les étapes suivantes ; sign.cmd l'ajoute depuis SIGN_PFX_PASSWORD, donné à la seule étape qui signe l'installeur
+          "AL_SIGN_ARGS=/f `"$pfx`" /tr http://timestamp.digicert.com /td sha256 /fd sha256" >> $env:GITHUB_ENV
+          "$($tool.DirectoryName)" >> $env:GITHUB_PATH
+          # the exe first (the installer then signs itself and its uninstaller)
+          & $tool.FullName sign /f $pfx /p $env:SIGN_PFX_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 build\Release\cdx-audio_linker.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Signature de cdx-audio_linker.exe échouée' }
+
+      # --- SignPath, first request: cdx-audio_linker.exe (it goes into the installer
+      # and is also published as the portable exe). A release signing request
+      # normally waits for a manual approval in SignPath: the timeout is long.
+      - name: Upload unsigned exe (SignPath)
+        if: env.HAS_SIGNPATH == 'true'
+        id: unsigned-exe
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unsigned-exe
+          path: src/cdx-audio_linker/build/Release/cdx-audio_linker.exe
+          if-no-files-found: error
+
+      - name: Sign cdx-audio_linker.exe (SignPath)
+        if: env.HAS_SIGNPATH == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'AudioLinker' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: exe
+          github-artifact-id: ${{ steps.unsigned-exe.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: src/cdx-audio_linker/signed-exe
+          parameters: |
+            version: "${{ steps.ver.outputs.version }}"
+
+      - name: Use the signed exe
+        if: env.HAS_SIGNPATH == 'true'
+        shell: pwsh
+        run: Copy-Item signed-exe\cdx-audio_linker.exe build\Release\cdx-audio_linker.exe -Force
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+        run: |
+          if ($env:HAS_CERT -eq 'true' -and $env:HAS_SIGNPATH -ne 'true') { .\installer\build.ps1 -ExePath build\Release\cdx-audio_linker.exe -Sign }
+          else { .\installer\build.ps1 -ExePath build\Release\cdx-audio_linker.exe }
+
+      # --- SignPath, second request: the installer built with the signed exe.
+      # Its SHA-256 is recomputed afterwards: the published hash must be the
+      # one of the signed file.
+      - name: Upload unsigned installer (SignPath)
+        if: env.HAS_SIGNPATH == 'true'
+        id: unsigned-installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unsigned-installer
+          path: src/cdx-audio_linker/installer/Output/cdx-audio_linker-Setup-${{ steps.ver.outputs.version }}.exe
+          if-no-files-found: error
+
+      - name: Sign the installer (SignPath)
+        if: env.HAS_SIGNPATH == 'true'
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'AudioLinker' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: src/cdx-audio_linker/signed-installer
+          parameters: |
+            version: "${{ steps.ver.outputs.version }}"
+
+      - name: Use the signed installer, refresh its SHA-256, check both signatures
+        if: env.HAS_SIGNPATH == 'true'
+        shell: pwsh
+        run: |
+          $name = "cdx-audio_linker-Setup-${{ steps.ver.outputs.version }}.exe"
+          Copy-Item "signed-installer\$name" "installer\Output\$name" -Force
+          .\installer\checksum.ps1 -Setup "installer\Output\$name"
+          foreach ($f in 'build\Release\cdx-audio_linker.exe', "installer\Output\$name") {
+            $s = Get-AuthenticodeSignature $f
+            if ($s.Status -ne 'Valid') { throw "$f : signature $($s.Status)" }
+            "$f : signé par $($s.SignerCertificate.Subject)"
+          }
+
+      # What a user does: install silently, check the files, uninstall.
+      - name: Installer test (install, upgrade, uninstall)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem installer\Output\cdx-audio_linker-Setup-*.exe).FullName
+          $dir = Join-Path $env:RUNNER_TEMP 'cdx-audio_linker-installed'
+          $a = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/DIR=`"$dir`"")
+          foreach ($pass in 1, 2) {   # 2 = upgrade over an existing install
+            $p = Start-Process $setup -ArgumentList $a -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "Installation (passage $pass) : code $($p.ExitCode)" }
+            if (-not (Test-Path "$dir\cdx-audio_linker.exe")) { throw 'cdx-audio_linker.exe absent après installation' }
+          }
+          $ver = (Get-Item "$dir\cdx-audio_linker.exe").VersionInfo.FileVersion
+          if ($ver -ne '${{ steps.ver.outputs.version }}') { throw "Version installée $ver inattendue" }
+          $p = Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Désinstallation : code $($p.ExitCode)" }
+          Start-Sleep -Seconds 2
+          if (Test-Path "$dir\cdx-audio_linker.exe") { throw 'cdx-audio_linker.exe encore présent après désinstallation' }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cdx-audio_linker-installer
+          path: |
+            src/cdx-audio_linker/installer/Output/cdx-audio_linker-Setup-*.exe
+            src/cdx-audio_linker/installer/Output/cdx-audio_linker-Setup-*.exe.sha256
+          if-no-files-found: error
+
+      - name: Upload portable exe
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cdx-audio_linker-portable
+          path: src/cdx-audio_linker/build/Release/cdx-audio_linker.exe
+          if-no-files-found: error
+
+  # On a v* tag: publish the installer (+ SHA-256) and the portable exe as a
+  # GitHub Release. A tag with a "-" (v1.2.0-rc1) is a pre-release.
+  release:
+    if: startsWith(github.ref, 'refs/tags/audio_linker-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Only the two final artifacts: the unsigned files sent to SignPath are
+      # artifacts of the same run and must never end up in the release.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: dist
+          pattern: cdx-audio_linker-*
+          merge-multiple: true
+
+      # Fixed header of the release notes (how to install, how to check the
+      # download, signature status), then the generated list of changes.
+      - name: Release notes header
+        run: |
+          v="${{ needs.build.outputs.version }}"
+          notice=unsigned
+          [ "${{ needs.build.outputs.signed }}" = "true" ] && notice=signed
+          { sed "s/VERSION/$v/g" src/cdx-audio_linker/release/release-header.md; cat "src/cdx-audio_linker/release/release-notice-$notice.md"; printf '\n---\n\n'; } > header.md
+          cat header.md
+
+      - name: Portable exe name
+        run: mv dist/cdx-audio_linker.exe "dist/cdx-audio_linker-${{ needs.build.outputs.version }}-portable.exe"
+
+      # One .sha256 for both files, in the format `sha256sum -c` reads; the
+      # check runs here, so a malformed file fails the release instead of
+      # reaching users.
+      - name: Checksums
+        run: |
+          cd dist
+          sums="cdx-audio_linker-Setup-${{ needs.build.outputs.version }}.exe.sha256"
+          sed -i 's/\r$//' "$sums"
+          sha256sum --binary "cdx-audio_linker-${{ needs.build.outputs.version }}-portable.exe" >> "$sums"
+          cat "$sums"
+          sha256sum --check "$sums"
+
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: |
+            dist/cdx-audio_linker-Setup-*.exe
+            dist/cdx-audio_linker-Setup-*.exe.sha256
+            dist/cdx-audio_linker-*-portable.exe
+          name: Audio Linker ${{ needs.build.outputs.version }}
+          body_path: header.md
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

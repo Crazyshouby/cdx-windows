@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'none'">
+<title>CDX — sélecteur de fenêtres</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/host/page.css">
+<style>
+  /* Le sélecteur Alt+Tab de windows-ui.html : une grille de petites fenêtres, celle qui est choisie est la fenêtre active (cadre à l'accent). */
+  .grid { flex: 1; min-height: 0; display: grid; gap: 16px; justify-content: center; align-content: start; padding: 11px 0; overflow: hidden; }
+  .card { position: relative; width: 250px; height: 190px; cursor: default; }
+  .card .win { position: absolute; inset: 0; }
+  /* une fenêtre inactive posée dans une fenêtre active reprend ses gris (les jetons de titre sont hérités) */
+  .card .cb { padding: 5px; }
+  .cardbody { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  .cardbody img { width: 64px; height: 64px; image-rendering: pixelated; }
+  .cardbody .min { color: var(--faint); }
+  .cardbody span { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
+  .status span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .status .hint { margin-left: auto; color: var(--faint); white-space: nowrap; padding-left: 14px; }
+</style>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/host/host.js"></script>
+<script src="/shell/shell.js"></script>
+</head>
+<body>
+<div class="win active">
+  <div class="tb"><span class="tb-title">Changer de fenêtre</span></div>
+  <div class="cb">
+    <div class="grid" id="grid"></div>
+    <div class="status"><span class="orb green"></span><span class="t" id="cur"></span><span class="hint">Tab : suivant · Maj+Tab : précédent · Échap : annuler</span></div>
+  </div>
+</div>
+<script src="/shell/alttab.js"></script>
+</body>
+</html>

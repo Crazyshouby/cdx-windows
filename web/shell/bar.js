@@ -1,0 +1,193 @@
+// Le script de bar.html, sorti de la page pour que sa politique de sécurité (CSP) n'autorise aucun script en ligne.
+  fillPix();
+  const $ = id => document.getElementById(id);
+  $('start').onclick = () => post({ cmd: 'toggleStart' });
+
+  // Les applications épinglées à la barre : la liste vient du programme (epingles.json) ; clic = lancer, clic droit = menu (retirer, déplacer).
+  let lastPins = '';
+  handlers.pins = m => {
+    // L'ordre de la barre (barIndex) est indépendant de celui des tuiles du menu Démarrer (ordre de la liste).
+    const items = m.items.filter(p => p.bar).sort((a, b) => a.barIndex - b.barIndex), key = JSON.stringify(items);
+    if (key === lastPins) return; lastPins = key;
+    $('pins').innerHTML = items.map(p => `<button class="tk pin" draggable="true" data-t="${esc(p.target)}" title="${esc(p.name)}">${pinIcon(p, 16)}</button>`).join('');
+    fillPinIcons($('pins'), 16);
+    log('épingles affichées : ' + items.length);
+  };
+  // Glisser-déposer. Sources : une épingle de la barre (la réordonner), une fenêtre ouverte, une application ou une tuile du menu Démarrer (les épingler),
+  // des fichiers venus de l'Explorateur (programmes, raccourcis, dossiers). Cible : toute la barre ; la place est donnée par la position de la souris
+  // parmi les épingles (devant la moitié gauche d'une épingle, ou à la fin). Le programme valide tout : la page ne fait que transmettre.
+  const KIND = 'application/x-cdx-pin';
+  const pinBtns = () => [...$('pins').querySelectorAll('[data-t]')];
+  const beforeOf = x => { for (const b of pinBtns()) { const r = b.getBoundingClientRect(); if (x < r.left + r.width / 2) return b.dataset.t; } return ''; };
+  const clearMark = () => document.querySelectorAll('.insL, .insR').forEach(b => b.classList.remove('insL', 'insR'));
+  const mark = x => {
+    clearMark(); const bs = pinBtns(); if (!bs.length) return;
+    const before = beforeOf(x);
+    if (before) bs.find(b => b.dataset.t === before).classList.add('insL'); else bs[bs.length - 1].classList.add('insR');
+  };
+  const hasType = (e, t) => e.dataTransfer && [...e.dataTransfer.types].includes(t);
+  document.addEventListener('dragstart', e => {
+    const p = e.target.closest && e.target.closest('[data-t]'), t = e.target.closest && e.target.closest('[data-h]');
+    if (p && $('pins').contains(p)) { e.dataTransfer.setData(KIND, JSON.stringify({ k: 'move', t: p.dataset.t })); e.dataTransfer.effectAllowed = 'move'; }
+    else if (t && $('tasks').contains(t)) { e.dataTransfer.setData(KIND, JSON.stringify({ k: 'task', h: t.dataset.h })); e.dataTransfer.effectAllowed = 'copy'; }
+    else return;
+    log('glisser commencé');
+  });
+  // L'effet du dépôt doit faire partie de ceux que la source autorise (effectAllowed), sinon le navigateur refuse de déposer :
+  // une épingle de la barre se déplace, tout le reste (fenêtre, application du menu Démarrer, fichiers) s'épingle en copie.
+  let overLogged = false;
+  document.addEventListener('dragover', e => {
+    if (!hasType(e, KIND) && !hasType(e, 'Files')) return;
+    const ea = e.dataTransfer.effectAllowed;
+    e.preventDefault(); e.dataTransfer.dropEffect = ea === 'move' ? 'move' : 'copy'; mark(e.clientX);
+    if (!overLogged) { overLogged = true; log('survol de glisser-déposer (effectAllowed ' + ea + ')'); }
+  });
+  document.addEventListener('dragleave', e => { if (!e.relatedTarget) clearMark(); });
+  document.addEventListener('dragend', () => { overLogged = false; clearMark(); });
+  document.addEventListener('drop', e => {
+    overLogged = false;
+    const kind = hasType(e, KIND), files = hasType(e, 'Files');
+    log('dépôt reçu : ' + [...(e.dataTransfer ? e.dataTransfer.types : [])].join(','));
+    if (!kind && !files) return;
+    e.preventDefault(); const before = beforeOf(e.clientX); clearMark();
+    if (kind) {
+      let p = null; try { p = JSON.parse(e.dataTransfer.getData(KIND)); } catch { return; }
+      if (p.k === 'move') post({ cmd: 'pin.reorder', target: p.t, before });
+      else if (p.k === 'task') post({ cmd: 'pin.addtask', h: p.h, before });
+      else if (p.k === 'app') post({ cmd: 'pin.add', name: p.name, target: p.t, before });
+    } else if (hasHost && e.dataTransfer.files.length) window.chrome.webview.postMessageWithAdditionalObjects({ cmd: 'pin.dropfiles', before }, e.dataTransfer.files);
+  });
+
+  $('pins').onclick = e => { const b = e.target.closest('[data-t]'); if (b) post({ cmd: 'launch', target: b.dataset.t }); };
+  $('pins').oncontextmenu = e => { e.preventDefault(); const b = e.target.closest('[data-t]'); if (b) post({ cmd: 'bar.menu', kind: 'pin', key: b.dataset.t, x: Math.round(b.getBoundingClientRect().left) }); };
+
+  // La liste des fenêtres ouvertes : poussée par le programme tous les 500 ms, redessinée seulement si elle a changé.
+  let last = '';
+  handlers.tasks = m => {
+    const key = JSON.stringify(m.items);
+    if (key === last) return; last = key;
+    // Un bouton par application ; plusieurs fenêtres du même programme : un seul bouton avec leur nombre (data-g = clé du groupe), la liste s'ouvre au clic.
+    $('tasks').innerHTML = m.items.map(t => `<button class="tk ${t.active ? 'on' : ''} ${t.min ? 'min' : ''} ${t.count > 1 ? 'multi' : ''}" draggable="true" data-h="${t.h}"${t.g ? ` data-g="${esc(t.g)}"` : ''} title="${esc(t.count > 1 ? t.title + ' — ' + t.count + ' fenêtres' : t.title)}"><img data-p="${esc(t.exe)}" alt=""><span>${esc(t.title)}</span>${t.count > 1 ? `<span class="cnt">${t.count}</span>` : ''}</button>`).join('');
+    $('tasks').querySelectorAll('img').forEach(img => wantIcon(img.dataset.p, img));
+    log('tâches affichées : ' + m.items.length);
+  };
+  // Une fenêtre seule : clic = l'afficher (ou la réduire si elle est active), clic droit = son menu, clic molette = la fermer.
+  // Un groupe : clic = la liste de ses fenêtres (au-dessus de la barre), clic droit = épingler / tout fermer ; pas de fermeture au clic molette.
+  const menuX = b => Math.round(b.getBoundingClientRect().left);
+  $('tasks').onclick = e => {
+    const b = e.target.closest('[data-h]'); if (!b) return;
+    if (b.dataset.g) post({ cmd: 'bar.menu', kind: 'windows', key: b.dataset.g, x: menuX(b) }); else post({ cmd: 'activate', h: b.dataset.h });
+  };
+  $('tasks').oncontextmenu = e => {
+    e.preventDefault(); const b = e.target.closest('[data-h]'); if (!b) return;
+    if (b.dataset.g) post({ cmd: 'bar.menu', kind: 'group', key: b.dataset.g, x: menuX(b) }); else post({ cmd: 'bar.menu', kind: 'task', key: b.dataset.h, x: menuX(b) });
+  };
+  $('tasks').onauxclick = e => { if (e.button === 1) { const b = e.target.closest('[data-h]'); if (b && !b.dataset.g) post({ cmd: 'close', h: b.dataset.h }); } };
+
+  // Les icônes de la zone de notification : poussées quand elles changent (ajout, retrait, image, infobulle). Nos pictogrammes pixel pour les
+  // applis connues (nom du processus, sans .exe, en minuscules) ; pour les autres, la vraie icône réduite à un ton par un seuil de clarté.
+  const APP_ICONS = { discord: 'discord', steam: 'steam', nvcontainer: 'nvidia', 'nvdisplay.container': 'nvidia', amdinstallmanager: 'amd', radeonsoftware: 'amd',
+    amdfendrsr: 'amd', amdnoisesuppression: 'amd', localsend_app: 'localsend', 'tailscale-ipn': 'tailscale', obs64: 'obs', 'whatsapp.root': 'whatsapp', whatsapp: 'whatsapp',
+    vlc: 'vlc', epicgameslauncher: 'epic', 'battle.net': 'battlenet', 'core temp': 'temperature', hwinfo64: 'temperature', phoneexperiencehost: 'telephone',
+    droidcam: 'camera', iriunwebcam: 'camera', 'creative cloud': 'adobe', photoshopprefsmanager: 'adobe', medal: 'medal', anydesk: 'distant', teamviewer: 'distant',
+    barrier: 'distant', 'lm studio': 'lmstudio', tennis: 'tennis', securityhealthsystray: 'securite', quicklook: 'loupe', 'cdx-messages': 'discussion', kirc: 'discussion',
+    usagely: 'ia', usagemonitorforclaude: 'ia' };
+  // Les icônes de Windows lui-même (explorer.exe : réseau, son, batterie) se reconnaissent à leur infobulle.
+  const SYS_ICONS = [[/r[ée]seau|internet|wi-?fi|ethernet|network/i, 'reseau'], [/haut-parleur|volume|casque|speaker|audio/i, 'son'], [/batterie|battery/i, 'batterie']];
+  // Audio Linker a son bouton juste à côté : son icône ferait doublon.
+  const HIDDEN = new Set(['cdx-audio_linker', 'audiolinker']);   // (audiolinker : une version d'avant le renommage, encore installée)
+  const iconFor = t => {
+    const exe = (t.exe || '').toLowerCase();
+    if (APP_ICONS[exe]) return APP_ICONS[exe];
+    if (exe === 'explorer') for (const [re, ic] of SYS_ICONS) if (re.test(t.tip || '')) return ic;
+    return null;
+  };
+  // La vraie icône (PNG 16 × 16) en un ton, couleur du texte : on garde ce qui est plus clair que le gros de l'icône (le dessin sur son fond) ;
+  // une icône d'une seule teinte (un glyphe blanc sur transparent) garde toute sa silhouette.
+  const mono = (png, cv) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = 16, g = cv.getContext('2d'); cv.width = w; cv.height = w; g.drawImage(img, 0, 0, w, w);
+      const px = g.getImageData(0, 0, w, w).data, ink = getComputedStyle(cv).color, opaque = [];
+      for (let i = 0; i < px.length; i += 4) if (px[i + 3] > 128) opaque.push({ i: i / 4, l: (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) / 255 });
+      const med = opaque.map(o => o.l).sort((a, b) => a - b)[Math.floor(opaque.length / 2)] || 0;
+      let keep = opaque.filter(o => o.l > med + 0.12);
+      if (keep.length < 10) keep = opaque;
+      g.clearRect(0, 0, w, w); g.fillStyle = ink;
+      for (const o of keep) g.fillRect(o.i % w, Math.floor(o.i / w), 1, 1);
+    };
+    img.src = 'data:image/png;base64,' + png;
+  };
+  let lastZone = '';
+  handlers.tray = m => {
+    const key = JSON.stringify(m.items);
+    if (key === lastZone) return; lastZone = key;
+    const z = $('zone'); z.textContent = '';
+    for (const t of m.items) {
+      if (HIDDEN.has((t.exe || '').toLowerCase())) continue;
+      const b = document.createElement('button'); b.className = 'zi'; b.dataset.k = t.k; b.title = t.tip || t.exe;
+      const ic = iconFor(t);
+      if (ic) b.innerHTML = pix(ic, 16);
+      else { const cv = document.createElement('canvas'); b.appendChild(cv); mono(t.png, cv); }
+      z.appendChild(b);
+    }
+    log('zone de notification : ' + m.items.length + ' icône(s)');
+  };
+  // Le second clic d'un double-clic part comme « double-clic » (comme la barre de Windows : bouton enfoncé, relâché, double-clic, relâché).
+  // Un clic sur une icône ne doit pas aussi ouvrir le centre rapide (la zone est dans la case de l'heure).
+  $('zone').onclick = e => { e.stopPropagation(); const b = e.target.closest('[data-k]'); if (b && e.detail <= 2) post({ cmd: 'tray.click', k: b.dataset.k, b: e.detail === 2 ? 'd' : 'l' }); };
+  $('zone').onmousedown = e => e.stopPropagation();
+  $('zone').oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); const b = e.target.closest('[data-k]'); if (b) post({ cmd: 'tray.click', k: b.dataset.k, b: 'r' }); };
+
+  $('tray').onclick = () => post({ cmd: 'toggleCenter' });
+  // Notifications non vues (envoyées par les autres applications) : la cloche et leur nombre, à place fixe (la barre ne bouge pas).
+  handlers.notifs = m => { $('nt').style.visibility = m.unread ? 'visible' : 'hidden'; $('ntn').textContent = m.unread > 99 ? '99+' : m.unread; };
+  handlers.centerOpen = m => $('tray').classList.toggle('on', m.open);
+  handlers.start = m => $('start').classList.toggle('on', m.open);
+  handlers.stats = () => {};   // CPU et RAM ne sont plus dans la barre (centre rapide seulement), décision du 02/11/2026
+
+  const tick = () => {
+    const d = new Date();
+    $('clock').textContent = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    $('date').textContent = d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+  };
+  tick(); setInterval(tick, 10000);
+
+  // Le bloc de droite garde une largeur fixe : chaque case prend la largeur de son texte le plus long (CPU 100 %, RAM 99,9 Go, 88:88, le jour et le mois les plus larges),
+  // sinon la barre se déforme quand « 9 » devient « 10 » ou « 100 ».
+  const lock = (el, samples) => {
+    const m = document.createElement('span'); m.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap'; document.body.appendChild(m);
+    let w = 0; for (const s of samples) { m.textContent = s; w = Math.max(w, m.getBoundingClientRect().width); }
+    m.remove(); el.style.display = 'inline-block'; el.style.width = Math.ceil(w) + 'px';
+  };
+  const lockTray = () => {
+    lock($('clock'), ['00:00', '08:08', '11:11', '88:88']);
+    const wd = [], mo = [];
+    for (let i = 0; i < 7; i++) wd.push(new Date(2026, 9, 25 + i).toLocaleDateString('fr-FR', { weekday: 'short' }));
+    for (let i = 0; i < 12; i++) mo.push(new Date(2026, i, 28).toLocaleDateString('fr-FR', { month: 'short' }));
+    const samples = []; for (const w of wd) for (const m of mo) samples.push(w + ' 28 ' + m);
+    lock($('date'), samples);
+  };
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(lockTray);
+
+  // Audio Linker : le programme pousse son état (running, starting, volume, muted, playing, setups) tant que le tube répond, {on:false} sinon.
+  let alState = null, alHold = 0, alVol = 100;
+  const alTitle = () => { const m = alState; if (!m) return;
+    $('alBtn').title = 'Audio Linker : ' + (m.starting ? 'le groupe démarre…' : m.running ? 'en marche' + (m.playing ? ' (' + m.playing + ')' : '') : 'arrêté') + ', volume ' + alVol + ' %' + (m.muted ? ', coupé' : '') + ' — molette : volume'; };
+  handlers.audio = m => {
+    $('alk').hidden = !m.on;
+    if (!m.on) { alState = null; return; }
+    alState = m;
+    $('alOrb').className = 'orb' + (m.starting ? ' amber pulse' : m.running ? ' green' : '');
+    $('alBtn').classList.toggle('muted', !!m.muted);
+    if (Date.now() > alHold) alVol = m.volume;   // juste après la molette, l'état renvoyé ne reprend pas la main
+    alTitle();
+  };
+  $('alk').onwheel = e => {   // la molette sur le bouton règle le volume par pas de 5, sans ouvrir le déroulant
+    e.preventDefault(); alVol = Math.max(0, Math.min(100, alVol + (e.deltaY < 0 ? 5 : -5)));
+    alHold = Date.now() + 1500; alTitle(); post({ cmd: 'audio.volume', v: alVol, commit: true });
+  };
+  // Le déroulant (état du groupe, coupure, volume, setups) s'ouvre dans une petite fenêtre au-dessus du bouton (un menu natif sortirait de l'écran vers le bas).
+  $('alBtn').onclick = () => post({ cmd: 'audio.menu', x: Math.round($('alBtn').getBoundingClientRect().left) });
+  if (!hasHost && location.search.includes('audio')) handlers.audio({ on: true, running: true, starting: false, muted: false, volume: 70, playing: 'Casque', setups: [{ name: 'Casque', count: 1 }, { name: 'Groupe Ecrans', count: 3 }] });   // aperçu hors du shell
+  post({ cmd: 'ready', page: 'bar' });

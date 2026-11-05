@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob: https:; media-src 'self' blob:; frame-src 'none'">
+<title>CDX — YouTube</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/host/page.css">
+<link rel="stylesheet" href="/youtube/youtube.css">
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/cdx-frame.js"></script>
+<script src="/cdx/cdx-columns.js"></script>
+<script src="/host/host.js"></script>
+</head>
+<body class="active">
+<div class="win active" id="win">
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" data-act="close"></button><button class="tb-btn tb-m" data-act="menu" title="Réglages, compte Google"></button><span class="tb-title" id="ttl">YouTube</span><button class="tb-btn tb-r2" data-act="max"></button><button class="tb-btn tb-r" data-act="min"></button></div>
+  <div class="cb">
+    <!-- le haut : une seule rangée -->
+    <form class="nav" id="nav" autocomplete="off">
+      <button type="button" class="btn" id="bRetour" title="Retour (Alt+←, bouton « précédent » de la souris)" disabled>◀</button>
+      <div class="sections">
+        <button type="button" class="btn" id="bAccueil" title="Accueil (Alt+Origine)"><span class="pix" data-ic="video"></span> Accueil</button>
+        <button type="button" class="btn" id="bAbos" title="Les vidéos des chaînes suivies, à leur heure"><span class="pix" data-ic="horloge"></span> Abonnements</button>
+      </div>
+      <div class="q"><input id="q" class="text-input" type="search" placeholder="Rechercher sur YouTube…" spellcheck="false" maxlength="200"><button type="submit" class="btn" id="bChercher" title="Rechercher (Entrée ; Ctrl+L pour aller au champ)"><span class="pix" data-ic="loupe"></span></button></div>
+    </form>
+    <div class="zone" id="zone" tabindex="-1">
+      <div id="vue"></div>
+    </div>
+    <!-- le mini-lecteur : la vidéo continue pendant qu'on parcourt YouTube (la vue native se pose sur #miniEcran) -->
+    <div class="mini" id="mini" hidden>
+      <div class="mini-ecran" id="miniEcran"></div>
+      <div class="bas"><span class="titre" id="miniTitre" title="Revenir à la vidéo"></span><button class="btn ic" id="miniRevenir" title="Revenir à la vidéo"></button><button class="btn ic" id="miniFermer" title="Fermer (la vidéo s'arrête)"></button></div>
+    </div>
+    <!-- le bas : la platine, une seule bande (l'afficheur, puis le transport pendant qu'une vidéo est à l'écran) -->
+    <div class="platine" id="platine">
+      <div class="status" id="afficheur"><span class="orb" id="orb"></span><span class="ecran"><span class="tps" id="cTemps"></span><span class="st1" id="st1">Démarrage…</span><span class="st2" id="st2"></span></span></div>
+      <div class="transport" id="commandes" hidden>
+        <button class="btn ic" data-c="precedente" id="cPrec" title="Précédente (ou début de la vidéo)"></button>
+        <button class="btn ic" data-c="basculer" id="cLire" title="Lecture / pause (Espace)"></button>
+        <button class="btn ic" data-c="suivante" id="cSuiv" title="Vidéo suivante"></button>
+        <input type="range" id="cPos" min="0" max="0" step="1" value="0" title="Position (← →)">
+        <span class="ensuite" id="cEnsuite"></span>
+        <button class="btn ic" data-c="muet" id="cMuet" title="Couper le son (M)"></button>
+        <input type="range" id="cVol" min="0" max="100" step="1" value="100" title="Volume (↑ ↓)">
+        <button class="btn ic" data-c="reglages" id="cReglages" title="Vitesse, qualité, sous-titres"></button>
+        <button class="btn ic" data-c="pleinecran" id="cPlein" title="Plein écran (F, F11 ; Échap pour sortir)"></button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/youtube/youtube.js"></script>
+</body>
+</html>

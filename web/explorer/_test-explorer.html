@@ -1,0 +1,60 @@
+<!doctype html><meta charset="utf-8"><title>test</title>
+<!-- Page de test : charge l'Explorateur en mode démonstration dans un cadre, lui envoie des événements souris et clavier synthétiques (dans la page
+     seulement) et écrit les messages que la page a postés. Utilisée avec Chrome headless, jamais sur la session de Valentin. -->
+<iframe id="f" src="explorer.html" style="width:1180px;height:720px;border:0"></iframe>
+<pre id="out">en attente</pre>
+<script>
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+f.onload = async () => {
+  await sleep(1000);
+  const w = f.contentWindow, d = f.contentDocument, res = [], H = w.__handlers;
+  const DOC = 'C:\\Users\\Valentin\\Documents', SUB = DOC + '\\Charte graphique';
+  const md = (el, detail, extra = {}) => el.dispatchEvent(new w.MouseEvent('mousedown', { bubbles: true, button: 0, detail, ...extra }));
+  const row = n => [...d.querySelectorAll('#files .fr')].find(r => r.textContent.includes(n));
+  const spy = () => JSON.stringify(w.__spy.filter(m => m.cmd !== 'win.title'));
+  const run = async (label, fn) => { w.__spy = []; await fn(); res.push(label + ' -> ' + spy()); };
+  const box = () => d.getElementById('pvbox');
+
+  await run('double-clic dossier', () => { md(row('Charte graphique'), 1); md(row('Charte graphique'), 2); });
+  await run('double-clic fichier', () => { md(row('capture-cdx.png'), 1); md(row('capture-cdx.png'), 2); });
+  await run('Entrée sur dossier Messages', () => { md(row('Messages'), 1); d.getElementById('files').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  H['fs.list']({ tab: '1', path: SUB, items: [], free: 1 });           // la page affiche le dossier ouvert par Entrée ... on revient à Documents plus bas
+  H['fs.list']({ tab: '1', path: DOC, items: [{ n: 'Charte graphique', d: true, s: -1, m: 1 }, { n: 'Messages', d: true, s: -1, m: 1 }, { n: 'capture-cdx.png', d: false, s: 2300000, m: 1 }, { n: 'notes-cdx.txt', d: false, s: 4000, m: 1 }, { n: 'données.bin', d: false, s: 900, m: 1 }], free: 1 });
+
+  // ---- aperçu ----
+  await run('clic sur « Aperçu » (ouverture du volet)', () => d.getElementById('cPv').click());
+  res.push('   volet visible : ' + !d.getElementById('pv').hidden + ', bouton enfoncé : ' + d.getElementById('cPv').classList.contains('on'));
+  await run('sélection du texte notes-cdx.txt', () => md(row('notes-cdx.txt'), 1));
+  H['fs.preview']({ type: 'fs.preview', path: DOC + '\\notes-cdx.txt', kind: 'text', text: 'ligne 1\nligne 2 — é', truncated: true });
+  res.push('   contenu : ' + JSON.stringify(box().textContent));
+  await run('réponse périmée (autre chemin) ignorée', () => H['fs.preview']({ type: 'fs.preview', path: 'autre', kind: 'text', text: 'NON', truncated: false }));
+  res.push('   contenu inchangé : ' + !box().textContent.includes('NON'));
+  await run('sélection de l\'image capture-cdx.png', () => md(row('capture-cdx.png'), 1));
+  res.push('   <img src> : ' + (box().querySelector('img') ? box().querySelector('img').getAttribute('src') : 'aucune'));
+  await run('sélection du dossier Messages (pas de requête)', () => md(row('Messages'), 1));
+  await run('binaire données.bin', () => { md(row('données.bin'), 1); H['fs.preview']({ type: 'fs.preview', path: DOC + '\\données.bin', kind: 'binary' }); });
+  res.push('   message : ' + JSON.stringify(box().textContent));
+  await run('Alt+P (fermeture)', () => d.getElementById('files').dispatchEvent(new w.KeyboardEvent('keydown', { key: 'p', altKey: true, bubbles: true })));
+  res.push('   volet visible : ' + !d.getElementById('pv').hidden);
+
+  // ---- boutons latéraux ----
+  await run('double-clic dossier pour créer un historique', () => { md(row('Charte graphique'), 1); md(row('Charte graphique'), 2); });
+  H['fs.list']({ tab: '1', path: SUB, items: [], free: 1 });
+  await sleep(300);
+  let prevented = null;
+  await run('bouton latéral PRÉCÉDENT (mouseup bouton 3)', () => {
+    const down = new w.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 3 }); d.body.dispatchEvent(down); prevented = down.defaultPrevented;
+    d.body.dispatchEvent(new w.MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 3 }));
+  });
+  res.push('   mousedown bouton 3 : action par défaut annulée = ' + prevented);
+  H['fs.list']({ tab: '1', path: DOC, items: [], free: 1 });
+  await sleep(300);
+  await run('bouton latéral SUIVANT (mouseup bouton 4)', () => d.body.dispatchEvent(new w.MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 4 })));
+  H['fs.list']({ tab: '1', path: SUB, items: [], free: 1 });
+  await sleep(300);
+  await run('SUIVANT de nouveau (déjà à la fin : rien)', () => d.body.dispatchEvent(new w.MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 4 })));
+  await sleep(300);
+  await run('deux avis en 250 ms (WM_APPCOMMAND + souris) : un seul retour', () => { H.nav({ dir: 'back' }); d.body.dispatchEvent(new w.MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 3 })); });
+  document.getElementById('out').textContent = res.join('\n');
+};
+</script>

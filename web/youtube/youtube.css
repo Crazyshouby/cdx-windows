@@ -1,0 +1,191 @@
+/* CDX-YouTube (maquette du 03/11/2026, archives/maquettes/youtube) : une rangée en haut, la zone creusée, la platine en bas. Mise en page propre à
+   l'application (CHARTE.md §9.5) : les composants viennent de cdx-ui.css, les couleurs des jetons du thème. Aucun arrondi, aucune graisse, 14 px partout.
+   Accueil en rubans (par moment), abonnements en règle du temps, recherche en liste à colonnes (ou en vignettes), vidéo en mode cinéma. */
+.cb { display: flex; flex-direction: column; gap: 5px; min-height: 0; position: relative; }
+
+/* ---------- le haut ---------- */
+.nav { display: flex; gap: 5px; flex: none; align-items: center; margin: 0; }
+.nav .btn { padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; }
+.nav .sections { display: flex; }
+.nav .sections .btn { margin-right: -1px; }
+.nav .q { flex: 1; display: flex; gap: 5px; max-width: 560px; margin-left: auto; min-width: 160px; }
+.nav .q .text-input { flex: 1; min-width: 0; }
+
+/* ---------- la zone : creusée, de l'air ---------- */
+.zone { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; background: var(--ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); outline: none; }
+.page { padding: 18px 26px 24px; }
+.titre-page { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; color: var(--text); }
+.titre-page .n { color: var(--faint); }
+.titre-page .droite { margin-left: auto; display: flex; }
+.titre-page .droite .btn { margin-left: -1px; padding: 0 10px; }
+.vide { padding: 40px 20px; text-align: center; color: var(--faint); line-height: 1.6; }
+.vide .btn { margin-top: 12px; }
+.plus { display: flex; justify-content: center; padding: 4px 0 20px; color: var(--faint); }
+.lien { cursor: pointer; }
+.lien:hover { text-decoration: underline; }
+
+/* vignettes : la miniature, sa durée, la barre « déjà vu » */
+.vign { position: relative; aspect-ratio: 16 / 9; background: var(--panel); border: 1px solid var(--outline); overflow: hidden; }
+.vign img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.duree { position: absolute; right: 3px; bottom: 3px; padding: 0 4px; line-height: 16px; background: var(--panel); color: var(--text); border: 1px solid var(--outline); }
+.duree.direct { background: var(--hl); color: var(--hl-text); }
+.vign .vu { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--outline); }
+.vign .vu i { display: block; height: 100%; background: var(--accent); }
+.vign.pile { box-shadow: 4px -4px 0 var(--line); margin: 4px 4px 0 0; }
+.duree.liste { background: var(--panel); }
+
+/* une carte (rubans, grille) */
+.carte { min-width: 0; cursor: default; padding: 4px; border: 1px solid transparent; }
+.carte:hover { background: var(--row-hover); }
+.carte:focus { outline: none; background: var(--row-sel); border-color: var(--row-sel-ring); }
+.carte .t { margin-top: 7px; color: var(--text); line-height: 16px; height: 32px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.carte .c { margin-top: 3px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ACCUEIL : des rubans par moment, quatre grandes vignettes visibles, le reste en coulisse (flèches) */
+.ruban { margin-bottom: 26px; }
+.ruban-tete { display: flex; align-items: center; gap: 12px; padding-bottom: 6px; margin-bottom: 10px; border-bottom: 1px solid var(--line); color: var(--text); }
+.ruban-tete .n { color: var(--faint); }
+.ruban-tete .fl { margin-left: auto; display: flex; }
+.ruban-tete .fl .btn { width: 22px; padding: 0; margin-left: -1px; }
+.ruban-corps { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 3 * 18px) / 4); gap: 18px; overflow: hidden; scroll-behavior: smooth; }
+.ruban.shorts .ruban-corps { grid-auto-columns: calc((100% - 6 * 18px) / 7); }
+.ruban.shorts .vign { aspect-ratio: 9 / 16; }
+@media (max-width: 1100px) { .ruban-corps { grid-auto-columns: calc((100% - 2 * 18px) / 3); } .ruban.shorts .ruban-corps { grid-auto-columns: calc((100% - 4 * 18px) / 5); } }
+@media (max-width: 760px) { .ruban-corps { grid-auto-columns: calc((100% - 18px) / 2); } }
+
+/* grille (chaîne, liste, recherche en vignettes) */
+.grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px 18px; }
+
+/* ABONNEMENTS : la règle du temps — une colonne d'heures, un filet, les sorties posées à leur heure, groupées par jour */
+.regle { max-width: 980px; margin: 0 auto; }
+.jour { color: var(--text); margin: 6px 0 12px 92px; display: flex; gap: 12px; align-items: baseline; }
+.jour .n { color: var(--faint); }
+.sortie { display: grid; grid-template-columns: 70px 22px 216px 1fr; align-items: start; min-height: 132px; cursor: default; }
+.sortie .h { text-align: right; color: var(--faint); padding-top: 2px; white-space: nowrap; }
+.sortie .fil { position: relative; align-self: stretch; }
+.sortie .fil::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.sortie .fil::after { content: ""; position: absolute; left: 7px; top: 5px; width: 5px; height: 5px; background: var(--faint); border: 1px solid var(--outline); }
+.sortie.neuve .fil::after { background: var(--accent); }
+.sortie .vign { margin-right: 16px; }
+.sortie .tx { display: flex; flex-direction: column; gap: 4px; padding: 1px 4px 4px; min-width: 0; border: 1px solid transparent; }
+.sortie:hover .tx { background: var(--row-hover); }
+.sortie:focus { outline: none; }
+.sortie:focus .tx { background: var(--row-sel); border-color: var(--row-sel-ring); }
+.sortie .tx .t { color: var(--text); line-height: 16px; }
+.sortie .tx .c, .sortie .tx .m { color: var(--faint); }
+.sortie .tx .neuf { color: var(--warn); }
+
+/* RECHERCHE en liste : la liste à colonnes de la charte, rayée par colonne */
+.rliste { display: flex; flex-direction: column; height: 100%; padding: 18px 26px 18px; box-sizing: border-box; }
+#zone.rl { overflow: hidden; }
+#zone.rl > #vue { height: 100%; }
+/* largeurs et rayures par cdx-columns.js (colonnes redimensionnables, gardées) */
+.rliste .lhead, .rliste .ligne { display: grid; grid-template-columns: var(--cdx-cols, 88px minmax(80px, 1fr) 210px 84px 130px 120px); }
+.rliste .lh { cursor: default; }
+.rliste .list { flex: 1; }
+.rliste .ligne { align-items: center; min-height: 46px; border-bottom: 1px solid var(--line); cursor: default; outline: none; }
+.rliste .ligne:hover { background: var(--row-hover); }
+.rliste .ligne:focus { background: var(--row-sel); box-shadow: inset 0 0 0 1px var(--row-sel-ring); }
+.rliste .ligne > * { padding: 0 8px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rliste .ligne .vign { width: 64px; padding: 0; margin: 4px 8px; }
+.rliste .ligne .vign .duree { display: none; }
+.rliste .ligne .f { color: var(--faint); }
+.rliste .plus { padding: 8px 0 0; }
+
+/* chaînes, listes : en-tête et onglets */
+.tete { display: flex; align-items: flex-start; gap: 14px; padding: 0 0 12px; }
+.tete .avatar { flex: none; width: 88px; height: 88px; border: 1px solid var(--outline); }
+.tete .qui { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tete .nom { color: var(--text); }
+.tete .apropos { color: var(--faint); line-height: 16px; max-height: 48px; overflow: hidden; white-space: pre-wrap; }
+.tete .btn { flex: none; }
+.onglets { padding: 0 0 14px; background: none; }
+
+/* VIDÉO : le lecteur au centre, une ligne d'infos, une colonne à onglets à droite. La fiche remplit la zone sans la faire défiler (#zone.fige) : le
+   lecteur garde sa place. Le rectangle .lecteur est recouvert par la vraie page YouTube (une vue native posée par le programme). */
+#zone.fige { overflow: hidden; }
+#zone.fige > #vue { height: 100%; }
+.cinema { display: flex; gap: 18px; height: 100%; padding: 16px 18px; box-sizing: border-box; min-height: 0; }
+.scene { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+/* 196 px : barre de titre, cadre, rangée du haut, platine, marges de la zone et la ligne d'infos sous la vidéo */
+.lecteur { flex: none; position: relative; align-self: center; width: min(100%, calc((100vh - 196px) * 16 / 9)); aspect-ratio: 16 / 9; background: var(--panel); border: 1px solid var(--outline);
+  display: flex; align-items: center; justify-content: center; color: var(--faint); }
+.cartouche { flex: none; display: flex; flex-direction: column; gap: 5px; padding: 0 2px; align-self: center; width: min(100%, calc((100vh - 196px) * 16 / 9)); min-width: 0; }
+.cartouche .t { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cartouche .qui { display: flex; align-items: center; gap: 10px; color: var(--faint); min-width: 0; white-space: nowrap; }
+.cartouche .qui .nom { color: var(--text); }
+.cartouche .qui .av { flex: none; width: 16px; height: 16px; border: 1px solid var(--outline); }
+.cartouche .qui .m { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cartouche .qui .btn { margin-left: auto; padding: 0 10px; flex: none; }
+.cartouche .qui .btn + .btn { margin-left: 0; }
+.cote { flex: none; width: 360px; display: flex; flex-direction: column; min-height: 0; }
+body.sans-cote .cote { display: none; }   /* le bouton « Masquer la colonne » sous la vidéo (réglage gardé : yt.cote) */
+.cote .tabs { background: none; padding: 0; }
+.cote .volet { flex: 1; min-height: 0; overflow-y: auto; border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); background: var(--ink); padding: 6px; }
+@media (max-width: 1100px) { .cote { width: 300px; } }
+.bobine .pas { display: grid; grid-template-columns: 26px 128px 1fr; gap: 8px; padding: 5px 4px; border: 1px solid transparent; cursor: default; }
+.bobine .pas:hover { background: var(--row-hover); }
+.bobine .pas:focus { outline: none; background: var(--row-sel); border-color: var(--row-sel-ring); }
+.bobine .pas.on, .bobine .pas.ensuite { background: var(--row-sel); border-color: var(--row-sel-ring); }
+.bobine .num { color: var(--faint); text-align: right; padding-top: 1px; }
+.bobine .pas .vign .duree { display: none; }
+.bobine .tx { min-width: 0; }
+.bobine .t { color: var(--text); line-height: 16px; max-height: 48px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.bobine .c { color: var(--faint); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bobine .lab { color: var(--warn); }
+.bobine .sec { color: var(--faint); padding: 2px 4px 6px; }
+.desc { color: var(--text); line-height: 16px; white-space: pre-wrap; word-break: break-word; padding: 6px 8px; }
+.chaps { padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.chap { display: grid; grid-template-columns: 64px 1fr; gap: 6px; padding: 3px 8px; cursor: default; border: 1px solid transparent; }
+.chap:hover { background: var(--row-hover); }
+.chap .h { color: var(--faint); }
+.chap span:last-child { color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chap.on { background: var(--row-sel); border-color: var(--row-sel-ring); }
+
+/* le mini-lecteur : en bas à droite de la zone, au-dessus de la platine ; la vidéo (vue native) recouvre .mini-ecran */
+.mini { position: absolute; right: 22px; bottom: 39px; width: 340px; background: var(--panel); border: 1px solid var(--outline); box-shadow: var(--bevel), 4px 5px 0 rgba(0, 0, 0, .5); padding: 4px; z-index: 4; }
+.mini[hidden] { display: none; }
+.mini-ecran { aspect-ratio: 16 / 9; background: var(--ink); border: 1px solid var(--outline); }
+.mini .bas { display: flex; align-items: center; gap: 4px; padding: 4px 0 0 2px; }
+.mini .titre { flex: 1; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.mini .titre:hover { text-decoration: underline; }
+.mini .btn.ic { flex: none; width: 22px; height: 20px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.mini .btn.ic svg { display: block; }
+body.avec-mini .page { padding-bottom: 250px; }
+body.plein .mini { display: none; }
+
+/* ---------- la platine : l'afficheur (le texte vert de la charte) et, pendant une vidéo, le transport ---------- */
+.platine { flex: none; display: flex; align-items: center; gap: 4px; height: 22px; }
+.platine .status { flex: 1; min-width: 200px; height: 22px; box-sizing: border-box; padding-top: 4px; padding-bottom: 2px; }
+.platine .ecran { flex: 1; min-width: 0; display: flex; gap: 10px; white-space: nowrap; }
+.platine .ecran .tps { flex: none; }
+.platine .ecran .tps:empty { display: none; }
+.platine .ecran .st1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.platine .ecran .st2 { margin-left: auto; padding-left: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+body.lecture .platine .status { flex: 0 1 460px; cursor: pointer; }
+body.lecture .platine .ecran .st2 { display: none; }
+.transport { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; padding-left: 6px; }
+.transport[hidden] { display: none; }
+.transport .btn.ic { flex: none; width: 26px; height: 22px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.transport .btn.ic svg { display: block; }
+.transport #cPos { flex: 1; min-width: 80px; }
+.transport #cVol { flex: none; width: 76px; }
+.transport .ensuite { flex: 0 1 auto; max-width: 260px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
+.transport .ensuite:empty { display: none; }
+@media (max-width: 1150px) { .transport .ensuite { display: none; } }
+
+/* plein écran : la vidéo occupe la fenêtre (qui couvre l'écran), la platine seule en bas, 30 px ; plus de cadre ni de barre de titre */
+body.plein .tb, body.plein .nav, body.plein .cote, body.plein .cartouche, body.plein .rz { display: none; }
+body.plein .lecteur { visibility: hidden; }   /* en plein écran, le rectangle du lecteur est calculé par youtube.js (toute la fenêtre moins la platine) */
+body.plein .platine { position: fixed; left: 0; right: 0; bottom: 0; height: 30px; padding: 0 6px; background: var(--panel); z-index: 6; }
+body.plein.sans-barre .platine { display: none; }
+
+/* un écran de YouTube à la place de la vidéo (âge, contenu sensible, vidéo indisponible) : son message et ses boutons, dans le rectangle du lecteur
+   (la vue native est alors effacée) ; en plein écran, le message prend la place de la vidéo */
+.lecteur.bloque { overflow: auto; }
+.blocage { display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 600px; padding: 16px 20px; text-align: center; }
+.blocage .titre { color: var(--text); line-height: 18px; }
+.blocage .detail { color: var(--faint); line-height: 16px; white-space: pre-wrap; }
+.blocage .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.blocage .actions .btn { padding: 0 12px; }
+body.plein .lecteur.bloque { visibility: visible; position: fixed; left: 0; top: 0; right: 0; bottom: 30px; width: auto; aspect-ratio: auto; border: 0; z-index: 5; }

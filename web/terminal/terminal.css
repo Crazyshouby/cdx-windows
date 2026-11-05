@@ -1,0 +1,41 @@
+/* Le terminal : les onglets et le cadre sont ceux de la charte ; xterm.js dessine seulement la grille de texte dans chaque volet. */
+
+/* La police pixel à chasse fixe de la charte (cdx-ui/gen/gen_font_mono.py) : une case de 7 pixels à 14 px. Sans repli sur du gras synthétique (la charte n'a pas de gras). */
+@font-face { font-family: 'CDX Pixel Mono'; font-style: normal; font-weight: 100 900; src: url(/terminal/fonts/cdx-pixel-mono.ttf) format('truetype'); }
+@font-face { font-family: 'CDX Pixel Mono'; font-style: italic; font-weight: 100 900; src: url(/terminal/fonts/cdx-pixel-mono-italic.ttf) format('truetype'); }
+
+/* ---------- onglets (même présentation que ceux du navigateur) ---------- */
+.tabs { cursor: default; gap: 0; overflow: hidden; }
+.tab { flex: 0 1 190px; min-width: 56px; max-width: 190px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 8px; cursor: default; }
+.tab .tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.tab .x { flex: none; width: 14px; text-align: center; color: var(--faint); }
+.tab .x:hover { color: #fff; background: var(--a-mid); }
+.tab.new { flex: none; min-width: 0; max-width: none; padding: 0 9px; }
+
+/* ---------- volets ---------- */
+.stage { flex: 1; min-width: 0; min-height: 0; position: relative; }
+.tabview { position: absolute; inset: 0; display: none; }
+.tabview.on { display: flex; }
+.sp { flex: 1; min-width: 0; min-height: 0; display: flex; }
+.sp.h { flex-direction: row; }
+.sp.v { flex-direction: column; }
+.cell { display: flex; min-width: 0; min-height: 0; flex: 1 1 0; }
+.dv { flex: none; }
+.sp.h > .dv { width: 5px; cursor: col-resize; }
+.sp.v > .dv { height: 5px; cursor: row-resize; }
+.pane { flex: 1; min-width: 0; min-height: 0; display: flex; }
+
+/* Un volet : un conteneur « console » de la charte (noir, creusé, anneau d'accent quand il a le focus) qui reçoit xterm.js. */
+.termbox { flex: 1; min-width: 0; min-height: 0; display: flex; padding: 4px 0 4px 6px; overflow: hidden; background: var(--ink);
+           border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+.termbox:focus-within { border-color: var(--red-frame); box-shadow: inset 0 0 0 1px var(--red-frame); }
+.term { flex: 1; min-width: 0; min-height: 0; }
+.xterm { height: 100%; }
+.xterm .xterm-viewport { background-color: var(--ink) !important; }
+
+/* La charte n'a pas d'ombre floue : on retire celles de la barre de défilement de xterm, et on lui donne le relief des autres. */
+.xterm .xterm-scrollable-element > .shadow { display: none !important; }
+.xterm .xterm-scrollable-element > .scrollbar { background: #333; box-shadow: inset 1px 0 0 #222; }
+.xterm .xterm-scrollable-element > .scrollbar.vertical { opacity: 1 !important; pointer-events: auto !important; }   /* la barre de la charte est toujours là, xterm la masque sinon */
+.xterm .xterm-scrollable-element > .scrollbar > .slider { border-radius: 0 !important; box-shadow: inset 1px 1px 0 #444, inset -1px -1px 0 #222, inset -2px -2px 0 #2a2a2a;
+           background-image: repeating-linear-gradient(#555 0 1px, transparent 1px 2px); background-size: 7px 5px; background-repeat: no-repeat; background-position: center; }

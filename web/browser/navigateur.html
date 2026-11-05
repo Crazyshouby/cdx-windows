@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'none'">
+<title>CDX — Navigateur</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/host/page.css">
+<style>
+  /* Le cadre du navigateur : tout ce qui entoure la page web. Les pages sont des WebView2 posés par le programme sur les rectangles #vpA (et #vpB, pages scindées). */
+  .tabs { cursor: default; gap: 0; overflow: hidden; }
+  .tab { flex: 0 1 190px; min-width: 56px; max-width: 190px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 8px; cursor: default; }
+  .tab .tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  .tab .x { flex: none; width: 14px; text-align: center; color: var(--faint); }
+  .tab .x:hover { color: #fff; background: var(--a-mid); }
+  .tab img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; }
+  .tab.new { flex: none; min-width: 0; max-width: none; padding: 0 9px; }
+  .tab .spin { flex: none; }
+  .tab.sp .tt::before { content: '◧ '; color: var(--faint); }                /* l'autre volet des pages scindées */
+  /* groupes d'onglets : une pastille nommée devant les onglets du groupe, qui portent sa couleur en haut ; repliée, les onglets sont cachés */
+  .c-accent { --gc: var(--accent); } .c-rouge { --gc: var(--red); } .c-ambre { --gc: var(--warn); } .c-vert { --gc: var(--green); } .c-gris { --gc: var(--faint); }
+  .tab.g { box-shadow: inset 0 3px 0 var(--gc); }
+  .grp { flex: none; display: flex; align-items: center; gap: 5px; max-width: 160px; padding: 0 8px; margin: 3px 2px 0 4px; border: 1px solid var(--gc); color: var(--text); background: var(--card-2); cursor: default; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .grp i { display: inline-block; width: 8px; height: 8px; background: var(--gc); flex: none; }
+  .grp .n { color: var(--faint); }
+  .grp.collapsed { background: var(--ink); }
+  .nav { display: flex; gap: 5px; flex: none; align-items: center; }
+  .nav .btn { padding: 0 9px; display: flex; align-items: center; gap: 6px; }
+  .nav .btn.on { background: #2a2a2a; box-shadow: var(--bevel-down); }
+  .nav .btn:disabled { color: var(--faint); }
+  #addr { height: 22px; }
+  #findbar { display: flex; align-items: center; gap: 6px; flex: none; }
+  #findbar[hidden] { display: none; }
+  #viewport { flex: 1; min-height: 0; display: flex; gap: 5px; }
+  .vp { flex: 1; min-width: 0; background: #000; border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  #vpB { flex: none; width: 50%; }
+  #vpB[hidden] { display: none; }
+  .badge { color: var(--warn); }
+  .status #st { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* une adresse trop longue finit par « … » */
+  .status .z { margin-left: auto; flex: none; cursor: default; }
+  /* une question (nom d'un groupe) : les pages web sont masquées le temps de la boîte (win.overlay) */
+  .veil { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: rgba(0, 0, 0, .5); }
+  .veil .win { position: relative; inset: auto; width: 380px; }
+  .veil .cb { gap: 10px; }
+  .veil .row { display: flex; gap: 8px; align-items: center; }
+</style>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/cdx-frame.js"></script>
+<script src="/cdx/cdx-split.js"></script>
+<script src="/host/host.js"></script>
+</head>
+<body>
+<div class="win active" id="win">
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Navigateur</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="cb">
+    <div class="nav">
+      <button class="btn" id="back" title="Précédent (Alt+←, bouton latéral de la souris)">←</button>
+      <button class="btn" id="fwd" title="Suivant (Alt+→, bouton latéral de la souris)">→</button>
+      <button class="btn" id="reload" title="Actualiser (F5)"><span class="pix" data-ic="maj"></span></button>
+      <input id="addr" class="text-input" type="text" spellcheck="false" autocomplete="off" placeholder="Rechercher ou saisir une adresse">
+      <button class="btn" id="star" title="Ajouter aux favoris (Ctrl+D)"><span class="pix" data-ic="carnet"></span></button>
+      <button class="btn" id="favs" title="Favoris"><span class="pix" data-ic="liste"></span></button>
+      <button class="btn" id="hist" title="Historique (Ctrl+H)"><span class="pix" data-ic="horloge"></span></button>
+      <button class="btn" id="dl" title="Téléchargements (Ctrl+J)"><span class="pix" data-ic="telecharger"></span><span class="badge" id="dlb"></span></button>
+      <button class="btn" id="ext" title="Extensions (antipub…)"><span class="pix" data-ic="bouclier"></span></button>
+    </div>
+    <div id="findbar" hidden>
+      <input id="find" class="text-input" type="text" placeholder="Rechercher dans la page…" spellcheck="false" autocomplete="off" style="flex:none;width:300px">
+      <button class="btn" id="fprev" title="Précédent (Maj+Entrée)">↑</button><button class="btn" id="fnext" title="Suivant (Entrée)">↓</button>
+      <span class="faint" id="fcount"></span><span style="flex:1"></span><button class="btn" id="fclose" title="Fermer (Échap)">Fermer</button>
+    </div>
+    <div id="viewport"><div class="vp" id="vpA"></div><div class="vp" id="vpB" hidden></div></div>
+    <div class="status"><span class="orb" id="orb"></span><span id="st"></span><span class="z" id="zoom" title="Cliquer pour revenir à 100 %"></span></div>
+  </div>
+</div>
+<i class="rz l" data-e="10"></i><i class="rz r" data-e="11"></i><i class="rz t" data-e="12"></i><i class="rz tl" data-e="13"></i><i class="rz tr" data-e="14"></i><i class="rz b" data-e="15"></i><i class="rz bl" data-e="16"></i><i class="rz br" data-e="17"></i>
+<script src="/browser/navigateur.js"></script>
+</body>
+</html>

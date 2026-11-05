@@ -1,0 +1,21 @@
+/* Shared by ui.html and options.html -- inlined into each page at build time
+   by cmake/InlineAssets.cmake, in place of the "@common.css@" marker comment.
+   The look is the CDX-UI charter (the cdx-ui repository): fonts, tokens, the
+   window frame and title bar, bevelled buttons, sliders, check boxes, toasts.
+   Its three files are copied into cdx/ by cdx-ui's tools/charte-sync.mjs
+   and never edited here; what follows is only what Audio Linker's own pages need
+   on top. Page layout stays in each page's own <style>.
+
+   There is a single theme here -- no light variant, no system accent colour.
+   The native side mirrors the frame and text colours (WindowBgForTheme in
+   AppState.cpp, the switcher palette in Switcher.cpp): keep them in sync with
+   cdx/cdx-ui.css. */
+
+/*@fonts.css@*/
+/*@cdx-ui.css@*/
+/*@themes.css@*/
+/*@cdx-frame.css@*/
+
+/* Audio Linker lays its windows out with its own paddings, not the charter's 5 px gap between children. */
+.cb { padding: 8px; gap: 0; }
+html[data-panel]:not([data-panel="all"]) .win { position: fixed; inset: 0; }
