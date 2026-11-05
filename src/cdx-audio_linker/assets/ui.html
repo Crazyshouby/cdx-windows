@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="fr" data-cdx-host="strings">
+<head>
+<meta charset="utf-8">
+<title>Audio Linker</title>
+<style>
+/*@common.css@*/
+/*@page.css@*/
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- The launcher: the main window, a column of buttons like CDX's. -->
+  <section class="win" id="launcherWin">
+    <div class="tb"><span class="tb-title">Audio Linker</span><button class="tb-btn tb-r" data-act="close" data-glyph="minus" title="Réduire dans la zone de notification" aria-label="Réduire dans la zone de notification"></button></div>
+    <div class="cb launcher">
+      <div class="status" id="statusPill"><span class="dot"></span><span id="statusText">Groupe arrêté</span></div>
+      <div id="banner" hidden><span class="banner-text" id="bannerText"></span><button class="ghost-btn" id="bannerBtn" hidden></button></div>
+      <select id="setupSelect" class="lsel" title="Setup chargé : le choisir le charge sans le jouer" aria-label="Setup chargé"></select>
+      <div class="lbtns">
+        <button class="lbtn" data-open="outputs"><span class="pix" data-ic="enceinte"></span>Sorties</button>
+        <button class="lbtn" id="inputsBtn"><span class="pix" data-ic="micro"></span>Entrées</button>
+        <button class="lbtn" data-open="setups"><span class="pix" data-ic="setups"></span>Setups</button>
+        <button class="lbtn" data-open="levels"><span class="pix" data-ic="volume"></span>Niveaux</button>
+        <button class="lbtn" data-open="journal"><span class="pix" data-ic="journal"></span>Journal<span class="orb amber" id="journalOrb" hidden></span></button>
+      </div>
+      <button id="toggleBtn" class="primary"><span class="spin orb amber pulse"></span><span id="toggleLabel">Démarrer le groupe</span></button>
+      <div class="lbtns">
+        <button class="lbtn" id="muteBtn" title="Couper le son de tout le groupe (sans toucher aux réglages)"><span class="pix" id="muteIcon" data-ic="volume"></span><span id="muteLabel">Couper le son</span></button>
+        <button class="lbtn" id="calLaunchBtn" title="Mesurer la latence de chaque enceinte avec un micro et les aligner"><span class="pix" data-ic="egaliseur"></span>Calage micro</button>
+        <button class="lbtn" id="optionsBtn"><span class="pix" data-ic="options"></span>Options</button>
+        <button class="lbtn" id="aboutBtn">À propos</button>
+        <button class="lbtn" id="quitBtn" title="Arrête le groupe et ferme Audio Linker">Quitter</button>
+      </div>
+      <div class="counters mono"><span id="cntOut" title="Enceintes cochées">[0]</span><span id="cntSetups" title="Setups enregistrés">[0]</span><span id="cntGlitch" title="Craquements depuis le démarrage">[0]</span></div>
+    </div>
+  </section>
+
+    <section class="win" id="devicesCard">
+      <div class="tb"><button class="tb-btn tb-l" data-act="close" data-glyph="x" title="Fermer" aria-label="Fermer"></button><span class="tb-title">Enceintes</span><button class="tb-btn tb-r" data-act="shade" data-glyph="minus" title="Enrouler" aria-label="Enrouler"></button></div>
+      <div class="cb">
+      <div class="card-head">
+        <div class="seg-tabs" id="devTabs">
+          <button class="seg-tab active" data-tab="outputs">Sorties</button>
+          <button class="seg-tab" data-tab="inputs">Entrées</button>
+        </div>
+      </div>
+      <div class="list" id="deviceList"></div>
+      <div class="list" id="inputList" style="display:none"></div>
+      <div class="row" id="devicesToolbar">
+        <button class="ghost-btn" id="calBtn"
+                title="Joue un tick régulier à travers le groupe : ajustez la latence de chaque enceinte jusqu'à ce que les ticks fusionnent">
+          Mode calage</button>
+        <button class="ghost-btn" id="micCalBtn"
+                title="Mesure la latence réelle de chaque enceinte avec un micro (balayage sonore) puis les aligne automatiquement">
+          Calage micro</button>
+        <button class="ghost-btn" id="refreshBtn" title="Actualiser la liste des périphériques">Actualiser</button>
+        <label>Volume</label>
+        <input type="range" id="sMasterVol" min="0" max="100" step="1"
+               title="Atténue toutes les enceintes proportionnellement, sans changer leur équilibre respectif">
+        <span class="val" id="vMasterVol"></span>
+      </div>
+      <div id="inputsHint" style="display:none">Le micro coché devient le micro par défaut de Windows,
+        immédiatement et à chaque application de ce setup. Aucun micro coché&nbsp;: le setup ne touche
+        pas au micro.</div>
+      </div>
+      <div class="grip-rz"></div>
+    </section>
+
+    <section class="win" id="setupsCard">
+      <div class="tb"><button class="tb-btn tb-l" data-act="close" data-glyph="x" title="Fermer" aria-label="Fermer"></button><span class="tb-title">Setups</span><button class="tb-btn tb-r" data-act="shade" data-glyph="minus" title="Enrouler" aria-label="Enrouler"></button></div>
+      <div class="cb">
+        <div class="list" id="setupList"></div>
+        <div class="setup-form">
+          <input type="text" class="text-input" id="setupName" maxlength="60" spellcheck="false"
+                 placeholder="Nom du setup…">
+          <button class="ghost-btn" id="saveSetupBtn">Enregistrer l'actuel</button>
+        </div>
+        <footer id="footerHint"></footer>
+      </div>
+      <div class="grip-rz"></div>
+    </section>
+
+  <section class="win" id="levelsWin">
+    <div class="tb"><button class="tb-btn tb-l" data-act="close" data-glyph="x" title="Fermer" aria-label="Fermer"></button><span class="tb-title">Niveaux</span><button class="tb-btn tb-r" data-act="shade" data-glyph="minus" title="Enrouler" aria-label="Enrouler"></button></div>
+    <div class="cb">
+      <div class="list" id="levelsList"></div>
+    </div>
+    <div class="grip-rz"></div>
+  </section>
+
+  <section class="win" id="journalWin">
+    <div class="tb"><button class="tb-btn tb-l" data-act="close" data-glyph="x" title="Fermer" aria-label="Fermer"></button><span class="tb-title">Journal</span><button class="tb-btn tb-r" data-act="shade" data-glyph="minus" title="Enrouler" aria-label="Enrouler"></button></div>
+    <div class="cb">
+      <div class="list journal" id="journalList"></div>
+      <div class="jr-tools">
+        <button class="ghost-btn" id="journalClear">Effacer</button>
+        <button class="ghost-btn" id="journalOpen" title="Ouvre le fichier journal de diagnostic dans votre éditeur de texte">Ouvrir le fichier</button>
+      </div>
+    </div>
+    <div class="grip-rz"></div>
+  </section>
+
+</div>
+
+<!-- The selected speaker's sheet: one element, moved under the selected row. -->
+<div id="sheet" hidden>
+  <div id="eqCurveWrap">
+    <canvas id="eqFlow" width="340" height="130"></canvas>
+    <svg id="eqCurve" viewBox="0 0 340 130" width="100%" height="130"></svg>
+  </div>
+  <div id="eqControls">
+    <div class="row wide" id="sourceRow">
+      <label>Source</label>
+      <select class="text-input" id="eqSourceSelect"></select>
+    </div>
+    <div class="row" id="channelRow">
+      <label>Canal</label>
+      <div class="seg" id="channelSeg">
+        <button data-mode="0">Stéréo</button>
+        <button data-mode="1">Gauche</button>
+        <button data-mode="2">Droite</button>
+      </div>
+    </div>
+    <div class="row"><label>Volume</label><input type="range" id="sVol" min="0" max="100" step="1"><span class="val" id="vVol"></span></div>
+    <div class="row wide" id="latRow"><label>Latence</label><input type="range" id="sLat" min="0" max="500" step="1"><span class="val" id="vLat"></span></div>
+  </div>
+  <div class="sheet-hint">Double-clic sur un point de l'égaliseur : remise à 0 dB. Clic sur la ligne de l'enceinte : refermer.</div>
+</div>
+
+<div class="modal" id="confirmModal">
+  <div class="modal-panel" style="width:380px">
+    <div class="modal-head">
+      <h2>Supprimer le setup</h2>
+      <button class="modal-close" data-close="#confirmModal" title="Fermer">×</button>
+    </div>
+    <div class="modal-body">
+    <p id="confirmText" class="confirm-text"></p>
+    <div class="confirm-actions">
+      <button class="ghost-btn" id="confirmNo">Annuler</button>
+      <button class="primary danger-btn" id="confirmYes">Supprimer</button>
+    </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="calModal">
+  <div class="modal-panel" style="width:440px">
+    <div class="modal-head">
+      <h2>Calage automatique au micro</h2>
+      <button class="modal-close" data-close="#calModal" title="Fermer">×</button>
+    </div>
+    <div class="modal-body">
+    <p class="confirm-text" style="margin-bottom:14px">
+      Placez le micro à votre position d'écoute. Un court balayage sonore sera joué
+      sur chaque enceinte cochée, puis leurs latences seront alignées automatiquement
+      sur l'enceinte la plus lente. Coupez toute autre lecture audio pendant la mesure.
+    </p>
+    <div class="row" style="margin-bottom:12px">
+      <label>Micro</label>
+      <select class="text-input" id="calMicSelect"></select>
+    </div>
+    <div id="calResults"></div>
+    <div class="confirm-actions">
+      <button class="ghost-btn" id="calCancelBtn" style="display:none">Annuler la mesure</button>
+      <button class="ghost-btn" id="calStartBtn">Démarrer la mesure</button>
+    </div>
+    </div>
+  </div>
+</div>
+
+<div id="ctxMenu"></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+/*@common.js@*/
+/*@page.js@*/
+</script>
+</body>
+</html>

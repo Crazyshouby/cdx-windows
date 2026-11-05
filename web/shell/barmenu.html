@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'none'">
+<title>CDX — menu de la barre</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/host/page.css">
+<style>
+  /* Le menu contextuel d'un bouton de la barre, ouvert au-dessus d'elle : les lignes sont données par le shell (id + libellé). */
+  .row-item { cursor: default; }
+  .row-item .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-item .mark { flex: none; width: 14px; color: var(--green); }</style>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/host/host.js"></script>
+<script src="/shell/shell.js"></script>
+</head>
+<body>
+<div class="win active">
+  <div class="tb"><span class="tb-title" id="title"></span></div>
+  <div class="cb">
+    <div class="list" id="list"></div>
+  </div>
+</div>
+<script src="/shell/barmenu.js"></script>
+</body>
+</html>

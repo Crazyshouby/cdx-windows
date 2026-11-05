@@ -1,0 +1,124 @@
+cmake_minimum_required(VERSION 3.20)
+# The one place the version lives: generated into gen/version.h for the C++
+# side (Options window) and the resource script (VERSIONINFO).
+project(cdx-audio_linker VERSION 1.4.0 LANGUAGES CXX RC)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Static CRT: the exe must run on a clean Windows without the VC++
+# Redistributable (it depends only on system DLLs). Matches the vendored
+# WebView2LoaderStatic.lib, which is itself built against the static CRT.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
+set(GEN_DIR ${CMAKE_BINARY_DIR}/gen)
+file(MAKE_DIRECTORY ${GEN_DIR})
+configure_file(cmake/version.h.in ${GEN_DIR}/version.h @ONLY)
+
+# Each WebView2 page is three files (assets/<page>.html markup, .css, .js) plus the
+# common.css/common.js both share, inlined at build time so the embedded pages stay
+# self-contained (NavigateToString can't reference files). cdx/ holds the CDX-UI charter (copied from the cdx-ui repository by
+# tools/charte-sync.mjs, never edited here); icons.js is generated (see
+# tools/gen_assets.py). Both are inlined into those two. Editing any input regenerates
+# the page and rebuilds the exe.
+set(ASSETS ${CMAKE_CURRENT_SOURCE_DIR}/assets)
+set(CDX ${CMAKE_CURRENT_SOURCE_DIR}/cdx)
+foreach(page ui options)
+    add_custom_command(
+        OUTPUT ${GEN_DIR}/${page}.gen.html
+        COMMAND ${CMAKE_COMMAND}
+            -DSRC=${ASSETS}/${page}.html -DDST=${GEN_DIR}/${page}.gen.html
+            -DCSS=${ASSETS}/common.css -DJS=${ASSETS}/common.js
+            -DFONTS=${CDX}/fonts.css -DCDXUI=${CDX}/cdx-ui.css
+            -DTHEMES=${CDX}/themes.css -DFRAMECSS=${CDX}/cdx-frame.css
+            -DBRIDGE=${CDX}/cdx-bridge.js -DFRAMEJS=${CDX}/cdx-frame.js -DICONS=${ASSETS}/icons.js
+            -DPAGECSS=${ASSETS}/${page}.css -DPAGEJS=${ASSETS}/${page}.js
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/InlineAssets.cmake
+        DEPENDS ${ASSETS}/${page}.html ${ASSETS}/${page}.css ${ASSETS}/${page}.js ${ASSETS}/common.css ${ASSETS}/common.js
+                ${CDX}/fonts.css ${CDX}/cdx-ui.css ${CDX}/themes.css
+                ${CDX}/cdx-frame.css ${CDX}/cdx-bridge.js ${CDX}/cdx-frame.js
+                ${ASSETS}/icons.js
+                ${CMAKE_CURRENT_SOURCE_DIR}/cmake/InlineAssets.cmake
+        COMMENT "Inlining common assets into ${page}.html"
+        VERBATIM)
+endforeach()
+
+add_executable(cdx-audio_linker WIN32
+    src/main.cpp
+    # GUI side, one file per concern (shared declarations in src/App.h)
+    src/Gui.cpp
+    src/AppState.cpp
+    src/Devices.cpp
+    src/Group.cpp
+    src/Hotkeys.cpp
+    src/SystemAudio.cpp
+    src/WebBridge.cpp
+    src/Switcher.cpp
+    src/Optimizer.cpp
+    src/Panels.cpp
+    src/Journal.cpp
+    src/Tray.cpp
+    src/CdxLink.cpp
+    src/DeviceManager.cpp
+    src/AudioEngine.cpp
+    src/Calibrator.cpp
+    src/WasapiStream.cpp
+    src/Config.cpp
+    src/CrashHandler.cpp
+    src/Log.cpp
+    src/LegacyMigration.cpp
+    assets/cdx-audio_linker.rc
+    # CMake merges .manifest sources into the exe's embedded manifest via
+    # mt.exe -- carries the PerMonitorV2 DPI-awareness declaration.
+    assets/cdx-audio_linker.manifest
+    # Generated pages (custom commands above); listed so the target builds
+    # them, the .rc embeds them as RCDATA.
+    ${GEN_DIR}/ui.gen.html
+    ${GEN_DIR}/options.gen.html
+)
+
+# The RC compiler embeds the generated pages as RCDATA but ninja can't
+# discover that dependency itself -- without this, regenerating a page
+# doesn't rebuild the exe.
+set_property(SOURCE assets/cdx-audio_linker.rc PROPERTY
+    OBJECT_DEPENDS ${GEN_DIR}/ui.gen.html ${GEN_DIR}/options.gen.html ${GEN_DIR}/version.h)
+
+# WebView2 SDK (vendored NuGet package, see third_party/webview2).
+set(WEBVIEW2_NATIVE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/webview2/build/native)
+
+target_include_directories(cdx-audio_linker PRIVATE
+    include
+    ${CMAKE_CURRENT_SOURCE_DIR}   # for "cdx/cdx_bus.h"
+    ${GEN_DIR}
+    ${WEBVIEW2_NATIVE}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/json)
+
+target_compile_definitions(cdx-audio_linker PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+# /guard:cf: control-flow guard; /permissive-: standards conformance; /W4 keeps
+# the (currently warning-free) tree that way.
+target_compile_options(cdx-audio_linker PRIVATE /utf-8 /W4 /permissive- /guard:cf)
+target_link_options(cdx-audio_linker PRIVATE /guard:cf /DYNAMICBASE /HIGHENTROPYVA /NXCOMPAT)
+
+target_link_libraries(cdx-audio_linker PRIVATE
+    ole32
+    user32
+    gdi32
+    avrt
+    shell32
+    dwmapi
+    advapi32
+    dbghelp # MiniDumpWriteDump (crash reports)
+    comdlg32 # GetSaveFileNameW/GetOpenFileNameW (Options: export/import config)
+    shcore # GetDpiForMonitor (initial window size on the cursor's monitor)
+    mmdevapi # ActivateAudioInterfaceAsync (process-loopback capture)
+    runtimeobject # RoGetActivationFactory/HSTRING (per-app endpoint routing)
+    ${WEBVIEW2_NATIVE}/x64/WebView2LoaderStatic.lib
+)
+
+# Unit tests (pure DSP/containers, see tests/). ON by default: they add a few
+# tiny executables and run in well under a second via ctest.
+option(CDX_AUDIO_LINKER_BUILD_TESTS "Build the unit tests" ON)
+if(CDX_AUDIO_LINKER_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'none'">
+<title>CDX — Transferts</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<link rel="stylesheet" href="/cdx/cdx-frame.css">
+<link rel="stylesheet" href="/host/page.css">
+<style>
+  /* « Transferts » : tout ce qui se copie, se déplace, se télécharge, en une liste. Les programmes qui font le travail l'annoncent ; cette page ne fait que montrer et transmettre les ordres. */
+  .top { display: flex; gap: 8px; align-items: center; flex: none; }
+  .mbar { display: flex; flex: 1; flex-wrap: wrap; }
+  .mb { height: 22px; padding: 0 12px; margin-right: -1px; font: inherit; color: var(--text); cursor: default; background: var(--btn); border: 1px solid #000; box-shadow: var(--bevel); display: flex; align-items: center; gap: 6px; }
+  .mb:hover { background: #3b3b3b; }
+  .mb.on { background: #2a2a2a; box-shadow: var(--bevel-down); }
+  .mb .n { color: var(--faint); }
+  .sep { width: 12px; flex: none; }
+  #rows { outline: none; scrollbar-gutter: stable; }
+  .tx { padding: 12px 14px 12px 12px; border-bottom: 1px solid var(--line); border-left: 6px solid transparent; display: flex; flex-direction: column; gap: 6px; }
+  .tx:hover { background: var(--row-hover); }
+  .tx.running { border-left-color: var(--accent); }
+  .tx.paused { border-left-color: var(--warn); }
+  .tx.failed { border-left-color: var(--red); }
+  .tx.done { border-left-color: var(--green); }
+  .tx .l1 { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .tx .ttl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .tx .kd { color: var(--faint); white-space: nowrap; }
+  .tx .stt { white-space: nowrap; color: var(--muted); }
+  .tx .l2, .tx .l3 { color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx .err { color: var(--warn); white-space: normal; }
+  .tx .bar { height: 8px; background: var(--ink); border: 1px solid #000; box-shadow: var(--bevel-down); overflow: hidden; position: relative; }
+  .tx .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); }
+  .tx.paused .bar i { background: var(--warn); }
+  .tx.failed .bar i { background: var(--red); }
+  .tx.done .bar i { background: var(--green); }
+  .tx .bar.unk i { width: 30% !important; animation: slide 1.4s linear infinite; }
+  @keyframes slide { from { left: -30%; } to { left: 100%; } }
+  .tx .acts { display: flex; gap: 5px; justify-content: flex-end; }
+  .tx .acts .btn { padding: 0 10px; height: 22px; }
+  .tx .l3row { display: flex; align-items: center; gap: 10px; }
+  .tx .l3row .l3 { flex: 1; min-width: 0; }
+  .empty { padding: 40px 30px; text-align: center; color: var(--faint); line-height: 1.7; }
+</style>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/cdx/cdx-frame.js"></script>
+<script src="/host/host.js"></script>
+</head>
+<body>
+<div class="win active" id="win">
+  <div class="tb" id="tb" data-dblclick="max"><button class="tb-btn tb-l" id="bx" data-act="close"><svg viewBox="0 0 9 9"><path d="M1 1L8 8M8 1L1 8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-m" data-act="menu" title="Réglages"></button><span class="tb-title" id="ttl">Transferts</span><button class="tb-btn tb-r2" id="bmax" data-act="max"><svg viewBox="0 0 9 9"><path d="M1 4.5H8M4.5 1V8" stroke="#fff" stroke-width="2" fill="none"/></svg></button><button class="tb-btn tb-r" id="bmin" data-act="min"><svg viewBox="0 0 9 9"><path d="M1 4.5H8" stroke="#fff" stroke-width="2" fill="none"/></svg></button></div>
+  <div class="cb">
+    <div class="top">
+      <div class="mbar" id="chips"></div>
+    </div>
+    <div class="list" id="rows" tabindex="0"></div>
+    <div class="status"><span class="orb" id="orb"></span><span id="st1"></span></div>
+  </div>
+</div>
+<i class="rz l" data-e="10"></i><i class="rz r" data-e="11"></i><i class="rz t" data-e="12"></i><i class="rz tl" data-e="13"></i><i class="rz tr" data-e="14"></i><i class="rz b" data-e="15"></i><i class="rz bl" data-e="16"></i><i class="rz br" data-e="17"></i>
+<script src="/transfers/transfers.js"></script>
+</body>
+</html>

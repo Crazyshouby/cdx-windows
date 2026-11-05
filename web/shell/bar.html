@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr" data-theme="rouge">
+<head>
+<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'none'">
+<title>CDX — barre des tâches</title>
+<link rel="stylesheet" href="/cdx/fonts.css">
+<link rel="stylesheet" href="/cdx/cdx-ui.css">
+<link rel="stylesheet" href="/cdx/themes.css">
+<style>
+  /* La barre des tâches de windows-ui.html, en vrai : mêmes règles (CHARTE-WINDOWS.md, extension « barre des tâches »). */
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--panel); }
+  .taskbar { position: absolute; inset: 0; display: flex; align-items: center; gap: 6px; padding: 0 6px;
+             background: var(--panel); border-top: 1px solid #000; box-shadow: inset 0 1px 0 #666, inset 0 2px 0 #444; }
+  .tk { position: relative; flex: 0 1 190px; display: flex; align-items: center; gap: 8px; height: 26px; min-width: 34px; padding: 0 10px 0 8px;
+        font: inherit; color: var(--text); white-space: nowrap; overflow: hidden; cursor: default; background: var(--btn); border: 1px solid #000; box-shadow: var(--bevel); }
+  .tk:hover { background: #3b3b3b; }
+  .tk > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+  .tk.on { background: #2a2a2a; box-shadow: var(--bevel-down); padding-left: 14px; }
+  .tk.on::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--bar); border-right: 1px solid #000; }
+  .tk.min { color: var(--faint); }
+  /* Le nombre de fenêtres d'un bouton qui en réunit plusieurs, et une marque ▲ : la liste s'ouvre vers le haut. */
+  .tk .cnt { flex: none; margin-left: auto; min-width: 16px; padding: 0 4px; text-align: center; color: var(--field-ink); background: var(--ink); border: 1px solid; border-color: var(--sunken-border); }
+  .tk.multi::after { content: "▲"; flex: none; transform: scale(0.6); color: var(--faint); }
+  .tk.start { flex: none; padding: 0 14px 0 8px; }
+  .tk.start.on { padding-left: 14px; }
+  .tk.insL { box-shadow: -3px 0 0 var(--bar), var(--bevel); }   /* repère d'insertion pendant un glisser-déposer */
+  .tk.insR { box-shadow: 3px 0 0 var(--bar), var(--bevel); }
+  .tk.pin { flex: none; min-width: 0; width: 30px; padding: 0; justify-content: center; }
+  .tk img { width: 16px; height: 16px; flex: none; image-rendering: pixelated; -webkit-user-drag: none; }
+  .tsep { flex: none; width: 2px; height: 22px; border-left: 1px solid #111; border-right: 1px solid #555; }
+  .ph { color: var(--faint) !important; }
+  .pins { display: flex; gap: 6px; flex: none; }
+  .tasks { display: flex; gap: 6px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
+  /* La case creusée de droite : [icônes des applis · date · heure] (décision de Valentin du 02/11/2026, maquette barre-audiolinker.html).
+     Les icônes de la zone de notification y sont rendues en un seul ton, celui du texte : nos pictogrammes pixel quand l'appli est connue
+     (table APP_ICONS), sinon la vraie icône réduite à un ton. Clic gauche, double-clic et clic droit sont renvoyés à l'appli. */
+  .tray { flex: none; display: flex; align-items: center; gap: 10px; height: 26px; padding: 0 8px; background: var(--ink); color: var(--field-ink); border: 1px solid; border-color: var(--sunken-border); box-shadow: var(--sunken-shadow); }
+  .zone { display: inline-flex; align-items: center; gap: 2px; height: 24px; }
+  .zone:empty { display: none; }
+  .zi { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; font: inherit; color: inherit; background: transparent; border: 1px solid transparent; cursor: default; }
+  .zi:hover { border-color: #333; background: #161616; }
+  .zi:active { background: #0b0b0b; }
+  .zi svg, .zi canvas { width: 16px; height: 16px; display: block; }
+  .zi svg path:not([fill="#000000"]) { fill: currentColor; }
+  .tray .faint { color: var(--faint); }
+  .tray .hot { color: var(--warn); }
+  .tray.click { cursor: default; }
+  .tray.click:hover { background: #0b0b0b; }
+  .tray.on { border-color: #000 #444 #444 #000; background: #101010; }
+  /* Audio Linker : un seul bouton, visible tant qu'il tourne sur cette machine (le programme tient le tube « cdx.audio_linker ») : l'icône du son
+     et, dans le coin, le voyant du groupe. Clic : le déroulant (audiomenu.html) ; molette : le volume. */
+  .alk { flex: none; display: flex; align-items: center; height: 26px; }
+  .alk[hidden] { display: none; }
+  .alk .tk.al { width: 34px; padding: 0; justify-content: center; }
+  .alk .tk.al .orb { position: absolute; right: 3px; bottom: 3px; width: 7px; height: 7px; }
+  .alk .tk.al.muted .pix { opacity: 0.4; }
+  .alk .tk.al.muted::after { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; height: 2px; background: var(--red); transform: rotate(-45deg); }
+  .alk .orb.pulse { animation: alpulse 1s ease-in-out infinite; }
+  @keyframes alpulse { 50% { opacity: 0.4; } }
+</style>
+<script src="/cdx/icons.js"></script>
+<script src="/cdx/cdx-bridge.js"></script>
+<script src="/host/host.js"></script>
+<script src="/shell/shell.js"></script>
+</head>
+<body>
+<div class="taskbar">
+  <button class="tk start" id="start"><span class="pix" data-ic="demarrer"></span><span>Démarrer</span></button>
+  <i class="tsep"></i>
+  <div class="pins" id="pins"></div>
+  <i class="tsep"></i>
+  <div class="tasks" id="tasks"></div>
+  <span style="flex:1"></span>
+  <div class="alk" id="alk" hidden>
+    <button class="tk pin al" id="alBtn" title="Audio Linker"><span class="pix" data-ic="volume"></span><span class="orb" id="alOrb"></span></button>
+  </div>
+  <div class="tray click" id="tray" title="Centre rapide : son, réseau, notifications, calendrier"><span id="nt" class="hot" style="visibility:hidden;display:inline-flex;align-items:center;gap:4px;width:34px"><span class="pix" data-ic="cloche"></span><span id="ntn">0</span></span><span class="zone" id="zone"></span><span id="date"></span><span id="clock"></span></div>
+</div>
+<script src="/shell/bar.js"></script>
+</body>
+</html>
